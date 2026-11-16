@@ -8,7 +8,7 @@
 
 ```bash
 git clone https://github.com/MS-TEAM2/monorepo.git && cd monorepo
-pnpm install                 # 프론트 의존성 + Git 훅 연결
+pnpm install                 # 프론트·앱·브리지 의존성 + Git 훅 연결
 uv sync --all-packages       # 백엔드·AI 의존성 (Python 3.13 자동 설치)
 uv run python -m ai_core.train   # 샘플 모델 학습 → ai/artifacts/model.joblib
 
