@@ -7,6 +7,7 @@
 필요한 것: Node 22 이상, pnpm 10, [uv](https://docs.astral.sh/uv/), git, [gh](https://cli.github.com/). 앱을 볼 때는 휴대폰에 Expo Go.
 
 ```bash
+git clone https://github.com/MS-TEAM2/monorepo.git && cd monorepo
 pnpm install                 # 프론트 의존성 + Git 훅 연결
 uv sync --all-packages       # 백엔드·AI 의존성 (Python 3.13 자동 설치)
 uv run python -m ai_core.train   # 샘플 모델 학습 → ai/artifacts/model.joblib
