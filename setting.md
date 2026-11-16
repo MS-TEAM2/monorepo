@@ -33,7 +33,7 @@ ax-monorepo/
 ├─ ai/                        ai_core 패키지 (train · evaluate · predict) + Azure ML 잡 정의
 ├─ infra/README.md            Azure 리소스 생성 절차 (az CLI)
 ├─ .github/
-│   ├─ workflows/             ci-frontend · ci-mobile · ci-backend · ci-ai · pr-check · claude-review · deploy · train · mobile-build
+│   ├─ workflows/             ci-frontend · ci-mobile · ci-backend · ci-ai · pr-check · deploy · train · mobile-build
 │   ├─ actions/changed/       바뀐 경로 판별용 공용 액션
 │   ├─ pull_request_template.md
 │   └─ dependabot.yml
@@ -104,7 +104,6 @@ ax-monorepo/
 | `ci-backend` | PR (백엔드·ai·명세 변경 시 실행) | ruff, pytest, OpenAPI 명세와 코드 일치 검사 |
 | `ci-ai` | PR (ai 변경 시 실행) | ruff, pytest, 샘플 데이터 학습 스모크 테스트 |
 | `pr-check` | 모든 PR | 브랜치 이름과 PR 제목의 Jira 키 검사 |
-| `claude-review` | PR 댓글의 `@claude` | Claude Code Action 리뷰 (팀원 호출만) |
 | `deploy` | main 머지, 프론트 변경 PR | 프론트 → Static Web Apps(PR은 미리보기), 백엔드 → GHCR 이미지 → Container Apps |
 | `train` | 수동 실행 | Azure ML 학습 잡 → 지표 출력 → 모델 등록 |
 | `mobile-build` | 수동 실행 | EAS Build 요청 (프로필·플랫폼 선택). 네이티브 부분이 바뀌었을 때만 |
@@ -120,7 +119,6 @@ ax-monorepo/
 | 백엔드 이미지 저장소 미지정 | GHCR(GitHub 컨테이너 레지스트리) | public 레포는 무료다. Azure Container Registry는 가장 싼 등급도 고정 요금이 붙는다 |
 | OpenAPI 명세를 직접 작성 | FastAPI 코드에서 생성하고 CI가 일치 검사 | 명세와 코드가 어긋날 수 없다. "명세 먼저 PR"은 스키마와 빈 라우트만 올리는 것으로 지킨다 |
 | Static Web Apps 배포 토큰 | 실행 시점에 OIDC로 조회 | 레포에 장기 토큰을 두지 않는다 |
-| `@claude` 호출 시 리뷰 | 조직 멤버·협력자의 호출만 실행 | public 레포라 외부인이 토큰 주인의 구독 한도를 쓸 수 있다 |
 | 커밋 전 포맷 훅 | Git `pre-commit` + Claude Code 편집 후 훅 | Git 훅은 어떤 AI를 쓰든 적용되고, Claude 훅은 고친 파일을 바로 포맷한다. `pnpm install`이 훅을 자동 연결한다 |
 | Azure for Students 구독($100 크레딧) | Microsoft 부트캠프 제공 구독 | 실제로 쓰는 구독에 맞췄다. 학생 구독 전용 무료 혜택(PostgreSQL 12개월 무료 등)은 전제하지 않는다. 예산 알림은 부트캠프 제공 한도 기준으로 건다 |
 | (언급 없음) | `deploy`는 `AZURE_CLIENT_ID` 변수가 없으면 건너뜀 | Azure 셋업 전에도 머지가 실패하지 않는다 |
@@ -161,7 +159,6 @@ ax-monorepo/
    - Organization과 public 레포를 만들고 첫 커밋을 push 한다. 첫 커밋도 형식을 지켜야 한다(예: `chore(PROJ-1): 모노레포 초기 셋업`).
    - `main` 브랜치 보호: PR 필수, 승인 1명, 직접 push 금지, Squash merge만 허용. 필수 체크는 `frontend`, `mobile`, `backend`, `ai`, `pr-check` 다섯 개.
    - Secret scanning과 Dependabot 알림을 켠다.
-   - `claude setup-token`으로 만든 토큰을 Secret `CLAUDE_CODE_OAUTH_TOKEN`으로 등록하고, Claude GitHub 앱을 레포에 설치한다(Claude Code에서 `/install-github-app`).
 3. **Azure**: `infra/README.md`를 따라 리소스와 OIDC를 만들고 레포 Variables 9개를 등록한다. 첫 배포 뒤 GHCR의 `backend` 패키지를 Public으로 바꾼다.
 4. **Jira**: 프로젝트 생성, 컴포넌트 `FE`/`BE`/`AI`, 워크플로 상태 To Do → In Progress → In Review → Done, GitHub for Jira 연결.
 5. **Slack**: 채널 5개(`#announce` `#dev` `#dev-alerts` `#deploy` `#standup`), Jira Cloud·GitHub 앱 설치, `#deploy`에서 `/github subscribe <org>/<repo>`로 배포 알림 연결.
@@ -211,7 +208,6 @@ gh auth login
 
 - [Slack MCP 서버 연결](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses) — `.mcp.json`의 Slack OAuth 설정
 - [Codex MCP](https://developers.openai.com/codex/mcp) — `.codex/config.toml` 형식, 신뢰 프로젝트 조건
-- [Claude Code Action 예시 워크플로](https://github.com/anthropics/claude-code-action/blob/main/examples/claude.yml) — `claude-review.yml`
 - [Expo 모노레포 가이드](https://docs.expo.dev/guides/monorepos/) — pnpm 격리 설치 지원(SDK 54+), Metro 자동 설정
 - [GitHub MCP 서버 설정](https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server) — `gh` CLI를 택한 근거
 - 액션·패키지 버전은 GitHub Releases, npm, PyPI의 2026-11-14 최신 버전을 확인해 썼다.
