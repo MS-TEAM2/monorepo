@@ -1,0 +1,152 @@
+name: deploy
+
+# main 머지 → 프론트(Static Web Apps) + 백엔드(Container Apps) 배포.
+# 프론트 변경 PR에는 미리보기 환경을 만든다.
+# Azure 로그인은 OIDC. 레포 Variables 에 AZURE_CLIENT_ID 가 없으면 전부 건너뛴다(Azure 셋업 전에도 머지 가능).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+    paths: ['frontend/**', 'packages/**', 'docs/api/**']
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+
+jobs:
+  frontend:
+    # fork PR 은 OIDC 로그인을 할 수 없으므로 제외
+    if: |
+      vars.AZURE_CLIENT_ID != '' && github.event.action != 'closed' &&
+      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.API_BASE_URL }}
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: 배포 토큰을 실행 시점에 조회 (레포에 저장하지 않음)
+        id: swa
+        env:
+          SWA_NAME: ${{ vars.AZURE_SWA_NAME }}
+        run: |
+          token=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$RESOURCE_GROUP" --query properties.apiKey -o tsv)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa.outputs.token }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: frontend/out
+          skip_app_build: true
+          skip_api_build: true
+
+  frontend-preview-close:
+    if: |
+      vars.AZURE_CLIENT_ID != '' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - id: swa
+        env:
+          SWA_NAME: ${{ vars.AZURE_SWA_NAME }}
+        run: |
+          token=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$RESOURCE_GROUP" --query properties.apiKey -o tsv)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.swa.outputs.token }}
+          action: close
+          app_location: frontend/out
+
+  backend:
+    if: vars.AZURE_CLIENT_ID != '' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # 모델은 이미지에 넣어 배포한다 (상시 과금되는 온라인 엔드포인트를 쓰지 않음).
+      # AML_MODEL_NAME 이 있으면 Azure ML 레지스트리의 최신 모델을, 없으면 샘플 모델을 학습해 넣는다.
+      - name: 모델 준비
+        env:
+          MODEL_NAME: ${{ vars.AML_MODEL_NAME }}
+          WORKSPACE: ${{ vars.AML_WORKSPACE }}
+        run: |
+          mkdir -p ai/artifacts
+          if [[ -n "$MODEL_NAME" ]]; then
+            az extension add --name ml --yes
+            version=$(az ml model list --name "$MODEL_NAME" -g "$RESOURCE_GROUP" -w "$WORKSPACE" \
+              --query "max_by(@, &to_number(version)).version" -o tsv)
+            az ml model download --name "$MODEL_NAME" --version "$version" \
+              -g "$RESOURCE_GROUP" -w "$WORKSPACE" --download-path "$RUNNER_TEMP/model"
+            cp "$(find "$RUNNER_TEMP/model" -name model.joblib | head -n1)" ai/artifacts/model.joblib
+            echo "Azure ML 모델 $MODEL_NAME v$version 사용"
+          else
+            uv run --package ai-core python -m ai_core.train
+          fi
+
+      - name: 이미지 이름 정하기 (GHCR, 소문자)
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/backend:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.name }}
+
+      - name: Container Apps 새 리비전 배포
+        env:
+          APP_NAME: ${{ vars.AZURE_CONTAINER_APP }}
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: az containerapp update --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --image "$IMAGE"

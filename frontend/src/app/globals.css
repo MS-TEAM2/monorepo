@@ -1,0 +1,103 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * 디자인 토큰. 색·모서리·그림자는 여기에서만 정한다 (다크 모드는 범위 밖).
+ * 프로젝트 브랜드가 정해지면 :root 의 값만 바꾼다. 컴포넌트에 색을 직접 쓰지 않는다.
+ */
+:root {
+  --radius: 1rem;
+
+  --background: #f8f7fc;
+  --foreground: #1f1b3a;
+  --card: #ffffff;
+  --card-foreground: #1f1b3a;
+  --popover: #ffffff;
+  --popover-foreground: #1f1b3a;
+
+  --primary: #7c3aed;
+  --primary-hover: #5b21b6;
+  --primary-foreground: #ffffff;
+  --primary-soft: #ede9fe;
+
+  --secondary: #f1eff8;
+  --secondary-foreground: #1f1b3a;
+  --muted: #f1eff8;
+  --muted-foreground: #6b6880;
+  --accent: #ede9fe;
+  --accent-foreground: #5b21b6;
+  --accent-coral: #ff6b4a;
+  --accent-coral-soft: #fff0ec;
+
+  --destructive: #dc2626;
+  --border: #e7e4f2;
+  --input: #e7e4f2;
+  --ring: #7c3aed;
+}
+
+@theme inline {
+  --font-sans:
+    var(--font-pretendard), "Pretendard", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 6px);
+  --radius-lg: calc(var(--radius) - 4px);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-coral: var(--accent-coral);
+  --color-coral-soft: var(--accent-coral-soft);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --shadow-soft: 0 1px 2px rgb(31 27 58 / 0.04), 0 4px 16px rgb(31 27 58 / 0.06);
+  --shadow-lifted: 0 2px 4px rgb(31 27 58 / 0.05), 0 12px 32px rgb(31 27 58 / 0.1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.6;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

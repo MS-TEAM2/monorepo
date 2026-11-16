@@ -1,0 +1,28 @@
+[project]
+name = "ax-monorepo"
+version = "0.1.0"
+description = "uv 워크스페이스 루트 (backend + ai)"
+requires-python = ">=3.13"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["backend", "ai"]
+
+[dependency-groups]
+dev = ["ruff", "pytest", "httpx2"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "ai_core"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests", "ai/tests"]
+addopts = "--import-mode=importlib"

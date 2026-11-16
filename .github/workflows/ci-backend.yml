@@ -1,0 +1,43 @@
+name: ci-backend
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.changed.outputs.hit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changed
+        uses: ./.github/actions/changed
+        with:
+          # 백엔드는 ai 패키지를 import 하므로 ai 변경에도 돈다
+          pattern: '^(backend/|ai/|docs/api/|pyproject\.toml|uv\.lock|\.github/workflows/ci-backend\.yml)'
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.hit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-packages
+      - run: uv run ruff check backend
+      - run: uv run ruff format --check backend
+      - run: uv run pytest backend/tests
+      - name: OpenAPI 명세와 코드 일치 검사
+        run: uv run python -m app.export_openapi --check

@@ -1,0 +1,12 @@
+# Codex용 MCP 서버. 프로젝트를 "신뢰"로 지정해야 이 파일이 로드된다.
+# 로그인은 각자: codex mcp login atlassian / notion / slack
+
+[mcp_servers.atlassian]
+url = "https://mcp.atlassian.com/v2/mcp"
+
+[mcp_servers.notion]
+url = "https://mcp.notion.com/mcp"
+
+[mcp_servers.slack]
+url = "https://mcp.slack.com/mcp"
+auth = "oauth"

@@ -1,0 +1,46 @@
+name: ci-mobile
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.changed.outputs.hit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changed
+        uses: ./.github/actions/changed
+        with:
+          pattern: '^(mobile/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.github/workflows/ci-mobile\.yml)'
+
+  mobile:
+    needs: changes
+    if: needs.changes.outputs.hit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint typecheck test --filter "mobile..."
+      - name: Expo 설정·의존성 버전 점검
+        working-directory: mobile
+        run: pnpm run doctor
+      - name: JS 번들이 만들어지는지 확인 (네이티브 빌드는 EAS 에서)
+        working-directory: mobile
+        run: pnpm exec expo export --platform android --platform ios --output-dir "$RUNNER_TEMP/mobile-export"

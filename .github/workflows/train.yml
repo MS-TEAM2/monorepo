@@ -1,0 +1,57 @@
+name: train
+
+# 수동 실행: Azure ML 학습 잡 → 지표 출력 → 모델 등록.
+# 클러스터 최소 노드는 0 이어야 한다 (작업할 때만 과금).
+on:
+  workflow_dispatch:
+    inputs:
+      register:
+        description: 학습이 끝나면 모델 레지스트리에 등록
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  WORKSPACE: ${{ vars.AML_WORKSPACE }}
+  MODEL_NAME: ${{ vars.AML_MODEL_NAME }}
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - run: az extension add --name ml --yes
+      - name: 학습 잡 실행
+        id: job
+        run: |
+          name=$(az ml job create --file ai/azureml/train-job.yml -g "$RESOURCE_GROUP" -w "$WORKSPACE" --query name -o tsv)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          az ml job stream --name "$name" -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+      - name: 지표 출력
+        env:
+          JOB_NAME: ${{ steps.job.outputs.name }}
+        run: |
+          az ml job download --name "$JOB_NAME" --output-name model --download-path out -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+          metrics=$(find out -name metrics.json | head -n1)
+          {
+            echo "### 학습 지표 ($JOB_NAME)"
+            echo '```json'
+            cat "$metrics"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: 모델 등록
+        if: inputs.register
+        env:
+          JOB_NAME: ${{ steps.job.outputs.name }}
+        run: |
+          az ml model create --name "$MODEL_NAME" --type custom_model \
+            --path "azureml://jobs/$JOB_NAME/outputs/model" -g "$RESOURCE_GROUP" -w "$WORKSPACE"

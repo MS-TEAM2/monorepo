@@ -1,0 +1,39 @@
+# 의존성·빌드
+node_modules/
+dist/
+.next/
+out/
+next-env.d.ts
+.turbo/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.tsbuildinfo
+
+# 비밀 값 (절대 커밋 금지)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 모델·데이터 (Blob Storage / Azure ML 에 보관)
+ai/artifacts/
+ai/data/
+*.joblib
+
+# Expo (mobile/.gitignore 에도 있음)
+.expo/
+mobile/ios/
+mobile/android/
+
+# 개인 설정
+.claude/settings.local.json
+.claude/worktrees/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.log

@@ -1,0 +1,16 @@
+{
+  "name": "@ax/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "웹(frontend)과 앱(mobile) 웹뷰 사이의 메시지 계약",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^5.0.5"
+  }
+}

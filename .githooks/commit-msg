@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# 커밋 메시지: <type>(<JIRA키>): 설명   예) feat(SCRUM-12): 로그인 API 추가
+set -euo pipefail
+
+first_line=$(head -n1 "$1")
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\([A-Z][A-Z0-9]+-[0-9]+\)!?: .+'
+
+if [[ "$first_line" =~ ^(Merge|Revert|fixup!|squash!) ]] || [[ "$first_line" =~ $pattern ]]; then
+  exit 0
+fi
+
+cat >&2 <<MSG
+커밋 메시지 형식이 맞지 않습니다.
+  받은 메시지: $first_line
+  형식: <type>(<JIRA키>): 설명
+  예시: feat(SCRUM-12): 로그인 API 추가
+  type: feat fix docs style refactor perf test build ci chore revert
+MSG
+exit 1

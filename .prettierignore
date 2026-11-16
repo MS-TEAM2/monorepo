@@ -1,0 +1,9 @@
+out
+.next
+node_modules
+pnpm-lock.yaml
+next-env.d.ts
+frontend/src/lib/api/schema.d.ts
+mobile/.expo
+mobile/ios
+mobile/android

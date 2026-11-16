@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# 1) 브랜치 이름 검사  2) 스테이징된 파일 포맷
+set -euo pipefail
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+branch_pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[A-Z][A-Z0-9]+-[0-9]+-[a-z0-9][a-z0-9-]*$'
+if [[ -n "$branch" && "$branch" != "main" && ! "$branch" =~ $branch_pattern ]]; then
+  cat >&2 <<MSG
+브랜치 이름 형식이 맞지 않습니다: $branch
+  형식: <type>/<JIRA키>-<영문-설명>
+  예시: feat/SCRUM-12-login
+  고치기: git branch -m <새-이름>
+MSG
+  exit 1
+fi
+
+staged() { git diff --cached --name-only --diff-filter=ACM | grep -E "$1" || true; }
+
+py_files=$(staged '^(backend|ai)/.*\.py$')
+if [[ -n "$py_files" ]] && command -v uv >/dev/null; then
+  echo "$py_files" | xargs uv run --quiet ruff check --fix --select I --quiet
+  echo "$py_files" | xargs uv run --quiet ruff format --quiet
+  echo "$py_files" | xargs git add
+fi
+
+js_files=$(staged '^(frontend|mobile|packages)/.*\.(ts|tsx|mts|mjs|js|css|json)$' | grep -v 'schema\.d\.ts$' || true)
+if [[ -n "$js_files" ]] && command -v pnpm >/dev/null; then
+  echo "$js_files" | xargs pnpm exec prettier --write --log-level warn
+  echo "$js_files" | xargs git add
+fi

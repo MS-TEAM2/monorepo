@@ -1,0 +1,15 @@
+# Azure ML 학습 잡. train.yml 워크플로가 `az ml job create --file` 로 실행한다.
+# 실제 데이터를 쓰려면 inputs 에 Blob 데이터 자산을 추가하고 --data 로 넘긴다.
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+display_name: train
+experiment_name: ax-train
+code: ..
+command: >-
+  pip install . &&
+  python -m ai_core.train --output ${{outputs.model}}
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04
+compute: azureml:cpu-cluster
+outputs:
+  model:
+    type: uri_folder

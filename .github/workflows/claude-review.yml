@@ -1,0 +1,33 @@
+name: claude-review
+
+# PR 댓글에 @claude 를 적었을 때만 돈다 (토큰 주인 한 사람의 구독 한도를 쓰기 때문).
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude:
+    # public 레포이므로 팀원(조직 멤버·협력자)의 호출만 받는다
+    if: |
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      (github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # AX 담당이 `claude setup-token` 으로 만든 토큰. 만든 사람의 구독에 묶인다.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --max-turns 15

@@ -1,0 +1,44 @@
+name: ci-frontend
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.changed.outputs.hit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changed
+        uses: ./.github/actions/changed
+        with:
+          pattern: '^(frontend/|packages/|docs/api/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|\.github/workflows/ci-frontend\.yml)'
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.hit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: API 타입이 명세와 일치하는지 검사
+        run: |
+          pnpm --filter frontend gen:api
+          git diff --exit-code -- frontend/src/lib/api/schema.d.ts
+      - run: pnpm turbo run lint typecheck test build --filter "frontend..."

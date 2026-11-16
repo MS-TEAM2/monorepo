@@ -1,0 +1,16 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+.git
+.turbo
+frontend
+mobile
+packages
+docs
+specs
+infra
+ai/data
+**/.env
+**/.env.*

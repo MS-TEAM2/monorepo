@@ -1,0 +1,42 @@
+name: ci-ai
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.changed.outputs.hit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changed
+        uses: ./.github/actions/changed
+        with:
+          pattern: '^(ai/|pyproject\.toml|uv\.lock|\.github/workflows/ci-ai\.yml)'
+
+  ai:
+    needs: changes
+    if: needs.changes.outputs.hit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv sync --locked --all-packages
+      - run: uv run ruff check ai
+      - run: uv run ruff format --check ai
+      - run: uv run pytest ai/tests
+      - name: 소형 샘플 데이터로 학습 스모크 테스트
+        run: uv run python -m ai_core.train --output "$RUNNER_TEMP/model"
