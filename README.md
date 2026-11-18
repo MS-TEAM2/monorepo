@@ -32,7 +32,7 @@ packages/bridge/     웹 ↔ 앱 메시지 계약
 backend/             FastAPI + 모델 추론
 ai/                  학습·평가·추론 패키지
 infra/               Azure 리소스 생성 절차
-.github/workflows/   CI 5개 + 배포 + 학습 + 앱 빌드
+.github/workflows/   CI 5개, 배포, 학습, 앱 빌드
 ```
 
 ## 작업 흐름
