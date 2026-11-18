@@ -41,3 +41,5 @@ infra/               Azure 리소스 생성 절차
 작은 수정: `ticket` → `start` → `pr`
 
 규칙은 [AGENTS.md](./AGENTS.md)를 본다.
+
+Notion MCP로 기획 문서를 읽어 작업 내용을 확인했습니다.
