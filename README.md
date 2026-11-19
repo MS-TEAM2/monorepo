@@ -17,7 +17,7 @@ pnpm dev                                                 # http://localhost:3000
 pnpm dev:mobile                                          # QR 을 휴대폰 Expo Go 로 스캔
 ```
 
-PR을 올리기 전에 `pnpm check`를 돌린다.
+PR을 올리기 전에 `pnpm check`가 통과하는지 확인한다.
 
 ## 구조
 
