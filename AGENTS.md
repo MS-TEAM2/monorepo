@@ -82,3 +82,5 @@ PR 설명에는 작성자가 **직접 이해한** 변경 요약을 적는다. "A
 ## 팀 스킬
 
 `spec` `ticket` `start` `pr` `standup` `retro` — Claude Code는 `/이름`, Codex는 `$이름`으로 부른다.
+
+환승결제 프론트엔드 구현에는 [frontend-task](.agents/skills/frontend-task/SKILL.md)를 사용한다.
