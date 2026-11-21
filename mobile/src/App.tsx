@@ -1,6 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+import { NativeScanner } from "./components/NativeScanner";
 import { WebShell } from "./components/WebShell";
 import { WEB_BACKGROUND, webUrl } from "./config";
 
@@ -12,6 +13,8 @@ export default function App() {
         <StatusBar style="dark" />
         <WebShell url={webUrl} />
       </SafeAreaView>
+      {/* 웹이 브리지로 카메라를 요청하면 웹뷰 위에 전체 화면으로 뜬다 */}
+      <NativeScanner />
     </SafeAreaProvider>
   );
 }

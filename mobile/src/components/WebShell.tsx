@@ -83,6 +83,8 @@ export function WebShell({ url }: { url: string }) {
       sharedCookiesEnabled
       thirdPartyCookiesEnabled={false}
       originWhitelist={["https://*", "http://*"]}
+      // 개발 중에만 크롬 DevTools(chrome://inspect)로 웹뷰를 볼 수 있게 한다
+      webviewDebuggingEnabled={__DEV__}
     />
   );
 }

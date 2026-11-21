@@ -4,6 +4,7 @@ import {
   type AppToWebMessage,
   type BridgeRequests,
   type BridgeRequestType,
+  supportsRequest,
   WEB_RECEIVE_FUNCTION,
 } from "@ax/bridge";
 
@@ -27,6 +28,11 @@ function bridgeWindow(): BridgeWindow | null {
  */
 export function getAppInfo(): AppInfo | null {
   return bridgeWindow()?.[APP_INFO_GLOBAL] ?? null;
+}
+
+/** 앱 안이고, 앱의 브리지 버전이 이 요청을 지원하는지 */
+export function canCallApp(type: BridgeRequestType): boolean {
+  return isInApp() && supportsRequest(getAppInfo(), type);
 }
 
 export function isInApp(): boolean {
@@ -53,6 +59,8 @@ function installReceiver(w: BridgeWindow) {
 export function callApp<K extends BridgeRequestType>(
   type: K,
   payload: BridgeRequests[K]["payload"],
+  /** timeoutMs: null 이면 기다림 제한 없음 (카메라처럼 사용자가 끝낼 때까지 걸리는 요청) */
+  options: { timeoutMs?: number | null } = {},
 ): Promise<BridgeRequests[K]["result"]> {
   const w = bridgeWindow();
   if (!w?.ReactNativeWebView) return Promise.reject(new Error("앱 안에서만 쓸 수 있는 기능입니다"));
@@ -60,10 +68,14 @@ export function callApp<K extends BridgeRequestType>(
 
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`앱 응답 시간 초과: ${type}`));
-    }, TIMEOUT_MS);
+    const timeoutMs = options.timeoutMs === undefined ? TIMEOUT_MS : options.timeoutMs;
+    const timer =
+      timeoutMs === null
+        ? undefined
+        : setTimeout(() => {
+            pending.delete(id);
+            reject(new Error(`앱 응답 시간 초과: ${type}`));
+          }, timeoutMs);
     pending.set(id, {
       resolve: (value) => {
         clearTimeout(timer);

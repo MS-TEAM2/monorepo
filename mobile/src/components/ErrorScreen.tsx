@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { WEB_BACKGROUND } from "../config";
+import { NATIVE_COLORS, WEB_BACKGROUND } from "../config";
 
 /** 웹을 불러오지 못했을 때(네트워크 끊김, 서버 오류) 보여 주는 화면 */
 export function ErrorScreen({ onRetry }: { onRetry: () => void }) {
@@ -24,15 +24,15 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: WEB_BACKGROUND,
   },
-  title: { fontSize: 18, fontWeight: "600", color: "#1f1b3a" },
-  body: { fontSize: 15, color: "#6b6880", textAlign: "center" },
+  title: { fontSize: 18, fontWeight: "600", color: NATIVE_COLORS.ink },
+  body: { fontSize: 15, color: NATIVE_COLORS.inkSoft, textAlign: "center" },
   button: {
     marginTop: 8,
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: 20,
-    borderRadius: 12,
-    backgroundColor: "#7c3aed",
+    borderRadius: 14,
+    backgroundColor: NATIVE_COLORS.ink,
   },
-  buttonText: { fontSize: 15, fontWeight: "600", color: "#ffffff" },
+  buttonText: { fontSize: 15, fontWeight: "700", color: NATIVE_COLORS.white },
 });

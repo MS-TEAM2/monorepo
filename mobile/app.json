@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#f8f7fc",
+    "backgroundColor": "#f1f4f2",
     "ios": {
       "bundleIdentifier": "com.axteam.service",
       "supportsTablet": false,
@@ -18,12 +18,13 @@
     "android": {
       "package": "com.axteam.service",
       "adaptiveIcon": {
-        "backgroundColor": "#f8f7fc",
+        "backgroundColor": "#f1f4f2",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA"]
     },
     "plugins": [
       [
@@ -32,9 +33,23 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#f8f7fc"
+          "backgroundColor": "#f1f4f2"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "매장에서 상품과 바코드를 비춰 가격을 비교하려면 카메라가 필요해요.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1de8d029-b14d-457e-ae60-5411117bf60a"
+      }
+    },
+    "owner": "cjt3591"
   }
 }

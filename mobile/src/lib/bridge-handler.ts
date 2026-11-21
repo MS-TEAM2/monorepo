@@ -1,6 +1,8 @@
 import type { AppToWebMessage, BridgeRequests, WebToAppMessage } from "@ax/bridge";
 import { Linking, Share } from "react-native";
 
+import { openScanner } from "./scanner-session";
+
 type Handlers = {
   [K in keyof BridgeRequests]: (payload: BridgeRequests[K]["payload"]) => Promise<BridgeRequests[K]["result"]>;
 };
@@ -18,6 +20,13 @@ const handlers: Handlers = {
     if (!SAFE_EXTERNAL_SCHEMES.test(url)) throw new Error(`허용하지 않는 주소입니다: ${url}`);
     await Linking.openURL(url);
     return { opened: true };
+  },
+  // 네이티브 카메라 화면(NativeScanner)을 띄우고 사용자가 찍거나 닫을 때까지 기다린다
+  async scanProduct({ attempt, hint }) {
+    return openScanner({ mode: "product", attempt: Math.max(1, attempt ?? 1), hint });
+  },
+  async scanBarcode({ hint }) {
+    return openScanner({ mode: "barcode", hint });
   },
 };
 

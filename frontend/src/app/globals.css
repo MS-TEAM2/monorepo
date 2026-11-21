@@ -6,39 +6,71 @@
  * 프로젝트 브랜드가 정해지면 :root 의 값만 바꾼다. 컴포넌트에 색을 직접 쓰지 않는다.
  */
 :root {
-  --radius: 1rem;
+  color-scheme: light;
+  --radius: 0.875rem;
 
-  --background: #f8f7fc;
-  --foreground: #1f1b3a;
-  --card: #ffffff;
-  --card-foreground: #1f1b3a;
-  --popover: #ffffff;
-  --popover-foreground: #1f1b3a;
+  /* 마트 가격표: 서늘한 진열대 바탕, 흰 가격표, 소나무색 잉크, 단위가격 노랑 */
+  --shelf: #f2f4f3;
+  --shelf-2: #e6ebe8;
+  --tag: #ffffff;
+  --ink: #0f2b27;
+  --ink-2: #4a5f5a;
+  --line: #d7dfdb;
+  --unit: #ffd94a;
+  --unit-soft: #fff4c7;
+  --save: #0e7c5a;
+  --save-soft: #e2f4ec;
+  --pricier: #d64545;
+  --pricier-soft: #fde9e9;
 
-  --primary: #7c3aed;
-  --primary-hover: #5b21b6;
+  /* 카메라 쪽 화면(렌즈·분석·바코드 스캔)의 밤색 바탕. 가격을 보여 주는 화면은 흰 가격표 바탕 */
+  --night: #0b221e;
+  --night-2: #16332d;
+  --night-line: rgb(255 255 255 / 0.12);
+  --on-night: #ffffff;
+  --on-night-2: rgb(255 255 255 / 0.68);
+
+  --background: var(--shelf);
+  --foreground: var(--ink);
+  --card: var(--tag);
+  --card-foreground: var(--ink);
+  --popover: var(--tag);
+  --popover-foreground: var(--ink);
+
+  --primary: var(--ink);
+  --primary-hover: #1d4640;
   --primary-foreground: #ffffff;
-  --primary-soft: #ede9fe;
+  --primary-soft: var(--shelf-2);
 
-  --secondary: #f1eff8;
-  --secondary-foreground: #1f1b3a;
-  --muted: #f1eff8;
-  --muted-foreground: #6b6880;
-  --accent: #ede9fe;
-  --accent-foreground: #5b21b6;
-  --accent-coral: #ff6b4a;
-  --accent-coral-soft: #fff0ec;
+  --secondary: var(--shelf-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--shelf-2);
+  --muted-foreground: var(--ink-2);
+  --accent: var(--unit-soft);
+  --accent-foreground: var(--ink);
+  --accent-coral: var(--unit);
+  --accent-coral-soft: var(--unit-soft);
 
-  --destructive: #dc2626;
-  --border: #e7e4f2;
-  --input: #e7e4f2;
-  --ring: #7c3aed;
+  --destructive: var(--pricier);
+  --border: var(--line);
+  --input: #b9c6c1;
+  --ring: #1d6b5d;
+
+  /* 소셜 로그인 버튼 (각 회사 안내 색) */
+  --kakao: #fee500;
+  --kakao-ink: rgb(0 0 0 / 0.85);
+  --google: #ffffff;
+
+  --shadow-tag: 0 1px 0 rgb(15 43 39 / 0.06), 0 8px 24px -12px rgb(15 43 39 / 0.25);
 }
 
 @theme inline {
   --font-sans:
     var(--font-pretendard), "Pretendard", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* 제목·가격: G마켓 산스. 본문은 Pretendard */
+  --font-display: var(--font-gmarket), var(--font-pretendard), "Pretendard", system-ui, sans-serif;
+  --font-figure: var(--font-display);
 
   --radius-sm: calc(var(--radius) - 8px);
   --radius-md: calc(var(--radius) - 6px);
@@ -66,11 +98,32 @@
   --color-coral-soft: var(--accent-coral-soft);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
+  --color-shelf: var(--shelf);
+  --color-shelf-2: var(--shelf-2);
+  --color-tag: var(--tag);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-unit: var(--unit);
+  --color-unit-soft: var(--unit-soft);
+  --color-save: var(--save);
+  --color-save-soft: var(--save-soft);
+  --color-pricier: var(--pricier);
+  --color-pricier-soft: var(--pricier-soft);
+  --color-night: var(--night);
+  --color-night-2: var(--night-2);
+  --color-night-line: var(--night-line);
+  --color-on-night: var(--on-night);
+  --color-on-night-2: var(--on-night-2);
+  --color-kakao: var(--kakao);
+  --color-kakao-ink: var(--kakao-ink);
+  --color-google: var(--google);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --shadow-soft: 0 1px 2px rgb(31 27 58 / 0.04), 0 4px 16px rgb(31 27 58 / 0.06);
-  --shadow-lifted: 0 2px 4px rgb(31 27 58 / 0.05), 0 12px 32px rgb(31 27 58 / 0.1);
+  --shadow-soft: 0 1px 2px rgb(15 43 39 / 0.06);
+  --shadow-lifted: var(--shadow-tag);
+  --shadow-tag: var(--shadow-tag);
 }
 
 @layer base {
@@ -79,6 +132,9 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
+    overflow-x: clip;
+    /* 두 번 탭 확대 대기를 없애 탭이 바로 반응하게 한다 */
+    touch-action: manipulation;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
@@ -86,6 +142,22 @@
     line-height: 1.6;
     word-break: keep-all;
     overflow-wrap: anywhere;
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection {
+    background: var(--unit);
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    text-wrap: balance;
+    min-width: 0;
+    overflow-wrap: break-word;
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
@@ -97,7 +169,141 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
+  /* 가로로 넘기는 카드 목록: 스크롤 막대를 숨긴다 (손가락으로 넘긴다) */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* 가격 숫자: 가격표처럼 좁고 굵게, 고정폭 숫자 */
+  .figure {
+    font-family: var(--font-figure);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  /* 버튼·탭 이름 같은 짧은 강조 글자 */
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes scan-sweep {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(var(--sweep-distance, 200px));
+  }
+}
+
+/* 분석 중 화면: 상품 위치에 초점 네모가 맺히는 동작 */
+@keyframes focus-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes blur-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes focus-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
+@keyframes fill-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* 화면 전환: 새 화면이 살짝 올라오며 나타난다. 짧게(200ms) 해서 기다리는 느낌이 없게 한다 */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 목록·카드가 차례로 올라온다. 순서는 --i 로 늦춘다 */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 가격표처럼 중요한 카드가 살짝 커지며 자리 잡는다 */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-page-in {
+  animation: page-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@utility animate-rise-in {
+  animation: rise-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+@utility animate-pop-in {
+  animation: pop-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -5,13 +5,13 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-bold whitespace-nowrap transition-[color,background-color,border-color,transform] duration-150 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover",
-        destructive: "bg-destructive text-white shadow-sm hover:bg-destructive/90",
-        coral: "bg-coral text-white shadow-sm hover:bg-coral/90",
+        default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        destructive: "bg-destructive text-white hover:bg-destructive/90",
+        coral: "bg-coral text-white hover:bg-coral/90",
         outline: "border border-border bg-card text-foreground hover:bg-primary-soft hover:text-primary-hover",
         secondary: "bg-secondary text-secondary-foreground hover:bg-primary-soft",
         ghost: "text-foreground hover:bg-primary-soft hover:text-primary-hover",
