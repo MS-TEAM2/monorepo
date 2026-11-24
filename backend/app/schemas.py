@@ -6,6 +6,14 @@ class HealthResponse(BaseModel):
     model_loaded: bool
 
 
+class DatabaseHealthResponse(BaseModel):
+    status: str = Field(examples=["ok"])
+
+
+class ErrorResponse(BaseModel):
+    detail: str
+
+
 class PredictRequest(BaseModel):
     features: list[list[float]] = Field(
         min_length=1, examples=[[[5.1, 3.5, 1.4, 0.2]]], description="행 단위 피처 배열"

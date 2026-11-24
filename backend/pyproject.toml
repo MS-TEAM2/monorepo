@@ -9,6 +9,8 @@ dependencies = [
     "pydantic-settings",
     "pyyaml",
     "ai-core",
+    "sqlalchemy>=2",
+    "psycopg[binary]>=3",
 ]
 
 [tool.uv.sources]

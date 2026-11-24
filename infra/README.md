@@ -61,6 +61,15 @@ az postgres flexible-server create -n ${PREFIX}-pg -g $RG -l $LOCATION \
 - **저장소는 32GB로.** 요금은 사용량이 아니라 프로비저닝한 용량 기준이다.
 - 비밀번호는 바로 Key Vault에 넣고 다른 곳에 남기지 않는다.
 
+로컬 백엔드에서 개발 DB에 연결하기:
+
+1. AX 담당이 앱용 DB·계정을 만들고, 접속할 PC의 공인 IP를 방화벽에 허용한다. 관리자 계정은 공유하지 않는다.
+2. `.env.example`의 형식대로 `backend/.env`에 `DATABASE_URL`을 적는다. `.env` 파일은 실행 위치와 관계없이 이 파일만 읽는다.
+3. 백엔드 개발 서버를 띄우고 `curl http://localhost:8000/health/db`가 `{"status":"ok"}`를 반환하는지 확인한다.
+
+`503`이면 서버 로그의 예외 종류를 보고 방화벽, 계정, DB 이름, 비밀번호 인코딩을 확인한다. 로그에는 접속 정보를 남기지 않는다.
+`sslmode`를 생략하면 `require`를 쓴다(암호화만 하고 서버 인증서는 검증하지 않는다).
+
 ## 4. 데이터·비밀 — Blob Storage, Key Vault
 
 ```bash
