@@ -18,9 +18,9 @@
   - 완료 조건: C-index·Brier·보정 실측값과 교체 판정을 ML 실험 DB에 기록
 - [ ] SCRUM-120 [AI] 요인 설명과 최종 모델 추론 연결 (선행: SCRUM-119)
   - 완료 조건: 요인 각 최대 3개, 기준선이면 빈 배열, 결과 단위(scope) 반환
-- [ ] SCRUM-122 [BE] 진단·모델 테이블 마이그레이션 추가 (선행: SCRUM-121, SCRUM-97)
-  - 완료 조건: `diagnoses`·`simulations`·`model_versions` 적용·되돌리기 확인
-- [ ] SCRUM-124 [BE] 진단 생성·목록·조회 API 구현 (선행: SCRUM-103, SCRUM-115, SCRUM-122, SCRUM-123)
-  - 완료 조건: 자료 부족·기준선 모드·소유권 404 테스트 통과
+- [ ] SCRUM-122 [BE] 진단·모델 테이블 마이그레이션 추가 (선행: SCRUM-174, SCRUM-97)
+  - 완료 조건: `diagnoses`·`simulations`·`model_versions` 적용·되돌리기와 사용자 외래 키 확인
+- [ ] SCRUM-124 [BE] 진단 생성·목록·조회 API 구현 (선행: SCRUM-103, SCRUM-115, SCRUM-122, SCRUM-123, SCRUM-181)
+  - 완료 조건: 자료 부족·기준선 모드·로그인 없음 401·다른 사용자 404 테스트 통과
 - [ ] SCRUM-125 [FE] 진단 결과의 생존 영역 구현 (선행: SCRUM-91, SCRUM-103)
   - 완료 조건: 확률·범위·기준선·산출 방법·한계·자료 부족을 표시하고 단정 문구 없음
