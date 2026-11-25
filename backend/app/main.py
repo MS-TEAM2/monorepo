@@ -1,11 +1,16 @@
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from ai_core.predict import load_model, predict
 from app.config import settings
-from app.schemas import HealthResponse, PredictRequest, PredictResponse
+from app.deps import get_db
+from app.schemas import DbHealthResponse, HealthResponse, PredictRequest, PredictResponse
 
 
 @asynccontextmanager
@@ -29,6 +34,16 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health(request: Request) -> HealthResponse:
     return HealthResponse(status="ok", model_loaded=request.app.state.model is not None)
+
+
+@app.get("/health/db", response_model=DbHealthResponse, tags=["system"])
+def health_db(db: Annotated[Session, Depends(get_db)]) -> DbHealthResponse:
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        # 원래 예외에 접속 정보가 섞일 수 있어 `from None`으로 연결을 끊는다.
+        raise HTTPException(status_code=503, detail="데이터베이스에 연결할 수 없습니다") from None
+    return DbHealthResponse(status="ok")
 
 
 @app.post("/api/v1/predict", response_model=PredictResponse, tags=["ai"])
