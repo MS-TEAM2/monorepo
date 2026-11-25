@@ -67,10 +67,14 @@ export interface components {
              */
             status: string;
         };
-        /** HTTPValidationError */
-        HTTPValidationError: {
+        /** ErrorResponse */
+        ErrorResponse: {
             /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
+            detail: string | {
+                [key: string]: unknown;
+            }[];
+            /** Code */
+            code: string;
         };
         /** HealthResponse */
         HealthResponse: {
@@ -102,19 +106,6 @@ export interface components {
         PredictResponse: {
             /** Predictions */
             predictions: number[];
-        };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
         };
     };
     responses: never;
@@ -163,6 +154,15 @@ export interface operations {
                     "application/json": components["schemas"]["DbHealthResponse"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     run_predict_api_v1_predict_post: {
@@ -187,13 +187,22 @@ export interface operations {
                     "application/json": components["schemas"]["PredictResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

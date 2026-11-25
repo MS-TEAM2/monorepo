@@ -1,18 +1,19 @@
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
+from typing import Annotated
 
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
-from app.db import get_engine
+from app.errors import AppError
 
 
-def get_db() -> Iterator[Session]:
+async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     """요청마다 DB 세션을 하나 열고 끝나면 닫는다. 접속 주소가 없으면 503."""
-    if not settings.database_url:
-        raise HTTPException(status_code=503, detail="데이터베이스가 설정되지 않았습니다")
-    session = Session(get_engine(settings.database_url))
-    try:
+    factory = request.app.state.session_factory
+    if factory is None:
+        raise AppError(503, "service_unavailable", "데이터베이스가 설정되지 않았습니다")
+    async with factory() as session:
         yield session
-    finally:
-        session.close()
+
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]
