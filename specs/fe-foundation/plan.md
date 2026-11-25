@@ -10,7 +10,7 @@ FE1이 레이아웃·토큰, 세션 보관, API 클라이언트, 주소 검색, 
 
 | 영역 | 변경 내용 |
 | --- | --- |
-| BE | 없음 (세션 API는 session-privacy) |
+| BE | 없음 (로그인·세션 API는 social-login) |
 | FE | layout.tsx, globals.css, components/ui, lib/session.ts, lib/api/client.ts, components/address-search.tsx, 경로 헬퍼 |
 | AI | 없음 |
 
