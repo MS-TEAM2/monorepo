@@ -16,6 +16,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /health/db:
+    get:
+      tags:
+      - system
+      summary: Health Db
+      operationId: health_db_health_db_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DbHealthResponse'
   /api/v1/predict:
     post:
       tags:
@@ -43,6 +56,17 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    DbHealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          examples:
+          - ok
+      type: object
+      required:
+      - status
+      title: DbHealthResponse
     HTTPValidationError:
       properties:
         detail:

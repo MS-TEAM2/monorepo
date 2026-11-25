@@ -7,3 +7,20 @@
 - 설정은 `app/config.py`의 `Settings`로만 읽는다. 코드에 비밀 값·URL을 하드코딩하지 않는다.
 - 라우트마다 pytest 테스트를 둔다(정상 1개 + 실패 1개 이상).
 - 검사: `pnpm check:py` (ruff, pytest, 명세 일치).
+
+## 데이터베이스 (PostgreSQL)
+
+- 접속 주소는 `DATABASE_URL` 환경 변수(`backend/.env`)로만 준다. 코드·`alembic.ini`·로그에 쓰지 않는다. 비밀번호가 든 값이므로 Key Vault → Container Apps 환경 변수로 주입한다.
+- 형식: `postgresql://사용자:비밀번호@호스트:5432/DB이름`. Azure Database for PostgreSQL은 끝에 `?sslmode=require`를 붙인다. `postgresql://`은 코드가 psycopg(v3) 드라이버용으로 바꿔 쓴다.
+- 요청 안에서는 `app/deps.py`의 `get_db`로 세션을 받는다. 주소가 없으면 503이다. 접속 확인은 `GET /health/db` (실패 시 503, 기존 `/health`는 DB와 무관).
+- 로컬 DB 예시: `docker run --name ax-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres:17` 후 `DATABASE_URL=postgresql://postgres:dev@localhost:5432/postgres`.
+- 마이그레이션은 레포 루트에서 실행한다.
+
+| 목적 | 명령 |
+| --- | --- |
+| 최신까지 적용 | `uv run alembic -c backend/alembic.ini upgrade head` |
+| 한 단계 되돌리기 | `uv run alembic -c backend/alembic.ini downgrade -1` |
+| 현재 버전 확인 | `uv run alembic -c backend/alembic.ini current` |
+| 새 리비전 만들기 | `uv run alembic -c backend/alembic.ini revision -m "설명"` |
+
+- 테스트는 외부 DB를 쓰지 않는다. `get_db`를 SQLite로 바꿔 끼우거나(`app.dependency_overrides`) `settings.database_url`을 monkeypatch 한다.
