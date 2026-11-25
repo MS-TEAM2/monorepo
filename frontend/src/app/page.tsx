@@ -7,7 +7,7 @@ export default function HomePage() {
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-4 py-16">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>AX Service</CardTitle>
+          <CardTitle>전지적 창업시점</CardTitle>
           <RuntimeBadge />
         </CardHeader>
         <CardContent>
