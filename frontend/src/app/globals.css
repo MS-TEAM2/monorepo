@@ -4,40 +4,94 @@
 /*
  * 디자인 토큰. 색·모서리·그림자는 여기에서만 정한다 (다크 모드는 범위 밖).
  * 프로젝트 브랜드가 정해지면 :root 의 값만 바꾼다. 컴포넌트에 색을 직접 쓰지 않는다.
+ *
+ * 전지적 창업시점 브랜드 (주황·크림). 글자·버튼에 쓰는 primary 는 흰 글씨 대비 4.5:1 이상인 #C2410C 이고,
+ * 밝은 주황(#EA580C, #F97316)은 지도 핀·반경 원 같은 장식에만 brand 토큰으로 쓴다.
+ * 위험·주의·양호는 색만으로 구분하지 않고 문구(위험/주의/양호)를 함께 쓴다.
  */
 :root {
   --radius: 1rem;
 
-  --background: #f8f7fc;
-  --foreground: #1f1b3a;
+  --background: #fff7ed;
+  --foreground: #291f1b;
   --card: #ffffff;
-  --card-foreground: #1f1b3a;
+  --card-foreground: #291f1b;
   --popover: #ffffff;
-  --popover-foreground: #1f1b3a;
+  --popover-foreground: #291f1b;
 
-  --primary: #7c3aed;
-  --primary-hover: #5b21b6;
+  --primary: #c2410c;
+  --primary-hover: #9a3412;
   --primary-foreground: #ffffff;
-  --primary-soft: #ede9fe;
+  --primary-soft: #ffedd5;
 
-  --secondary: #f1eff8;
-  --secondary-foreground: #1f1b3a;
-  --muted: #f1eff8;
-  --muted-foreground: #6b6880;
-  --accent: #ede9fe;
-  --accent-foreground: #5b21b6;
-  --accent-coral: #ff6b4a;
-  --accent-coral-soft: #fff0ec;
+  --brand: #ea580c;
+  --brand-light: #f97316;
 
+  --secondary: #fffbf7;
+  --secondary-foreground: #291f1b;
+  --muted: #f7efe8;
+  --muted-foreground: #7c6a5e;
+  --accent: #ffedd5;
+  --accent-foreground: #9a3412;
+  --accent-coral: #ea580c;
+  --accent-coral-soft: #fff7ed;
+
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
   --destructive: #dc2626;
-  --border: #e7e4f2;
-  --input: #e7e4f2;
-  --ring: #7c3aed;
+  --destructive-soft: #fef2f2;
+
+  --border: #f3e5d8;
+  --input: #ebdcd0;
+  --ring: #c2410c;
+
+  /* 세부 단계 (화면 디자인 시안 그대로) */
+  --ink-hover: #3e2f29;
+  --ink-700: #4a3b32;
+  --ink-600: #5c4b41;
+  --ink-500: #6b5a4e;
+  --ink-400: #8a7669;
+  --ink-300: #9a877b;
+  --ink-200: #b8a89d;
+  --line: #efe3d8;
+  --line-strong: #e5d5c6;
+  --line-warm: #f3d9c4;
+  --brand-50: #fff4ea;
+  --brand-100: #ffe8d6;
+  --brand-200: #fed7aa;
+  --brand-300: #fdba74;
+  --brand-400: #fb923c;
+  --success-500: #059669;
+  --success-700: #065f46;
+  --success-line: #a7f3d0;
+  --warning-500: #d97706;
+  --warning-700: #92400e;
+  --warning-line: #fcd34d;
+  --destructive-700: #991b1b;
+  --destructive-line: #fecaca;
+
+  /* 반경 지도 */
+  --map-bg: #f4efe6;
+  --map-block: #eae2d6;
+  --map-block-line: #e2d9ca;
+  --map-park: #d5ecd7;
+  --map-park-line: #bbe0be;
+  --map-water: #c5e2f6;
+  --map-water-line: #e4f2fc;
+  --map-road-dash: #fde4ce;
+  --map-store-out: #cbbfb4;
+  --map-closed: #9ca3af;
+  --map-closed-light: #d1d5db;
+  --map-closed-stroke: #6b7280;
 }
 
 @theme inline {
+  /* Toss Product Sans 는 공개 웹폰트가 아니므로 설치된 기기에서만 쓰이고, 나머지는 번들된 Pretendard 로 보인다 */
   --font-sans:
-    var(--font-pretendard), "Pretendard", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    "Toss Product Sans", var(--font-pretendard), "Pretendard", system-ui, -apple-system, "Apple SD Gothic Neo",
+    "Malgun Gothic", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --radius-sm: calc(var(--radius) - 8px);
@@ -45,6 +99,8 @@
   --radius-lg: calc(var(--radius) - 4px);
   --radius-xl: var(--radius);
   --radius-2xl: calc(var(--radius) + 4px);
+  /* 페이지 머리·큰 카드용 (28px) */
+  --radius-3xl: calc(var(--radius) + 12px);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -64,13 +120,46 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-coral: var(--accent-coral);
   --color-coral-soft: var(--accent-coral-soft);
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --color-destructive: var(--destructive);
+  --color-destructive-soft: var(--destructive-soft);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --shadow-soft: 0 1px 2px rgb(31 27 58 / 0.04), 0 4px 16px rgb(31 27 58 / 0.06);
-  --shadow-lifted: 0 2px 4px rgb(31 27 58 / 0.05), 0 12px 32px rgb(31 27 58 / 0.1);
+  --color-ink-hover: var(--ink-hover);
+  --color-ink-700: var(--ink-700);
+  --color-ink-600: var(--ink-600);
+  --color-ink-500: var(--ink-500);
+  --color-ink-400: var(--ink-400);
+  --color-ink-300: var(--ink-300);
+  --color-ink-200: var(--ink-200);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-line-warm: var(--line-warm);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-success-500: var(--success-500);
+  --color-success-700: var(--success-700);
+  --color-success-line: var(--success-line);
+  --color-warning-500: var(--warning-500);
+  --color-warning-700: var(--warning-700);
+  --color-warning-line: var(--warning-line);
+  --color-destructive-700: var(--destructive-700);
+  --color-destructive-line: var(--destructive-line);
+  --color-map-bg: var(--map-bg);
+  --color-map-closed: var(--map-closed);
+
+  --shadow-soft: 0 1px 2px rgb(41 31 27 / 0.04), 0 4px 16px rgb(41 31 27 / 0.06);
+  --shadow-lifted: 0 2px 4px rgb(41 31 27 / 0.05), 0 12px 32px rgb(41 31 27 / 0.1);
 }
 
 @layer base {
@@ -84,6 +173,7 @@
     @apply bg-background text-foreground font-sans antialiased;
     font-size: 16px;
     line-height: 1.6;
+    letter-spacing: -0.01em;
     word-break: keep-all;
     overflow-wrap: anywhere;
   }
