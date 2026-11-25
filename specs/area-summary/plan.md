@@ -16,7 +16,7 @@
 
 ## API 변경
 
-추가: `GET /areas/summary`(A07)
+추가: `GET /areas/summary`(A07). 로그인 선택이며 로그인 전 `dong_stats: null`, `locked: ["dong_stats"]`
 
 기본 경로는 `/api/v1`이다. 백엔드 스키마에서 `docs/api/openapi.yaml`과 프론트 생성 타입을 갱신해 같은 PR에 넣는다.
 
