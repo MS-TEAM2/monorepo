@@ -8,6 +8,7 @@ import { AreaSummaryPanel } from "@/components/explore/area-summary";
 import { CategoryFilter, RadiusFilter } from "@/components/explore/explore-filters";
 import { MapCanvas, type MapPoint } from "@/components/explore/map-canvas";
 import { NaverExploreMap } from "@/components/explore/naver-explore-map";
+import { StoreListSheet } from "@/components/explore/store-list";
 import { SvgStoreLayer } from "@/components/explore/svg-store-layer";
 import { ErrorNotice } from "@/components/feedback/error-notice";
 import { SampleDataBadge } from "@/components/feedback/sample-data";
@@ -18,6 +19,7 @@ import { resolveRegion } from "@/lib/api/regions";
 import { listStores, type StoreItem, type StoreList } from "@/lib/api/stores";
 import { categoryLabel } from "@/lib/categories";
 import { DEFAULT_CENTER, DEFAULT_RADIUS, queryCategories, type ExploreCenter, type RadiusM } from "@/lib/explore";
+import { resultNotice } from "@/lib/explore-states";
 import { naverMapClientId } from "@/lib/naver-map";
 import type { CategoryId } from "@/lib/routes";
 
@@ -97,6 +99,48 @@ export function ExploreView() {
       },
       { enableHighAccuracy: false, timeout: 10_000 },
     );
+  }
+
+  function openSummary() {
+    document.getElementById("area-summary-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const resultState = resultNotice(loadingStores ? null : stores, radius, categories.length);
+
+  function renderResultNotice() {
+    if (resultState?.kind === "empty") {
+      return (
+        <div role="status" className="flex flex-col gap-2 rounded-xl border bg-card p-3 text-sm">
+          <p>반경 안에 조건에 맞는 영업 중 매장이 없어요.</p>
+          <div className="flex flex-wrap gap-2">
+            {resultState.widerRadius && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => setRadius(resultState.widerRadius!)}
+              >
+                반경 {resultState.widerRadius >= 1000 ? "1km" : `${resultState.widerRadius}m`}로 넓히기
+              </Button>
+            )}
+            {resultState.canClearCategories && (
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => setCategories([])}>
+                업종 필터 해제
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    if (resultState?.kind === "truncated") {
+      return (
+        <p role="status" className="rounded-xl border bg-card p-3 text-sm">
+          전체 {resultState.total.toLocaleString("ko-KR")}곳 중 가까운 {resultState.returned.toLocaleString("ko-KR")}
+          곳만 지도에 표시해요. 업종을 줄이거나 반경을 좁히면 모두 볼 수 있어요.
+        </p>
+      );
+    }
+    return null;
   }
 
   return (
@@ -219,11 +263,22 @@ export function ExploreView() {
               ) : null}
             </p>
           )}
+          {!storesError && renderResultNotice()}
           {naverFailed && (
-            <p role="alert" className="rounded-xl border bg-card p-3 text-sm">
-              네이버지도를 불러오지 못해 임시 지도로 보여 드려요. 매장 위치와 반경은 그대로 확인할 수 있어요.
-            </p>
+            <div role="alert" className="flex flex-col gap-2 rounded-xl border bg-card p-3 text-sm">
+              <p>네이버지도를 불러오지 못해 임시 지도로 보여 드려요. 매장 목록으로도 같은 내용을 볼 수 있어요.</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 self-start"
+                onClick={() => setNaverFailed(false)}
+              >
+                <RotateCw aria-hidden="true" />
+                지도 다시 불러오기
+              </Button>
+            </div>
           )}
+          <StoreListSheet list={stores} onOpenSummary={openSummary} />
           <p className="text-xs text-muted-foreground">
             {showNaver
               ? "지도를 길게 누르거나(PC는 오른쪽 클릭) 옮긴 뒤 다시 찾기로 위치를 바꿀 수 있어요."
@@ -233,7 +288,10 @@ export function ExploreView() {
         </div>
       </section>
 
-      <div className="order-3 px-4 pt-6 pb-4 md:order-none md:col-start-2 md:row-start-2 md:px-0 md:pb-0">
+      <div
+        id="area-summary-section"
+        className="order-3 scroll-mt-20 px-4 pt-6 pb-4 md:order-none md:col-start-2 md:row-start-2 md:px-0 md:pb-0"
+      >
         <AreaSummaryPanel center={center} radius={radius} selectedCategories={categories} />
       </div>
     </main>
