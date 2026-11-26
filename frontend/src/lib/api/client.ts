@@ -1,4 +1,7 @@
+import { ApiError, errorKindFromStatus } from "./errors";
+import { findMock, isMockMode, MOCK_DELAY_MS, type HttpMethod } from "./mock";
 import type { components } from "./schema";
+import { clearSession, getSessionToken } from "@/lib/session";
 
 // 타입은 docs/api/openapi.yaml 에서 생성한다: pnpm --filter frontend gen:api
 export type Health = components["schemas"]["HealthResponse"];
@@ -16,18 +19,103 @@ function apiBaseUrl(): string {
   return `http://${host}:8000`;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!response.ok) {
-    throw new Error(`${path} 요청 실패 (${response.status})`);
-  }
-  return response.json() as Promise<T>;
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/**
+ * 401 을 받으면 토큰을 지운 뒤 이 함수를 부른다. 원래 화면을 기억하고 로그인으로 보내는 일은
+ * 로그인 접근 제한(SCRUM-179)이 등록한다. 해제 함수를 돌려준다.
+ */
+export function onUnauthorized(handler: UnauthorizedHandler): () => void {
+  unauthorizedHandler = handler;
+  return () => {
+    if (unauthorizedHandler === handler) unauthorizedHandler = null;
+  };
 }
 
-export const getHealth = () => request<Health>("/health");
+export type RequestOptions = {
+  method?: HttpMethod;
+  query?: Record<string, string | number | boolean | readonly (string | number)[] | null | undefined>;
+  body?: unknown;
+  signal?: AbortSignal;
+};
+
+function toSearchParams(query: RequestOptions["query"]): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value === null || value === undefined) continue;
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, String(item)));
+    else params.set(key, String(value));
+  }
+  return params;
+}
+
+function handleUnauthorized(): void {
+  clearSession();
+  unauthorizedHandler?.();
+}
+
+async function fromMock<T>(
+  method: HttpMethod,
+  path: string,
+  query: URLSearchParams,
+  body: unknown,
+  token: string | null,
+): Promise<T | undefined> {
+  const handler = isMockMode() ? findMock(method, path) : null;
+  if (!handler) return undefined;
+  await new Promise((resolve) => setTimeout(resolve, MOCK_DELAY_MS));
+  try {
+    return handler({ method, path, query, body, authenticated: token !== null }) as T;
+  } catch (error) {
+    if (error instanceof ApiError && error.kind === "unauthorized") handleUnauthorized();
+    throw error;
+  }
+}
+
+/**
+ * 모든 API 호출이 거치는 공통 요청 함수 (스펙 R3·R4·R5).
+ * - 세션 토큰이 있을 때만 Authorization 을 붙인다. 로그인 전에는 토큰 없이 공개 API를 부른다.
+ * - 실패하면 ApiError(kind: unauthorized·not_found·conflict·validation·network·server)를 던진다.
+ * - 401 이면 토큰을 지우고 onUnauthorized 로 알린다.
+ * - 예시 응답이 등록된 주소는 예시 응답을 돌려준다(lib/api/mock.ts).
+ */
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? "GET";
+  const query = toSearchParams(options.query);
+  const token = getSessionToken();
+
+  const mocked = await fromMock<T>(method, path, query, options.body, token);
+  if (mocked !== undefined) return mocked;
+
+  const search = query.toString();
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl()}${path}${search ? `?${search}` : ""}`, {
+      method,
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: options.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError("network", null);
+  }
+
+  if (!response.ok) {
+    const kind = errorKindFromStatus(response.status);
+    if (kind === "unauthorized") handleUnauthorized();
+    throw new ApiError(kind, response.status);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+export const getHealth = () => apiRequest<Health>("/health");
 
 export const predict = (body: PredictRequest) =>
-  request<PredictResponse>("/api/v1/predict", { method: "POST", body: JSON.stringify(body) });
+  apiRequest<PredictResponse>("/api/v1/predict", { method: "POST", body });
