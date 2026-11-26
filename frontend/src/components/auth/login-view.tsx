@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CircleAlert } from "lucide-react";
+import { ArrowLeft, CircleAlert, LockKeyhole } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useId, useState, useSyncExternalStore } from "react";
 
 import { SampleDataNotice } from "@/components/feedback/sample-data";
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { prepareLogin } from "@/lib/api/auth";
 import { isMockMode } from "@/lib/api/mock";
 import { LOGIN_ERROR_COPY, parseLoginError, type LoginError, type LoginProvider } from "@/lib/auth";
+import { isLoginRequired, lastPublicPath } from "@/lib/return-to";
 import { hasAgreedTerms, PRIVACY_HREF, rememberTermsAgreement, TERMS_HREF, TERMS_VERSION } from "@/lib/terms";
 
 const noSubscribe = () => () => {};
@@ -32,7 +34,10 @@ export function LoginView() {
   );
   const [localError, setLocalError] = useState<LoginError | null>(null);
   const [dismissed, setDismissed] = useState(false);
-  const error = localError ?? (dismissed ? null : parseLoginError(new URLSearchParams(search)));
+  const query = new URLSearchParams(search);
+  const error = localError ?? (dismissed ? null : parseLoginError(query));
+  const required = isLoginRequired(query);
+  const router = useRouter();
 
   // 이 브라우저에서 같은 버전에 동의했으면 다시 묻지 않는다 (API 명세서 A26)
   const remembered = useSyncExternalStore(
@@ -71,6 +76,18 @@ export function LoginView() {
 
       {isMockMode() && (
         <SampleDataNotice>예시 모드라 구글·카카오로 가지 않고 예시 계정으로 로그인해요.</SampleDataNotice>
+      )}
+
+      {required && !copy && (
+        <div role="note" className="flex gap-2 rounded-xl border bg-card p-4">
+          <LockKeyhole className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
+          <div className="flex flex-col gap-1">
+            <p className="font-bold text-foreground">로그인이 필요한 기능이에요</p>
+            <p className="text-sm text-muted-foreground">
+              진단·계약서 확인 결과는 내 계정에만 저장돼요. 로그인하면 보던 화면으로 돌아와요.
+            </p>
+          </div>
+        </div>
       )}
 
       {copy && (
@@ -146,6 +163,16 @@ export function LoginView() {
             {pending === provider ? "이동하는 중…" : PROVIDER_LABEL[provider]}
           </Button>
         ))}
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-11 w-full"
+          disabled={pending !== null}
+          onClick={() => router.push(lastPublicPath())}
+        >
+          <ArrowLeft aria-hidden="true" />
+          이전 화면으로
+        </Button>
       </div>
     </main>
   );

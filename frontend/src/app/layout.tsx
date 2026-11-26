@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
+import { AuthGuard } from "@/components/auth/auth-guard";
 import { BOTTOM_TAB_BAR_SPACE, BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteHeader } from "@/components/ui/site-header";
@@ -38,7 +39,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <TooltipProvider delayDuration={200}>
           <SiteHeader navigation={NAV_ITEMS} />
-          <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>{children}</div>
+          <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>
+            <AuthGuard>{children}</AuthGuard>
+          </div>
           <BottomTabBar />
         </TooltipProvider>
         <Toaster />
