@@ -50,10 +50,10 @@ export async function completeLogin(
     const response = await exchange({ code, code_verifier: verifier });
     return saveSession(response) ? { ok: true } : { ok: false, error: "exchange_failed" };
   } catch (error) {
-    // 400(만료·재사용·verifier 불일치)·422 는 validation, 409 는 conflict. 처음부터 다시 해야 한다
-    if (error instanceof ApiError && (error.kind === "validation" || error.kind === "conflict")) {
-      return { ok: false, error: "expired" };
-    }
+    // 409 account_deleting: 탈퇴 처리 중인 계정 (API 명세서 A01)
+    if (error instanceof ApiError && error.kind === "conflict") return { ok: false, error: "account_deleting" };
+    // 400 invalid_login_code(만료·재사용·verifier 불일치)·422 는 처음부터 다시 해야 한다
+    if (error instanceof ApiError && error.kind === "validation") return { ok: false, error: "expired" };
     return { ok: false, error: "exchange_failed" };
   }
 }

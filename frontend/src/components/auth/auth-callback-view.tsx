@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 
 import { completeLogin } from "@/lib/api/auth";
 import { loginHref, parseCallbackQuery } from "@/lib/auth";
+import { forgetTermsAgreement } from "@/lib/terms";
 
 /** 로그인 후 돌아갈 화면. 원래 화면 복귀는 SCRUM-179 에서 바꾼다 */
 const AFTER_LOGIN_HREF = "/";
@@ -27,6 +28,8 @@ export function AuthCallbackView() {
     window.history.replaceState(null, "", window.location.pathname);
 
     if (result.kind === "error") {
+      // 약관이 바뀌었으면 기억한 동의를 지우고 로그인 화면에서 다시 묻는다
+      if (result.error === "terms_outdated") forgetTermsAgreement();
       router.replace(loginHref(result.error));
       return;
     }

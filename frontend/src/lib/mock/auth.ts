@@ -14,6 +14,6 @@ defineMock("POST", "/api/v1/auth/token", ({ body }) => {
     body.code === MOCK_LOGIN_CODE &&
     typeof body.code_verifier === "string" &&
     body.code_verifier !== "";
-  if (!valid) throw new ApiError("validation", 400, "invalid_grant");
+  if (!valid) throw new ApiError("validation", 400, "invalid_login_code");
   return { token: "mock-session-token", expires_at: new Date(Date.now() + THIRTY_DAYS_MS).toISOString() };
 });

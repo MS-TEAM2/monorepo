@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { prepareLogin } from "@/lib/api/auth";
 import { isMockMode } from "@/lib/api/mock";
 import { LOGIN_ERROR_COPY, parseLoginError, type LoginError, type LoginProvider } from "@/lib/auth";
-import { PRIVACY_HREF, TERMS_HREF } from "@/lib/terms";
+import { hasAgreedTerms, PRIVACY_HREF, rememberTermsAgreement, TERMS_HREF, TERMS_VERSION } from "@/lib/terms";
 
 const noSubscribe = () => () => {};
 
@@ -34,10 +34,18 @@ export function LoginView() {
   const [dismissed, setDismissed] = useState(false);
   const error = localError ?? (dismissed ? null : parseLoginError(new URLSearchParams(search)));
 
-  const ready = agreed && over14 && pending === null;
+  // 이 브라우저에서 같은 버전에 동의했으면 다시 묻지 않는다 (API 명세서 A26)
+  const remembered = useSyncExternalStore(
+    noSubscribe,
+    () => hasAgreedTerms(),
+    () => false,
+  );
+  const consented = remembered || (agreed && over14);
+  const ready = consented && pending === null;
 
   async function start(provider: LoginProvider) {
-    if (!agreed || !over14) return;
+    if (!consented) return;
+    rememberTermsAgreement();
     setPending(provider);
     setLocalError(null);
     setDismissed(true);
@@ -75,44 +83,53 @@ export function LoginView() {
         </div>
       )}
 
-      <fieldset className="flex flex-col gap-1 rounded-xl border bg-card p-2">
-        <legend className="sr-only">로그인 전 확인</legend>
-        <div className="flex min-h-11 items-start gap-3 px-2 py-2">
-          <Checkbox
-            id={termsId}
-            checked={agreed}
-            onCheckedChange={(value) => setAgreed(value === true)}
-            className="mt-0.5"
-          />
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={termsId} className="text-base leading-snug font-semibold">
-              이용약관과 개인정보 처리방침에 동의해요 (필수)
-            </Label>
-            <p className="flex gap-3 text-sm">
-              <Link href={TERMS_HREF} className="text-primary underline underline-offset-2">
-                이용약관 보기
-              </Link>
-              <Link href={PRIVACY_HREF} className="text-primary underline underline-offset-2">
-                개인정보 처리방침 보기
-              </Link>
-            </p>
+      {remembered ? (
+        <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+          이 브라우저에서 이용약관·개인정보 처리방침(버전 {TERMS_VERSION})에 동의하고 만 14세 이상임을 확인했어요.{" "}
+          <Link href={TERMS_HREF} className="text-primary underline underline-offset-2">
+            이용약관 보기
+          </Link>
+        </p>
+      ) : (
+        <fieldset className="flex flex-col gap-1 rounded-xl border bg-card p-2">
+          <legend className="sr-only">로그인 전 확인</legend>
+          <div className="flex min-h-11 items-start gap-3 px-2 py-2">
+            <Checkbox
+              id={termsId}
+              checked={agreed}
+              onCheckedChange={(value) => setAgreed(value === true)}
+              className="mt-0.5"
+            />
+            <div className="flex flex-col gap-1">
+              <Label htmlFor={termsId} className="text-base leading-snug font-semibold">
+                이용약관과 개인정보 처리방침에 동의해요 (필수)
+              </Label>
+              <p className="flex gap-3 text-sm">
+                <Link href={TERMS_HREF} className="text-primary underline underline-offset-2">
+                  이용약관 보기
+                </Link>
+                <Link href={PRIVACY_HREF} className="text-primary underline underline-offset-2">
+                  개인정보 처리방침 보기
+                </Link>
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex min-h-11 items-start gap-3 px-2 py-2">
-          <Checkbox
-            id={ageId}
-            checked={over14}
-            onCheckedChange={(value) => setOver14(value === true)}
-            className="mt-0.5"
-          />
-          <Label htmlFor={ageId} className="text-base leading-snug font-semibold">
-            만 14세 이상이에요 (필수)
-          </Label>
-        </div>
-      </fieldset>
+          <div className="flex min-h-11 items-start gap-3 px-2 py-2">
+            <Checkbox
+              id={ageId}
+              checked={over14}
+              onCheckedChange={(value) => setOver14(value === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor={ageId} className="text-base leading-snug font-semibold">
+              만 14세 이상이에요 (필수)
+            </Label>
+          </div>
+        </fieldset>
+      )}
 
       <div className="safe-bottom mt-auto flex flex-col gap-2">
-        {!agreed || !over14 ? (
+        {!consented ? (
           <p className="text-center text-sm text-muted-foreground">두 항목을 모두 확인하면 로그인할 수 있어요.</p>
         ) : null}
         {(["kakao", "google"] as const).map((provider) => (

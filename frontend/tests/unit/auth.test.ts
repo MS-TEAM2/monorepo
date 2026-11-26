@@ -18,6 +18,7 @@ import {
   VERIFIER_STORAGE_KEY,
 } from "@/lib/auth";
 import { getSessionToken, type SessionStorageLike } from "@/lib/session";
+import { forgetTermsAgreement, hasAgreedTerms, rememberTermsAgreement, TERMS_VERSION } from "@/lib/terms";
 
 function memoryStorage(): SessionStorageLike & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -146,10 +147,32 @@ describe("코드 교환 (A01)", () => {
     ).resolves.toEqual({ ok: false, error: "expired" });
 
     storeVerifier("v");
+    await expect(
+      completeLogin("c1", () => Promise.reject(new ApiError("conflict", 409, "account_deleting"))),
+    ).resolves.toEqual({ ok: false, error: "account_deleting" });
+
+    storeVerifier("v");
     await expect(completeLogin("c1", () => Promise.reject(new ApiError("network", null)))).resolves.toEqual({
       ok: false,
       error: "exchange_failed",
     });
     expect(getSessionToken()).toBeNull();
+  });
+});
+
+describe("약관 동의 기억 (API 명세서 A26)", () => {
+  it("같은 버전에 동의했으면 다시 묻지 않고, 버전이 바뀌거나 지우면 다시 묻는다", () => {
+    const storage = memoryStorage();
+    expect(hasAgreedTerms(TERMS_VERSION, { storage })).toBe(false);
+    rememberTermsAgreement(TERMS_VERSION, { storage });
+    expect(hasAgreedTerms(TERMS_VERSION, { storage })).toBe(true);
+    expect(hasAgreedTerms("next-version", { storage })).toBe(false);
+    forgetTermsAgreement({ storage });
+    expect(hasAgreedTerms(TERMS_VERSION, { storage })).toBe(false);
+  });
+
+  it("저장소를 못 쓰면 매번 묻는다", () => {
+    rememberTermsAgreement(TERMS_VERSION, { storage: null });
+    expect(hasAgreedTerms(TERMS_VERSION, { storage: null })).toBe(false);
   });
 });
