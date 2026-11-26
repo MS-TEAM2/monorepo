@@ -15,7 +15,7 @@ export type PredictResponse = components["schemas"]["PredictResponse"];
  * 없으면 개발 중으로 보고, 페이지를 연 호스트의 8000 포트를 쓴다.
  * (휴대폰 앱이 PC의 192.168.x.x:3000 을 열면 API 도 192.168.x.x:8000 으로 간다)
  */
-function apiBaseUrl(): string {
+export function apiBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
   const host = typeof window === "undefined" ? "localhost" : window.location.hostname;
   return `http://${host}:8000`;
