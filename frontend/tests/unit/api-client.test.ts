@@ -77,6 +77,23 @@ describe("토큰", () => {
   });
 });
 
+describe("본문", () => {
+  it("multipart 는 그대로 보내고 JSON Content-Type 을 붙이지 않는다", async () => {
+    respond(202, { id: "ct_1" });
+    const form = new FormData();
+    form.append("consented", "true");
+    await apiRequest("/api/v1/diagnoses/d1/contracts", { method: "POST", body: form });
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.body).toBe(form);
+    expect((init?.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+  });
+
+  it("204 의 빈 본문을 처리한다", async () => {
+    respond(204);
+    await expect(apiRequest("/api/v1/auth/logout", { method: "POST" })).resolves.toBeUndefined();
+  });
+});
+
 describe("오류 구분", () => {
   it("401·404·409·422·서버·네트워크를 구분한다", async () => {
     const cases: [number, string][] = [
@@ -92,6 +109,21 @@ describe("오류 구분", () => {
     }
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     expect(await kindOf(apiRequest("/x"))).toBe("network");
+  });
+
+  it("오류 본문의 code 를 넘긴다", async () => {
+    respond(400, { detail: "서울 밖입니다", code: "out_of_service_area" });
+    const error = await apiRequest("/api/v1/stores").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe("out_of_service_area");
+    expect((error as ApiError).kind).toBe("validation");
+  });
+
+  it("413·415 는 입력 오류로 본다", async () => {
+    respond(413);
+    expect(await kindOf(apiRequest("/x"))).toBe("validation");
+    respond(415);
+    expect(await kindOf(apiRequest("/x"))).toBe("validation");
   });
 
   it("401 이면 토큰을 지우고 알린다", async () => {

@@ -50,6 +50,18 @@ function toSearchParams(query: RequestOptions["query"]): URLSearchParams {
   return params;
 }
 
+/** 오류 본문 `{ detail, code }` 의 code. 본문이 없거나 JSON 이 아니면 null */
+async function readErrorCode(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.json();
+    return typeof body === "object" && body !== null && "code" in body && typeof body.code === "string"
+      ? body.code
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function handleUnauthorized(): void {
   clearSession();
   unauthorizedHandler?.();
@@ -89,8 +101,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (mocked !== undefined) return mocked;
 
   const search = query.toString();
+  // multipart(FormData)는 브라우저가 경계값을 넣은 Content-Type 을 직접 붙인다 (API 명세 10장)
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
@@ -98,7 +112,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     response = await fetch(`${apiBaseUrl()}${path}${search ? `?${search}` : ""}`, {
       method,
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined ? undefined : isFormData ? (options.body as FormData) : JSON.stringify(options.body),
       signal: options.signal,
     });
   } catch (error) {
@@ -109,7 +124,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!response.ok) {
     const kind = errorKindFromStatus(response.status);
     if (kind === "unauthorized") handleUnauthorized();
-    throw new ApiError(kind, response.status);
+    throw new ApiError(kind, response.status, await readErrorCode(response));
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
