@@ -13,8 +13,15 @@ describe("parseWebToAppMessage", () => {
     });
   });
 
+  test("문서 스캔 요청을 받아들인다", () => {
+    const raw = JSON.stringify({ id: "2", type: "scanDocument", payload: { maxPages: 10 } });
+
+    expect(parseWebToAppMessage(raw)).toEqual({ id: "2", type: "scanDocument", payload: { maxPages: 10 } });
+  });
+
   test.each([
     ["JSON 이 아님", "not json"],
+    ["스캔 쪽수가 정수가 아님", JSON.stringify({ id: "1", type: "scanDocument", payload: { maxPages: "10" } })],
     ["모르는 요청", JSON.stringify({ id: "1", type: "deleteAll", payload: {} })],
     ["id 없음", JSON.stringify({ type: "share", payload: { message: "a" } })],
     ["payload 형식 틀림", JSON.stringify({ id: "1", type: "share", payload: { message: 1 } })],

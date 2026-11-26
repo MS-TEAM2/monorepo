@@ -420,11 +420,11 @@ export const MAP_SIZE = {
 } as const;
 
 export const CONTRACT_STEPS: readonly string[] = [
-  "1. 계약서 파일 업로드",
-  "2. 글자 인식 (OCR 추출)",
-  "3. 개인정보 마스킹 처리",
-  "4. 핵심 조건 · 위험 특약 분석",
-  "5. 원본 파일 및 OCR 보관분 즉시 삭제",
+  "파일 받기",
+  "글자 읽기",
+  "개인정보 가리기",
+  "조건과 특약 살펴보기",
+  "원본 지우기",
 ];
 
 export const RISK_CLAUSES: readonly RiskClause[] = [

@@ -4,6 +4,7 @@ import { ClipboardCheck, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
 
 import { PageShell } from "@/components/screens/page-shell";
+import { ScreenHeader } from "@/components/screens/screen-kit";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
 import { POLICIES, POLICY_CATEGORIES } from "@/lib/mock/startup/data";
@@ -11,7 +12,7 @@ import type { Policy, PolicyCategory } from "@/lib/mock/startup/types";
 
 export function PolicyCard({ policy }: { policy: Policy }) {
   return (
-    <article className="flex flex-col gap-2 p-6 rounded-[28px] border border-border bg-white">
+    <article className="flex flex-col gap-2 p-5 rounded-2xl border border-border bg-card">
       <span className="self-start px-3 py-1 rounded-full bg-success-soft text-success text-[13px] font-bold">
         {policy.cat}
       </span>
@@ -42,7 +43,7 @@ export function PolicyCard({ policy }: { policy: Policy }) {
   );
 }
 
-/** 지원정책 화면 시안 */
+/** 지원정책 (기획서 화면 목록 밖, 팀 회의로 추가) */
 export function PolicyScreen() {
   const go = useGoScreen();
   const { appliedContract } = useStartup();
@@ -51,42 +52,38 @@ export function PolicyScreen() {
 
   return (
     <PageShell>
-      <div className="space-y-6">
-        <div className="rounded-[28px] bg-gradient-to-br from-brand-50 to-brand-100 border border-brand-200 px-6 py-7 sm:px-8 sm:py-9">
-          <span className="text-[13px] font-bold px-2.5 py-1 rounded-full bg-white text-primary border border-brand-200">
-            지원정책
-          </span>
-          <h1 className="mt-3 text-[32px] sm:text-[40px] font-extrabold leading-tight tracking-tight text-foreground">
-            정부 지원정책
-          </h1>
-          <p className="mt-2 text-[17px] text-ink-600">
-            외식업 예비 창업자가 신청할 수 있는 자금, 보증, 교육, 컨설팅이에요.
+      <ScreenHeader title="지원정책" />
+      <div className="mx-auto max-w-[960px] space-y-6">
+        <div>
+          <h1 className="hidden text-2xl font-extrabold tracking-tight text-foreground md:block">지원정책</h1>
+          <p className="text-[15px] text-ink-600 md:mt-1">
+            외식업 예비 창업자가 신청할 수 있는 자금·보증·교육·컨설팅이에요.
           </p>
         </div>
         {appliedContract ? (
-          <div className="flex flex-wrap items-center gap-3 px-5 py-4 rounded-[20px] bg-success-soft border border-success-line text-[16px] text-success-700">
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4 rounded-2xl bg-success-soft border border-success-line text-[16px] text-success-700">
             <ClipboardCheck className="w-5 h-5 shrink-0" aria-hidden="true" />
             <span className="flex-1">
-              <b>계약서 검토를 마쳤어요.</b> 계약 전에 자금·보증부터 확인하면 보증금과 시설비 부담을 줄일 수 있어요.
+              <b>계약서 확인을 마쳤어요.</b> 계약 전에 자금·보증부터 확인하면 보증금과 시설비 부담을 줄일 수 있어요.
             </span>
             <button
               type="button"
               onClick={() => go("contract")}
               className="text-[15px] font-bold text-success underline underline-offset-[3px]"
             >
-              검토 결과 다시 보기
+              결과 다시 보기
             </button>
           </div>
         ) : (
-          <div className="flex flex-wrap items-center gap-3 px-5 py-4 rounded-[20px] bg-white border border-border text-[16px] text-ink-600">
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4 rounded-2xl bg-card border border-border text-[16px] text-ink-600">
             <FileText className="w-5 h-5 shrink-0 text-brand" aria-hidden="true" />
-            <span className="flex-1">계약서를 먼저 검토하면 필요한 자금 규모를 가늠하기 쉬워요.</span>
+            <span className="flex-1">계약서를 먼저 확인하면 필요한 자금 규모를 가늠하기 쉬워요.</span>
             <button
               type="button"
               onClick={() => go("contract")}
               className="text-[15px] font-bold text-primary underline underline-offset-[3px]"
             >
-              계약서 검토하기
+              계약서 확인하기
             </button>
           </div>
         )}

@@ -19,17 +19,17 @@ describe("BottomTabBar", () => {
     pathname.value = "/";
   });
 
-  it("메뉴 6개를 모두 보여 준다", () => {
+  it("메뉴 5개를 모두 보여 준다", () => {
     const markup = renderToStaticMarkup(createElement(BottomTabBar));
 
-    expect(markup.match(/<a /g)).toHaveLength(6);
+    expect(markup.match(/<a /g)).toHaveLength(5);
     expect(markup).toContain("하단 메뉴");
   });
 
-  it("홈에서는 강조되는 탭이 없다", () => {
+  it("홈에서는 홈 탭만 강조한다", () => {
     const markup = renderToStaticMarkup(createElement(BottomTabBar));
 
-    expect(currentLinks(markup)).toEqual([]);
+    expect(currentLinks(markup)).toEqual(["/"]);
   });
 
   it("하위 경로에서도 해당 탭 하나에만 aria-current를 붙인다", () => {

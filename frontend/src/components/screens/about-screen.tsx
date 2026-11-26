@@ -4,9 +4,10 @@ import { Trash } from "lucide-react";
 import { useState } from "react";
 
 import { PageShell } from "@/components/screens/page-shell";
+import { ScreenHeader } from "@/components/screens/screen-kit";
 import { useStartup } from "@/components/screens/startup-provider";
 
-/** S11 데이터·한계 화면 시안 */
+/** S11 데이터·한계 */
 export function AboutScreen() {
   const { resetAll } = useStartup();
   const [confirming, setConfirming] = useState(false);
@@ -14,12 +15,10 @@ export function AboutScreen() {
 
   return (
     <PageShell>
-      <div className="space-y-5">
-        <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-4">
-          <span className="text-[13px] font-bold px-2 py-0.5 rounded-full bg-foreground text-white">
-            S11 · 데이터 출처 및 한계
-          </span>
-          <h2 className="text-lg font-extrabold text-foreground">사용 데이터 · 계산식 · 주의사항</h2>
+      <ScreenHeader title="데이터와 한계" backHref="/" />
+      <div className="mx-auto max-w-[960px] space-y-5">
+        <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
+          <h2 className="text-[17px] font-bold text-foreground">어떤 데이터를 쓰고, 무엇을 모르는지</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -42,14 +41,14 @@ export function AboutScreen() {
                 </tr>
                 <tr>
                   <td className="py-2.5 pr-3 font-bold">임대차 계약서 OCR + AI</td>
-                  <td className="py-2.5 px-3">S06~S08 조건 추출 및 특약 점검</td>
+                  <td className="py-2.5 px-3">계약서 조건 읽기와 특약 점검</td>
                   <td className="py-2.5 pl-3 text-ink-500">법률 자문 아님, 원본은 처리 종료 즉시 삭제</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
-        <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-3">
+        <div className="bg-card rounded-2xl border border-border p-5 space-y-3">
           <h3 className="text-base font-extrabold text-foreground">세션 데이터 초기화</h3>
           <p className="text-xs text-ink-500">
             로그인 없이 현재 브라우저 세션에서만 동작합니다. 입력한 진단 값과 계약서 검토 내역을 즉시 비울 수 있습니다.

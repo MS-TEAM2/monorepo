@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/policy" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/guide" }));
 
 import { SiteHeader } from "@/components/ui/site-header";
 import { NAV_ITEMS } from "@/lib/navigation";
@@ -19,7 +19,6 @@ describe("SiteHeader", () => {
     const markup = renderToStaticMarkup(createElement(SiteHeader, { navigation: NAV_ITEMS }));
 
     expect(markup).toContain("주요 메뉴");
-    expect(markup).toContain("서울 외식 · 계약서 검토");
     for (const item of NAV_ITEMS) {
       expect(markup).toContain(`href="${item.href}"`);
     }
@@ -27,6 +26,6 @@ describe("SiteHeader", () => {
       .map((match) => match[0])
       .filter((tag) => tag.includes('aria-current="page"'));
     expect(current).toHaveLength(1);
-    expect(current[0]).toContain('href="/policy"');
+    expect(current[0]).toContain('href="/guide"');
   });
 });

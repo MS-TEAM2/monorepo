@@ -1,359 +1,523 @@
 "use client";
 
-import { Calculator, ChevronDown, ChevronUp, MapPin, RefreshCw, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Camera, CircleCheck, MapPin, TriangleAlert } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { AnalyzingScene, Awning } from "@/components/screens/brand";
+import { ContractUpload } from "@/components/screens/contract-upload";
+import {
+  BottomSheet,
+  Chip,
+  FlowSteps,
+  NumberField,
+  PageTitle,
+  Panel,
+  ScreenHeader,
+  StickyActions,
+  StickyActionsSpacer,
+  buttonClass,
+} from "@/components/screens/screen-kit";
+import type { FieldSources } from "@/components/screens/startup-provider";
 import { formatCount } from "@/lib/mock/startup/calc";
-import type { Category, DongSummary, FormState, Neighborhood, RadiusM, RadiusStats } from "@/lib/mock/startup/types";
-type TextField = { [K in keyof FormState]: FormState[K] extends string ? K : never }[keyof FormState];
-const STEP3_FIELDS: readonly (readonly [TextField, string])[] = [
-  ["keyMoneyMan", "권리금 (만원)"],
-  ["facilityCostMan", "시설·인테리어비 (만원)"],
-  ["annualEscalationPct", "연 월세 인상률 (%)"],
-  ["exitMonth", "종료 가정 시점 (개월)"],
-  ["remainingObligationMonths", "남은 의무기간 (개월)"],
-  ["penaltyMan", "계약 위약금 (만원)"],
-];
+import { CATEGORIES } from "@/lib/mock/startup/data";
+import type { Category, ContractField, FormState, Neighborhood, RadiusM, RadiusStats } from "@/lib/mock/startup/types";
+import { cn } from "@/lib/utils";
+
+const STEPS = [
+  { title: "자리와 면적", description: "지도에서 고른 자리가 맞는지 보고 매장 면적을 넣어요." },
+  { title: "매달 나가는 돈", description: "계약서가 있으면 찍어서 채울 수 있어요." },
+  { title: "처음 들어가는 돈", description: "없으면 비워 두고 넘어가도 돼요." },
+] as const;
+
+const ANALYZE_STEPS = [
+  "반경 안 같은 업종 가게를 세는 중",
+  "1·2·3년 생존확률을 계산하는 중",
+  "월세와 비용으로 손익을 따지는 중",
+  "결과를 정리하는 중",
+] as const;
+
+type TextKey = { [K in keyof FormState]: FormState[K] extends string ? K : never }[keyof FormState];
+
 type DiagnosisInputViewProps = {
   neighborhood: Neighborhood;
   category: Category;
+  onSelectCategory: (category: Category) => void;
   radiusM: RadiusM;
   radiusStats: RadiusStats;
-  dongSummary: DongSummary;
   formState: FormState;
   onChangeForm: (update: (previous: FormState) => FormState) => void;
+  fieldSources: FieldSources;
+  onClearFieldSource: (key: keyof FormState) => void;
   onFillExample: () => void;
   usedExample: boolean;
   exampleConfirmed: boolean;
   onToggleExampleConfirm: (confirmed: boolean) => void;
+  onFillFromContract: (fields: ContractField[], fileName: string) => number;
+  contractFileName: string;
   onBackToMap: () => void;
   onRunDiagnosis: () => void;
-  isRunning: boolean;
 };
 
-/** S04 진단 입력 화면 시안 */
+/**
+ * S04 진단 입력. 기획서대로 탐색 정보 → 월 비용 → 초기 비용 3단계를 한 화면에 하나씩 보여 준다.
+ * 월 비용 단계에서는 계약서를 찍어 보증금·월세·관리비·부가세를 채울 수 있다(기획서에 없는 제안 기능, 예시 데이터).
+ */
 export function DiagnosisInputView({
   neighborhood,
   category,
+  onSelectCategory,
   radiusM,
   radiusStats,
-  dongSummary,
   formState,
   onChangeForm,
+  fieldSources,
+  onClearFieldSource,
   onFillExample,
   usedExample,
   exampleConfirmed,
   onToggleExampleConfirm,
+  onFillFromContract,
+  contractFileName,
   onBackToMap,
   onRunDiagnosis,
-  isRunning,
 }: DiagnosisInputViewProps) {
-  const [step3Open, setStep3Open] = useState(true);
-  const variableRate = Number(formState.variableCostRate);
-  const rentValue = Number(formState.rentMan);
-  const variableInvalid = Number.isNaN(variableRate) || variableRate < 0 || variableRate > 95;
-  const rentInvalid = "" === formState.rentMan || Number.isNaN(rentValue) || rentValue < 0;
+  const [step, setStep] = useState(0);
+  const [triedNext, setTriedNext] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanResult, setScanResult] = useState<{ filled: number; missing: string[] } | null>(null);
+  const [analyzeStep, setAnalyzeStep] = useState(-1);
+
+  // 진단 실행: 분석 로딩을 보여 준 뒤 결과로 간다. 실제 API(A09)가 붙으면 응답을 기다리는 동안 보여 준다
+  useEffect(() => {
+    if (analyzeStep < 0 || analyzeStep >= ANALYZE_STEPS.length) return;
+    const timer = setTimeout(() => {
+      setAnalyzeStep(analyzeStep + 1);
+      // 마지막 단계가 끝나면 한 번만 결과로 이동한다
+      if (analyzeStep === ANALYZE_STEPS.length - 1) onRunDiagnosis();
+    }, 850);
+    return () => clearTimeout(timer);
+  }, [analyzeStep, onRunDiagnosis]);
+
+  const set = (key: TextKey, value: string) => {
+    onChangeForm((previous) => ({ ...previous, [key]: value }));
+    onClearFieldSource(key);
+  };
+
+  const rent = Number(formState.rentMan);
+  const variable = Number(formState.variableCostRate);
+  const errors = {
+    rentMan: formState.rentMan === "" || !(rent > 0),
+    laborMan: formState.laborMan === "",
+    otherFixedMan: formState.otherFixedMan === "",
+    variableCostRate: formState.variableCostRate === "" || variable < 0 || variable > 95,
+  };
+  const monthlyInvalid = Object.values(errors).some(Boolean);
   const exampleUnconfirmed = usedExample && !exampleConfirmed;
-  const canRun = !variableInvalid && !rentInvalid && !exampleUnconfirmed && !isRunning;
-  const updateField = <K extends keyof FormState>(e: K, t: FormState[K]) =>
-    onChangeForm((s) => ({
-      ...s,
-      [e]: t,
-    }));
-  const [areaMin, areaMax, areaNote] = category.areaRec;
-  const areaValue = Number(formState.areaM2);
-  const areaPyeong = areaValue > 0 ? (areaValue / 3.3058).toFixed(1) : null;
+  const canFillExample =
+    formState.laborMan === "" || formState.otherFixedMan === "" || formState.variableCostRate === "";
+
+  const [areaMin, areaMax] = category.areaRec;
+  const area = Number(formState.areaM2);
+  const showError = (key: keyof typeof errors) => triedNext && errors[key];
+
+  const next = () => {
+    if (step === 1 && (monthlyInvalid || exampleUnconfirmed)) {
+      setTriedNext(true);
+      return;
+    }
+    setTriedNext(false);
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+      window.scrollTo({ top: 0 });
+    } else {
+      setAnalyzeStep(0);
+    }
+  };
+  const back = () => {
+    if (step === 0) onBackToMap();
+    else {
+      setStep(step - 1);
+      window.scrollTo({ top: 0 });
+    }
+  };
+
+  const current = STEPS[step] ?? STEPS[0];
+
   return (
-    <div className="space-y-5">
-      <div className="bg-white rounded-[24px] border border-border shadow-sm p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary-soft text-brand flex items-center justify-center shrink-0">
-            <MapPin className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[13px] font-bold px-2 py-0.5 rounded-full bg-foreground text-white">STEP 1</span>
-              <h2 className="text-base font-extrabold text-foreground">
-                {neighborhood.name} · {category.label} · 반경 {radiusM >= 1000 ? "1km" : `${radiusM}m`}
-              </h2>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-500 tabular-nums">
-              <span>영업 {formatCount(radiusStats.activeCount)}</span>
-              <span>·</span>
-              <span className="text-success-500">1년 개업 {formatCount(radiusStats.open1yCount)}</span>
-              <span>·</span>
-              <span className="text-destructive">1년 폐업 {formatCount(radiusStats.close1yCount)}</span>
-            </div>
-          </div>
+    <div className="mx-auto max-w-[720px]">
+      <ScreenHeader
+        title="진단 입력"
+        onBack={back}
+        right={
+          <span className="text-[14px] font-medium text-ink-500 tabular-nums">
+            {step + 1}/{STEPS.length}
+          </span>
+        }
+      />
+      <PageTitle title="창업 진단" description="세 단계만 입력하면 생존확률과 월세 손익이 나와요." />
+      <FlowSteps current="diagnose" />
+
+      <div className="mb-5">
+        <div className="mb-3 flex gap-1.5" aria-hidden="true">
+          {STEPS.map((item, index) => (
+            <span
+              key={item.title}
+              className={cn("h-1 flex-1 rounded-full", index <= step ? "bg-primary" : "bg-line-strong")}
+            />
+          ))}
         </div>
-        <button
-          type="button"
-          onClick={onBackToMap}
-          className="px-3.5 py-2 rounded-xl border border-input bg-secondary text-xs font-bold text-ink-600 hover:border-brand-light hover:text-brand"
-        >
-          지도에서 위치 변경
-        </button>
+        <h2 className="text-[22px] font-extrabold tracking-tight text-foreground">{current.title}</h2>
+        <p className="mt-1 text-[15px] text-ink-600">{current.description}</p>
       </div>
-      <div className="grid gap-5 items-start grid-cols-1 lg:grid-cols-12">
-        <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-5 lg:col-span-7">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-muted">
-            <div>
-              <span className="text-[13px] font-bold px-2 py-0.5 rounded-full bg-primary-soft text-primary">
-                STEP 2
-              </span>
-              <h3 className="text-lg font-extrabold text-foreground mt-1">월 비용 · 매장 면적 · 매출 입력</h3>
-              <p className="text-xs text-muted-foreground">만원 단위 입력 (API 전송 시 원화 정수 자동 변환)</p>
+
+      {step === 0 && (
+        <div className="space-y-4">
+          <Panel className="flex items-start gap-3">
+            <MapPin className="mt-0.5 size-5 shrink-0 text-brand" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[16px] font-bold text-foreground">{neighborhood.addr}</p>
+              <p className="mt-0.5 text-[14px] text-ink-600 tabular-nums">
+                반경 {radiusM >= 1000 ? "1km" : `${radiusM}m`} 안 {category.label}{" "}
+                {formatCount(radiusStats.activeCount)}
+                {" · "}1년 새 폐업 {formatCount(radiusStats.close1yCount)}
+              </p>
             </div>
             <button
               type="button"
-              onClick={onFillExample}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-background border border-brand-300 text-xs font-bold text-primary hover:bg-primary-soft"
+              onClick={onBackToMap}
+              className="-my-2 min-h-11 shrink-0 text-[14px] font-semibold text-primary"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              기획서 예시값 채우기
+              바꾸기
             </button>
-          </div>
-          <div className="p-3.5 rounded-2xl bg-secondary border border-border space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-bold text-ink-700">매장 면적 (선택)</label>
-              <span className="text-xs font-bold text-brand tabular-nums">
-                {areaPyeong ? `약 ${areaPyeong}평` : `${category.label} 추천 ${areaMin}~${areaMax}㎡`}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-32">
-                <input
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={formState.areaM2}
-                  onChange={(e) => updateField("areaM2", e.target.value)}
-                  placeholder="예: 50"
-                  className="w-full px-3 py-2 pr-9 rounded-xl bg-white border border-line-strong text-sm font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">㎡</span>
-              </div>
-              {[areaMin, Math.round((areaMin + areaMax) / 2), areaMax].map((e) => (
-                <button
-                  type="button"
-                  onClick={() => updateField("areaM2", String(e))}
-                  className="px-2.5 py-1.5 rounded-lg bg-white border border-input text-[13px] font-bold text-ink-600 hover:border-brand-light"
-                  key={e}
-                >
-                  {e}㎡ ({Math.round(e / 3.3058)}평)
-                </button>
+          </Panel>
+
+          <Panel>
+            <p className="mb-3 text-[15px] font-semibold text-ink-700">업종</p>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((item) => (
+                <Chip key={item.id} selected={item.id === category.id} onClick={() => onSelectCategory(item)}>
+                  {item.label}
+                </Chip>
               ))}
             </div>
-            <p className="text-[13px] text-ink-400">{areaNote}</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">보증금</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={formState.depositMan}
-                  onChange={(e) => updateField("depositMan", e.target.value)}
-                  className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-secondary border border-line-strong text-base font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">만원</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">
-                월세 <span className="text-brand">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="10"
-                  value={formState.rentMan}
-                  onChange={(e) => updateField("rentMan", e.target.value)}
-                  className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-secondary border border-line-strong text-base font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">만원</span>
-              </div>
-              <label className="mt-1.5 inline-flex items-center gap-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={formState.rentVatSeparate}
-                  onChange={(e) => updateField("rentVatSeparate", e.target.checked)}
-                  className="w-4 h-4 accent-brand"
-                />
-                <span className="text-xs text-ink-600">월세 부가세(10%) 별도</span>
-              </label>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">월 관리비</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="5"
-                  value={formState.maintenanceMan}
-                  onChange={(e) => updateField("maintenanceMan", e.target.value)}
-                  className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-secondary border border-line-strong text-base font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">만원</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">월 인건비</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="10"
-                  value={formState.laborMan}
-                  onChange={(e) => updateField("laborMan", e.target.value)}
-                  className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-secondary border border-line-strong text-base font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">만원</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">기타 고정비</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="10"
-                  value={formState.otherFixedMan}
-                  onChange={(e) => updateField("otherFixedMan", e.target.value)}
-                  className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-secondary border border-line-strong text-base font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">만원</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-700 mb-1">
-                변동비율 (0~95%) <span className="text-brand">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  max="95"
-                  value={formState.variableCostRate}
-                  onChange={(e) => updateField("variableCostRate", e.target.value)}
-                  className={`w-full px-4 py-2.5 pr-10 rounded-2xl bg-secondary border text-base font-bold text-foreground tabular-nums focus:outline-none ${variableInvalid ? "border-destructive" : "border-line-strong focus:border-brand-light"}`}
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">%</span>
-              </div>
-            </div>
-            <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-ink-700">예상 월매출 (선택 · 비우면 BEP만 계산)</label>
-                <button
-                  type="button"
-                  onClick={() => updateField("expectedSalesMan", String(Math.round(0.55 * dongSummary.avgSalesMan)))}
-                  className="text-[13px] font-bold text-brand hover:underline"
+          </Panel>
+
+          <Panel>
+            <NumberField
+              id="area"
+              label="매장 면적 (선택)"
+              unit="㎡"
+              value={formState.areaM2}
+              onChange={(value) => set("areaM2", value)}
+              placeholder={`${category.label}은 보통 ${areaMin}~${areaMax}㎡`}
+              hint={
+                area > 0
+                  ? `약 ${(area / 3.3058).toFixed(1)}평`
+                  : "넣으면 1년 생존확률을 이 자리 조건으로 계산해요. 비우면 서울 같은 업종 평균을 써요."
+              }
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[areaMin, Math.round((areaMin + areaMax) / 2), areaMax].map((value) => (
+                <Chip
+                  key={value}
+                  selected={formState.areaM2 === String(value)}
+                  onClick={() => set("areaM2", String(value))}
                 >
-                  보수적 예시({Math.round(0.55 * dongSummary.avgSalesMan).toLocaleString("ko-KR")}만) 넣기
-                </button>
+                  {value}㎡ · {Math.round(value / 3.3058)}평
+                </Chip>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="space-y-4">
+          {contractFileName ? (
+            <div className="flex items-start gap-3 rounded-3xl bg-success-soft p-5">
+              <CircleCheck className="mt-0.5 size-5 shrink-0 text-success" />
+              <div className="min-w-0 flex-1 text-[15px]">
+                <p className="font-bold text-success-700">계약서에서 읽은 값을 채웠어요</p>
+                <p className="mt-0.5 text-[14px] text-success-700">
+                  <span className="rounded bg-card px-1 font-bold">계약서</span> 표시가 붙은 칸이에요. 틀리면 바로
+                  고치면 돼요.
+                </p>
               </div>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  value={formState.expectedSalesMan}
-                  onChange={(e) => updateField("expectedSalesMan", e.target.value)}
-                  placeholder="비워두면 손익분기 매출(BEP)만 계산"
-                  className="w-full px-4 py-2.5 pr-12 rounded-2xl bg-secondary border border-line-strong text-base font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
+              <button
+                type="button"
+                onClick={() => setScanOpen(true)}
+                className="-my-2 min-h-11 shrink-0 text-[14px] font-semibold text-success-700"
+              >
+                다시 찍기
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setScanOpen(true)}
+              className="flex w-full items-center gap-4 rounded-3xl bg-foreground p-5 text-left text-background transition-transform active:scale-[0.98]"
+            >
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+                <Camera className="size-6" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[17px] font-bold">계약서로 채우기</span>
+                <span className="mt-0.5 block text-[14px] text-ink-300">
+                  가계약서나 계약서 초안을 찍으면 보증금, 월세, 관리비를 넣어 드려요
+                </span>
+              </span>
+            </button>
+          )}
+
+          <Panel className="space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <NumberField
+                id="deposit"
+                label="보증금"
+                unit="만원"
+                value={formState.depositMan}
+                onChange={(value) => set("depositMan", value)}
+                source={fieldSources.depositMan}
+              />
+              <div>
+                <NumberField
+                  id="rent"
+                  label="월세"
+                  unit="만원"
+                  required
+                  value={formState.rentMan}
+                  onChange={(value) => set("rentMan", value)}
+                  source={fieldSources.rentMan}
+                  invalid={showError("rentMan")}
+                  hint={showError("rentMan") ? "월세를 넣어 주세요." : undefined}
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-ink-400">만원</span>
+                <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={formState.rentVatSeparate}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      onChangeForm((previous) => ({ ...previous, rentVatSeparate: checked }));
+                      onClearFieldSource("rentVatSeparate");
+                    }}
+                    className="size-5 accent-primary"
+                  />
+                  <span className="text-[15px] text-ink-700">부가세 10% 별도</span>
+                  {fieldSources.rentVatSeparate === "contract" && (
+                    <span className="rounded-md bg-success-soft px-1.5 py-0.5 text-[12px] font-bold text-success-700">
+                      계약서
+                    </span>
+                  )}
+                </label>
+              </div>
+              <NumberField
+                id="maintenance"
+                label="관리비"
+                unit="만원"
+                value={formState.maintenanceMan}
+                onChange={(value) => set("maintenanceMan", value)}
+                source={fieldSources.maintenanceMan}
+              />
+            </div>
+
+            <div className="border-t border-border pt-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-[15px] font-bold text-foreground">운영비</p>
+                {canFillExample && (
+                  <button
+                    type="button"
+                    onClick={onFillExample}
+                    className="min-h-11 text-[14px] font-semibold text-primary"
+                  >
+                    모르는 칸은 예시값으로
+                  </button>
+                )}
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <NumberField
+                  id="labor"
+                  label="인건비 (월)"
+                  unit="만원"
+                  required
+                  value={formState.laborMan}
+                  onChange={(value) => set("laborMan", value)}
+                  source={fieldSources.laborMan}
+                  invalid={showError("laborMan")}
+                  hint={showError("laborMan") ? "모르면 예시값을 써도 돼요." : "혼자 운영하면 0을 넣어요."}
+                />
+                <NumberField
+                  id="other"
+                  label="기타 고정비 (월)"
+                  unit="만원"
+                  required
+                  value={formState.otherFixedMan}
+                  onChange={(value) => set("otherFixedMan", value)}
+                  source={fieldSources.otherFixedMan}
+                  invalid={showError("otherFixedMan")}
+                  hint="공과금·통신비·보험료 등"
+                />
+                <NumberField
+                  id="variable"
+                  label="재료비 비율"
+                  unit="%"
+                  required
+                  value={formState.variableCostRate}
+                  onChange={(value) => set("variableCostRate", value)}
+                  source={fieldSources.variableCostRate}
+                  invalid={showError("variableCostRate")}
+                  hint={
+                    showError("variableCostRate")
+                      ? "0~95 사이로 넣어 주세요."
+                      : "매출에서 재료비·카드수수료 등이 차지하는 비율"
+                  }
+                />
+                <NumberField
+                  id="sales"
+                  label="예상 월매출 (선택)"
+                  unit="만원"
+                  value={formState.expectedSalesMan}
+                  onChange={(value) => set("expectedSalesMan", value)}
+                  hint="비우면 손익분기 매출만 계산해요."
+                />
               </div>
             </div>
-          </div>
-          {usedExample && (
-            <div
-              className={`p-3.5 rounded-2xl border ${exampleConfirmed ? "bg-success-soft border-success-line" : "bg-background border-brand-light"}`}
-            >
-              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+
+            {usedExample && (
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-xl border p-4",
+                  exampleConfirmed
+                    ? "border-success-line bg-success-soft"
+                    : triedNext
+                      ? "border-destructive bg-destructive-soft"
+                      : "border-warning-line bg-warning-soft",
+                )}
+              >
                 <input
                   type="checkbox"
                   checked={exampleConfirmed}
-                  onChange={(e) => onToggleExampleConfirm(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 accent-brand"
+                  onChange={(event) => onToggleExampleConfirm(event.target.checked)}
+                  className="mt-0.5 size-5 shrink-0 accent-primary"
                 />
-                <span className="text-xs font-semibold text-foreground">
-                  기획서 예시값(월세 250 · 관리비 30 · 인건비 300 · 기타 120 · 변동비 40%)을 확인했습니다. (필수)
+                <span className="text-[15px] text-foreground">
+                  <span className="font-bold">예시값</span> 표시가 붙은 칸은 실제 내 비용이 아니라는 걸 알고 있어요.
                 </span>
               </label>
-            </div>
-          )}
+            )}
+          </Panel>
         </div>
-        <div className="space-y-4 lg:col-span-5">
-          <div className="bg-white rounded-[24px] border border-border shadow-sm overflow-hidden">
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4">
+          <Panel className="grid gap-5 sm:grid-cols-2">
+            <NumberField
+              id="key-money"
+              label="권리금"
+              unit="만원"
+              value={formState.keyMoneyMan}
+              onChange={(value) => set("keyMoneyMan", value)}
+              placeholder="0"
+            />
+            <NumberField
+              id="facility"
+              label="시설·인테리어비"
+              unit="만원"
+              value={formState.facilityCostMan}
+              onChange={(value) => set("facilityCostMan", value)}
+              placeholder="0"
+            />
+          </Panel>
+          <p className="px-1 text-[14px] text-ink-500">
+            중간에 그만둘 때의 손실(위약금·원상복구)은 계약서 확인 단계에서 계약 조건으로 계산해요.
+          </p>
+        </div>
+      )}
+
+      {triedNext && step === 1 && (monthlyInvalid || exampleUnconfirmed) && (
+        <p role="alert" className="mt-4 flex items-center gap-2 text-[14px] font-medium text-destructive">
+          <TriangleAlert className="size-4" />
+          {monthlyInvalid ? "빨간 칸을 채워 주세요." : "예시값 확인에 체크해 주세요."}
+        </p>
+      )}
+
+      <StickyActionsSpacer />
+      <StickyActions>
+        {step > 0 && (
+          <button type="button" onClick={back} className={buttonClass("secondary", "w-24 shrink-0")}>
+            이전
+          </button>
+        )}
+        <button type="button" onClick={next} className={buttonClass("primary", "flex-1 md:flex-none md:px-10")}>
+          {step === STEPS.length - 1 ? "진단 결과 보기" : "다음"}
+        </button>
+      </StickyActions>
+
+      <BottomSheet
+        open={scanOpen}
+        onClose={() => {
+          setScanOpen(false);
+          setScanResult(null);
+        }}
+        title={scanResult ? "계약서를 읽었어요" : "계약서로 채우기"}
+        footer={
+          scanResult ? (
             <button
               type="button"
-              onClick={() => setStep3Open((e) => !e)}
-              className="w-full px-5 py-4 flex items-center justify-between text-left bg-secondary"
+              onClick={() => {
+                setScanOpen(false);
+                setScanResult(null);
+              }}
+              className={buttonClass("primary", "w-full")}
             >
-              <div>
-                <span className="text-[13px] font-bold px-2 py-0.5 rounded-full bg-muted text-ink-600">
-                  STEP 3 · 선택
-                </span>
-                <h3 className="text-base font-extrabold text-foreground mt-1">초기 투자 · 중도 종료 조건</h3>
-              </div>
-              {step3Open ? (
-                <ChevronUp className="w-5 h-5 text-ink-400" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-ink-400" />
-              )}
+              확인하고 이어서 입력
             </button>
-            {step3Open && (
-              <div className="p-5 pt-3 border-t border-muted space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {STEP3_FIELDS.map(([e, s]) => (
-                    <div key={e}>
-                      <label className="block text-[13px] font-bold text-ink-600 mb-1">{s}</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formState[e]}
-                        onChange={(t) => updateField(e, t.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-secondary border border-line-strong text-sm font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div>
-                  <label className="block text-[13px] font-bold text-ink-600 mb-1">원상복구비 (만원)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formState.restorationMan}
-                    onChange={(e) => updateField("restorationMan", e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-secondary border border-line-strong text-sm font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                  />
-                </div>
-                <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
-                  <input
-                    type="checkbox"
-                    checked={formState.penaltyOverlapsRent}
-                    onChange={(e) => updateField("penaltyOverlapsRent", e.target.checked)}
-                    className="mt-0.5 w-4 h-4 accent-brand"
-                  />
-                  <span className="text-xs text-ink-600">위약금과 잔여 임대료 중복 산정 방지 (큰 값 1회만 반영)</span>
-                </label>
-              </div>
+          ) : undefined
+        }
+      >
+        {scanResult ? (
+          <div className="space-y-3 text-[15px]">
+            <p className="text-foreground">
+              <strong>{scanResult.filled}개 칸</strong>을 채웠어요. 입력칸에서 값이 맞는지 한 번 봐 주세요.
+            </p>
+            {scanResult.missing.length > 0 && (
+              <p className="rounded-xl bg-warning-soft px-4 py-3 text-[14px] text-warning-700">
+                글자가 흐려서 비워 둔 칸: <strong>{scanResult.missing.join(", ")}</strong>. 직접 넣어 주세요.
+              </p>
             )}
+            <p className="text-[13px] text-ink-400">
+              읽은 계약서는 계약서 확인 단계에서 다시 올리지 않고 그대로 이어서 볼 수 있어요.
+            </p>
           </div>
-          <button
-            type="button"
-            disabled={!canRun}
-            onClick={onRunDiagnosis}
-            className={`w-full py-4 px-6 rounded-[20px] font-extrabold text-base transition-all flex items-center justify-center gap-2 ${canRun ? "bg-gradient-to-r from-brand-light to-brand hover:from-brand hover:to-primary text-white shadow-soft" : "bg-line-strong text-ink-300 cursor-not-allowed"}`}
-          >
-            {isRunning ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Calculator className="w-5 h-5" />}
-            {isRunning ? "진단 계산 중..." : "생존확률 · 손익 진단 실행"}
-          </button>
+        ) : (
+          <>
+            <p className="mb-4 text-[15px] text-ink-600">
+              보증금·월세·관리비·부가세를 읽어서 넣어 드려요. 나머지 조건은 계약서 확인 단계에서 살펴봐요.
+            </p>
+            <ContractUpload
+              onComplete={(fields, fileName) => {
+                const filled = onFillFromContract(fields, fileName);
+                const missing = fields
+                  .filter((field) => ["deposit", "rent", "mgmt", "vat"].includes(field.key))
+                  .filter((field) => String(field.input ?? "").trim() === "")
+                  .map((field) => field.label);
+                setScanResult({ filled, missing });
+              }}
+            />
+          </>
+        )}
+      </BottomSheet>
+      {analyzeStep >= 0 && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-background" role="status">
+          <Awning className="h-6" />
+          <div className="flex flex-1 flex-col items-center justify-center px-6 pb-16">
+            <p className="mb-8 text-center text-[15px] text-ink-500">
+              {neighborhood.shortName} {category.label} 자리를 살펴보고 있어요
+            </p>
+            <AnalyzingScene variant="diagnosis" steps={ANALYZE_STEPS} step={analyzeStep} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

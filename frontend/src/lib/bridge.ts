@@ -4,6 +4,7 @@ import {
   type AppToWebMessage,
   type BridgeRequests,
   type BridgeRequestType,
+  REQUEST_TIMEOUT_MS,
   WEB_RECEIVE_FUNCTION,
 } from "@ax/bridge";
 
@@ -14,6 +15,7 @@ type BridgeWindow = Window & {
   [WEB_RECEIVE_FUNCTION]?: (message: AppToWebMessage) => void;
 };
 
+/** 응답 제한 시간 기본값. 촬영처럼 사람이 오래 쓰는 요청은 REQUEST_TIMEOUT_MS 를 따른다 */
 const TIMEOUT_MS = 30_000;
 const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
 
@@ -63,7 +65,7 @@ export function callApp<K extends BridgeRequestType>(
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error(`앱 응답 시간 초과: ${type}`));
-    }, TIMEOUT_MS);
+    }, REQUEST_TIMEOUT_MS[type] ?? TIMEOUT_MS);
     pending.set(id, {
       resolve: (value) => {
         clearTimeout(timer);

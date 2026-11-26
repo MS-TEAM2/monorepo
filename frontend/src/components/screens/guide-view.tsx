@@ -2,6 +2,8 @@
 
 import { ExternalLink, Landmark } from "lucide-react";
 import { useMemo, useState } from "react";
+
+import { ScreenHeader } from "@/components/screens/screen-kit";
 import {
   BUSINESS_AUTO_CONDITIONS,
   BUSINESS_DISABLED_CONDITIONS,
@@ -17,7 +19,7 @@ type GuideViewProps = {
   onGoPolicy: () => void;
 };
 
-/** S12 창업 가이드 체크리스트 화면 시안 */
+/** S12 창업 가이드 체크리스트 */
 export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps) {
   const [businessId, setBusinessId] = useState<BusinessTypeId>("restaurant");
   const [conditions, setConditions] = useState<Record<ConditionKey, boolean>>({
@@ -49,19 +51,17 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
   const doneCount = allItems.filter((e) => done[e.id]).length;
   const donePct = allItems.length ? Math.round((doneCount / allItems.length) * 100) : 0;
   return (
-    <div className="space-y-6">
-      <div className="rounded-[28px] bg-gradient-to-br from-brand-50 to-brand-100 border border-brand-200 px-6 py-7 sm:px-8 sm:py-9">
-        <span className="text-[13px] font-bold px-2.5 py-1 rounded-full bg-white text-primary border border-brand-200">
-          S12 · 창업 가이드
-        </span>
-        <h1 className="mt-3 text-[32px] sm:text-[40px] font-extrabold leading-tight tracking-tight text-foreground">
+    <div className="mx-auto max-w-[960px] space-y-8">
+      <ScreenHeader title="창업 가이드" backHref="/" />
+      <div>
+        <h1 className="hidden text-2xl font-extrabold tracking-tight text-foreground md:block">
           외식업 창업 체크리스트
         </h1>
-        <p className="mt-2 text-[17px] text-ink-600">어떤 가게를 열지 고르면, 꼭 해야 할 일만 순서대로 보여드려요.</p>
+        <p className="text-[15px] text-ink-600 md:mt-1">어떤 가게를 열지 고르면 해야 할 일만 순서대로 보여 줘요.</p>
       </div>
       <section className="space-y-4">
-        <h2 className="flex items-center gap-3 text-[22px] sm:text-[26px] font-extrabold text-foreground">
-          <span className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full bg-brand text-white text-[17px]">
+        <h2 className="flex items-center gap-3 text-[19px] font-bold text-foreground">
+          <span className="inline-flex items-center justify-center size-7 rounded-full bg-primary-soft text-primary text-[14px]">
             1
           </span>
           어떤 가게를 열 계획인가요?
@@ -74,7 +74,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
                 type="button"
                 aria-pressed={s}
                 onClick={() => setBusinessId(e.id)}
-                className={`grid gap-1.5 justify-items-start content-start text-left p-5 rounded-[28px] border-2 min-h-[132px] transition ${s ? "bg-background border-brand-light shadow-[inset_0_0_0_1px_var(--brand-light)]" : "bg-white border-line hover:border-brand-300"}`}
+                className={`grid gap-1.5 justify-items-start content-start text-left p-5 rounded-2xl border min-h-[112px] transition ${s ? "bg-card border-foreground shadow-[inset_0_0_0_1px_var(--foreground)]" : "bg-card border-line hover:border-line-strong"}`}
                 key={e.id}
               >
                 <b className="text-[18px] text-foreground">{e.name}</b>
@@ -90,8 +90,8 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
         </div>
       </section>
       <section className="space-y-4">
-        <h2 className="flex items-center gap-3 text-[22px] sm:text-[26px] font-extrabold text-foreground">
-          <span className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full bg-brand text-white text-[17px]">
+        <h2 className="flex items-center gap-3 text-[19px] font-bold text-foreground">
+          <span className="inline-flex items-center justify-center size-7 rounded-full bg-primary-soft text-primary text-[14px]">
             2
           </span>
           해당하는 조건을 모두 골라 주세요
@@ -102,7 +102,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
             const r = effectiveConditions[e.key];
             return (
               <label
-                className={`inline-flex items-center gap-2.5 min-h-[48px] px-4 py-2 rounded-[14px] border-2 text-[15px] font-bold ${s ? "cursor-default" : "cursor-pointer"} ${r ? "bg-background border-brand-light text-primary-hover" : "bg-white border-input text-ink-600"}`}
+                className={`inline-flex items-center gap-2.5 min-h-[48px] px-4 py-2 rounded-xl border text-[15px] font-semibold ${s ? "cursor-default" : "cursor-pointer"} ${r ? "bg-card border-foreground text-foreground" : "bg-white border-input text-ink-600"}`}
                 key={e.key}
               >
                 <input
@@ -128,17 +128,17 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
       </section>
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="flex items-center gap-3 text-[22px] sm:text-[26px] font-extrabold text-foreground">
-            <span className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-full bg-brand text-white text-[17px]">
+          <h2 className="flex items-center gap-3 text-[19px] font-bold text-foreground">
+            <span className="inline-flex items-center justify-center size-7 rounded-full bg-primary-soft text-primary text-[14px]">
               3
             </span>
             {business.name} 체크리스트
           </h2>
-          <span className="px-4 py-2 rounded-full bg-foreground text-white text-[15px] font-bold">
+          <span className="px-3 py-1.5 rounded-full bg-muted text-ink-700 text-[14px] font-semibold">
             영업 종류: {checklist.type}
           </span>
         </div>
-        <div className="p-5 rounded-[28px] bg-background border border-brand-200 space-y-2">
+        <div className="p-5 rounded-2xl bg-card border border-border space-y-2">
           <div className="flex items-center justify-between text-[18px] text-foreground">
             <b className="tabular-nums">
               {doneCount} / {allItems.length} 완료{" "}
@@ -152,12 +152,12 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
               체크 모두 지우기
             </button>
           </div>
-          <div className="h-3.5 rounded-full bg-white overflow-hidden">
+          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
             <div
               style={{
                 width: `${donePct}%`,
               }}
-              className="h-full rounded-full bg-gradient-to-r from-brand-300 to-brand-400 transition-all duration-300"
+              className="h-full rounded-full bg-primary transition-all duration-300"
             />
           </div>
           <small className="block text-[14px] text-muted-foreground">
@@ -169,7 +169,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
             const a = r.items.filter((e) => done[e.id]).length;
             return (
               <div key={r.name}>
-                <h3 className="flex items-baseline justify-between text-[20px] font-extrabold text-foreground pb-2.5 mb-3 border-b-[3px] border-brand-light">
+                <h3 className="flex items-baseline justify-between text-[17px] font-bold text-foreground pb-2 mb-3 border-b border-line-strong">
                   {r.name}
                   <span className="text-[14px] font-semibold text-muted-foreground tabular-nums">
                     {a}/{r.items.length}
@@ -181,7 +181,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
                     const n = !!done[r.id];
                     return (
                       <li
-                        className={`flex flex-wrap gap-x-3 gap-y-2.5 items-start px-4 py-3.5 rounded-[14px] border ${r.warn ? "bg-warning-soft border-warning-500" : n ? "bg-success-soft border-transparent" : "bg-white border-line"}`}
+                        className={`flex flex-wrap gap-x-3 gap-y-2.5 items-start px-4 py-3.5 rounded-xl border ${r.warn ? "bg-warning-soft border-warning-500" : n ? "bg-success-soft border-transparent" : "bg-card border-line"}`}
                         key={r.id}
                       >
                         <input
@@ -194,7 +194,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
                               [r.id]: e.target.checked,
                             }))
                           }
-                          className="mt-0.5 w-[22px] h-[22px] accent-brand shrink-0"
+                          className="mt-0.5 w-[22px] h-[22px] accent-primary shrink-0"
                         />
                         <label htmlFor={`guide-${r.id}`} className="flex-1 flex flex-col gap-0.5 cursor-pointer">
                           <span className="flex flex-wrap items-center gap-1.5">
@@ -232,7 +232,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
                                 href={r.ext[1]}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-full border-2 border-foreground text-[14px] font-bold text-foreground whitespace-nowrap hover:bg-background"
+                                className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 rounded-full border border-line-strong text-[14px] font-semibold text-foreground whitespace-nowrap hover:bg-background"
                               >
                                 {r.ext[0]} 바로가기
                                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
@@ -253,9 +253,9 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
           절차와 기준은 가게 위치와 면적에 따라 달라요. 영업신고 전에 구청 위생과에 한 번 확인하세요.
         </p>
       </section>
-      <div className="flex flex-wrap items-center justify-between gap-4 p-6 rounded-[28px] bg-white border border-border">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-card border border-border">
         <div>
-          <h3 className="text-[20px] font-extrabold text-foreground">창업 자금이 필요하다면</h3>
+          <h3 className="text-[17px] font-bold text-foreground">창업 자금이 필요하다면</h3>
           <p className="text-[15px] text-muted-foreground mt-1">
             외식업 예비 창업자가 신청할 수 있는 자금, 보증, 교육, 컨설팅을 모아 뒀어요.
           </p>
@@ -263,7 +263,7 @@ export function GuideView({ onGoMap, onGoContract, onGoPolicy }: GuideViewProps)
         <button
           type="button"
           onClick={onGoPolicy}
-          className="inline-flex items-center justify-center gap-2 min-h-[48px] px-[22px] rounded-[14px] bg-brand hover:bg-primary text-white text-[16px] font-bold"
+          className="inline-flex items-center justify-center gap-2 min-h-[48px] px-[22px] rounded-xl bg-primary hover:bg-primary-hover text-white text-[16px] font-bold"
         >
           <Landmark className="w-4 h-4" />
           지원정책 보기

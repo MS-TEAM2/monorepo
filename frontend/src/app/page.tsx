@@ -1,6 +1,6 @@
-import { ExploreScreen } from "@/components/screens/app-screens";
+import { HomeScreen } from "@/components/screens/app-screens";
 
-/** S01 홈. 화면 시안대로 상권 지도 위에 시작 선택 창(동네·업종·반경, 바로 이동할 기능)을 띄운다. */
+/** S01 홈. 동네·업종을 고르고 상권 지도나 진단으로 들어간다. */
 export default function HomePage() {
-  return <ExploreScreen withEntryModal />;
+  return <HomeScreen />;
 }

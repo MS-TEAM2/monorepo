@@ -1,14 +1,13 @@
-import { BookOpen, Calculator, Database, FileText, Landmark, MapIcon, type LucideIcon } from "lucide-react";
+import { BookOpen, Calculator, FileText, House, MapIcon, type LucideIcon } from "lucide-react";
 
 import type { NavIconName } from "@/lib/navigation";
 
 const ICONS: Record<NavIconName, LucideIcon> = {
+  home: House,
   explore: MapIcon,
   diagnose: Calculator,
   contract: FileText,
   guide: BookOpen,
-  policy: Landmark,
-  data: Database,
 };
 
 export function NavIcon({ name, className }: { name: NavIconName; className?: string }) {

@@ -15,6 +15,7 @@ import type {
   Store,
   SurvivalResult,
 } from "@/lib/mock/startup/types";
+import { formatKrw } from "@/lib/money";
 
 /** 5건 미만은 구간으로 표시한다 (기획서 S03) */
 export function formatCount(count: number): string {
@@ -24,12 +25,8 @@ export function formatCount(count: number): string {
 }
 
 /** 원 → 만원 표시. showSign이면 양수에 + */
-export function formatMan(krw: number | null | undefined, { showSign = false } = {}): string {
-  if (krw === null || krw === undefined || Number.isNaN(krw)) return "-";
-  const man = Math.round(krw / 1e4);
-  const text = Math.abs(man).toLocaleString("ko-KR");
-  if (man < 0) return `-${text}만원`;
-  return showSign && man > 0 ? `+${text}만원` : `${text}만원`;
+export function formatMan(krw: number | null | undefined, options: { showSign?: boolean } = {}): string {
+  return formatKrw(krw, options);
 }
 
 /** 같은 입력이면 항상 같은 수열을 주는 난수 (예시 매장 배치용) */

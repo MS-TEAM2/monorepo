@@ -1,20 +1,28 @@
 "use client";
 
-import {
-  Check,
-  CircleCheck,
-  ClipboardCheck,
-  Copy,
-  FileText,
-  Landmark,
-  ShieldCheck,
-  Sparkles,
-  Upload,
-} from "lucide-react";
+import { ChevronRight, FileText, Share2, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
+
+import { ContractPaper, PaperClause, splitRisky } from "@/components/screens/contract-paper";
+import { ContractUpload } from "@/components/screens/contract-upload";
+import { RollingText, useRevealValue } from "@/components/screens/motion-kit";
+import {
+  BottomSheet,
+  FlowSteps,
+  NumberField,
+  PageTitle,
+  Panel,
+  PanelTitle,
+  ScreenHeader,
+  StickyActions,
+  StickyActionsSpacer,
+  buttonClass,
+} from "@/components/screens/screen-kit";
+import { callApp, isInApp } from "@/lib/bridge";
+import { priceClauses } from "@/lib/clause-price";
 import { calcLoss, calcProfit, formatMan } from "@/lib/mock/startup/calc";
-import { PolicyCard } from "@/components/screens/policy-screen";
-import { CONTRACT_STEPS, POLICIES, RISK_CLAUSES, createContractFields } from "@/lib/mock/startup/data";
+import { RISK_CLAUSES } from "@/lib/mock/startup/data";
 import type {
   AppliedContract,
   Category,
@@ -24,28 +32,24 @@ import type {
   FormState,
   Neighborhood,
 } from "@/lib/mock/startup/types";
-const STAGE_TABS: readonly {
-  id: ContractStage;
-  label: string;
-}[] = [
-  {
-    id: "upload",
-    label: "S06. 계약서 올리기",
-  },
-  {
-    id: "review",
-    label: "S07. 추출 조건 확인",
-  },
-  {
-    id: "result",
-    label: "S08. 반영 결과·특약",
-  },
+import { cn } from "@/lib/utils";
+
+const STAGES: readonly { id: ContractStage; label: string }[] = [
+  { id: "upload", label: "올리기" },
+  { id: "review", label: "조건 확인" },
+  { id: "result", label: "결과" },
 ];
+
+const LOW_CONFIDENCE = 0.7;
+
 type ContractViewProps = {
   neighborhood: Neighborhood;
   category: Category;
   formState: FormState;
+  onChangeForm: (update: (previous: FormState) => FormState) => void;
   buildCostParams: (rentMan?: number | null) => CostParams;
+  hasReport: boolean;
+  contractFileName: string;
   contractStage: ContractStage;
   setContractStage: (stage: ContractStage) => void;
   contractFields: ContractField[];
@@ -53,16 +57,39 @@ type ContractViewProps = {
   appliedContract: AppliedContract | null;
   setAppliedContract: (contract: AppliedContract | null) => void;
   onGoReport: () => void;
-  onGoPolicy: () => void;
-  onGoGuide: () => void;
+  onGoDiagnose: () => void;
 };
 
-/** S06–S08 계약서 올리기·조건 확인·반영 결과 화면 시안 */
+/** 확인한 계약 조건을 진단 입력에 덮어쓴 계산값 */
+function applyContract(base: CostParams, contract: AppliedContract | null): CostParams {
+  if (!contract) return base;
+  const man = (value: string | number | undefined, fallback: number) =>
+    value === undefined ? fallback : Math.round(10000 * Number(value));
+  return {
+    ...base,
+    rentKrw: man(contract.rent, base.rentKrw),
+    maintenanceKrw: man(contract.mgmt, base.maintenanceKrw),
+    rentVatSeparate: contract.vat === undefined ? base.rentVatSeparate : String(contract.vat).includes("별도"),
+    annualEscalationPct: contract.raise === undefined ? base.annualEscalationPct : Number(contract.raise),
+    remainingObligationMonths:
+      contract.term === undefined
+        ? base.remainingObligationMonths
+        : Math.max(0, Number(contract.term) - base.exitMonth),
+    penaltyOverlapsRent:
+      (contract.penalty !== undefined && String(contract.penalty).includes("잔여")) || base.penaltyOverlapsRent,
+    restorationKrw: man(contract.restore, base.restorationKrw),
+  };
+}
+
+/** S06–S08 계약서 올리기 → 조건 확인 → 반영 결과 */
 export function ContractView({
   neighborhood,
   category,
   formState,
+  onChangeForm,
   buildCostParams,
+  hasReport,
+  contractFileName,
   contractStage,
   setContractStage,
   contractFields,
@@ -70,640 +97,495 @@ export function ContractView({
   appliedContract,
   setAppliedContract,
   onGoReport,
-  onGoPolicy,
-  onGoGuide,
+  onGoDiagnose,
 }: ContractViewProps) {
-  const [consents, setConsents] = useState([false, false, false]);
-  const [uploadError, setUploadError] = useState("");
-  const [processing, setProcessing] = useState(false);
-  const [processingStep, setProcessingStep] = useState(-1);
-  const [fileName, setFileName] = useState("");
   const [reviewError, setReviewError] = useState("");
-  const [copyMessage, setCopyMessage] = useState("");
-  const [showCopyBox, setShowCopyBox] = useState(false);
-  const allConsented = consents.every(Boolean);
-  const startAnalysis = (e: string) => {
-    setUploadError("");
-    setFileName(e);
-    setProcessing(true);
-    setProcessingStep(0);
-    CONTRACT_STEPS.forEach((e, t) => {
-      setTimeout(
-        () => {
-          setProcessingStep(t + 1);
-          if (t === CONTRACT_STEPS.length - 1) {
-            setTimeout(() => {
-              setContractFields(createContractFields());
-              setProcessing(false);
-              setContractStage("review");
-            }, 300);
-          }
-        },
-        360 * (t + 1),
-      );
-    });
-  };
+  const [shareMessage, setShareMessage] = useState("");
+  const [showQuestions, setShowQuestions] = useState(false);
+  const [openClause, setOpenClause] = useState<string | null>(null);
+  const openedClause = RISK_CLAUSES.find((clause) => clause.id === openClause) ?? null;
+
   const baseParams = useMemo(() => buildCostParams(null), [buildCostParams]);
-  const contractParams = useMemo(() => {
-    if (!appliedContract) return baseParams;
-    const e =
-      undefined !== appliedContract.rent ? Math.round(10000 * Number(appliedContract.rent)) : baseParams.rentKrw;
-    const t =
-      undefined !== appliedContract.mgmt ? Math.round(10000 * Number(appliedContract.mgmt)) : baseParams.maintenanceKrw;
-    const s =
-      undefined !== appliedContract.vat ? String(appliedContract.vat).includes("별도") : baseParams.rentVatSeparate;
-    const r = undefined !== appliedContract.raise ? Number(appliedContract.raise) : baseParams.annualEscalationPct;
-    const a =
-      undefined !== appliedContract.term
-        ? Math.max(0, Number(appliedContract.term) - baseParams.exitMonth)
-        : baseParams.remainingObligationMonths;
-    const n = undefined !== appliedContract.penalty && String(appliedContract.penalty).includes("잔여");
-    const l =
-      undefined !== appliedContract.restore
-        ? Math.round(10000 * Number(appliedContract.restore))
-        : baseParams.restorationKrw;
-    return {
-      ...baseParams,
-      rentKrw: e,
-      maintenanceKrw: t,
-      rentVatSeparate: s,
-      annualEscalationPct: r,
-      remainingObligationMonths: a,
-      penaltyOverlapsRent: !!n || baseParams.penaltyOverlapsRent,
-      restorationKrw: l,
-    };
-  }, [baseParams, appliedContract]);
-  const baseLoss = useMemo(() => calcProfit(baseParams), [baseParams]);
-  const contractLoss = useMemo(() => calcProfit(contractParams), [contractParams]);
-  const baseProfit = useMemo(() => calcLoss(baseParams), [baseParams]);
-  const contractProfit = useMemo(() => calcLoss(contractParams), [contractParams]);
-  const brokerQuestions = useMemo(
+  const contractParams = useMemo(() => applyContract(baseParams, appliedContract), [baseParams, appliedContract]);
+  const before = useMemo(() => ({ profit: calcProfit(baseParams), loss: calcLoss(baseParams) }), [baseParams]);
+  const after = useMemo(
+    () => ({ profit: calcProfit(contractParams), loss: calcLoss(contractParams) }),
+    [contractParams],
+  );
+
+  const clausePrices = useMemo(() => priceClauses(contractParams, appliedContract), [contractParams, appliedContract]);
+  const clauseTotal = Object.values(clausePrices).reduce((sum, price) => sum + (price.krw ?? 0), 0);
+  const [shownClauseTotal, clauseTotalRef] = useRevealValue(0, clauseTotal, 900);
+
+  const questions = useMemo(
     () =>
-      `[계약 전 중개사 확인 질문 · ${neighborhood.addr} · ${category.label}]
-` + RISK_CLAUSES.map((e, t) => `${t + 1}. (${e.title}) ${e.question}`).join("\n"),
+      `[계약 전 확인할 질문 · ${neighborhood.addr} · ${category.label}]\n` +
+      RISK_CLAUSES.map((clause, index) => `${index + 1}. ${clause.question}`).join("\n"),
     [neighborhood.addr, category.label],
   );
-  const copyQuestions = async () => {
+
+  const shareQuestions = async () => {
+    setShareMessage("");
     try {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(brokerQuestions);
-        setCopyMessage("중개사 확인 질문 4개를 클립보드에 복사했습니다.");
+      if (isInApp()) {
+        await callApp("share", { message: questions, title: "중개사에게 물어볼 질문" });
         return;
       }
-      throw Error("Clipboard unavailable");
-    } catch {
-      setShowCopyBox(true);
-      setCopyMessage("자동 복사가 제한되어 아래 텍스트 박스를 열었습니다. 직접 복사해 주세요.");
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: "중개사에게 물어볼 질문", text: questions });
+        return;
+      }
+      await navigator.clipboard.writeText(questions);
+      setShareMessage("질문을 복사했어요. 메신저에 붙여 넣으면 돼요.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setShowQuestions(true);
+      setShareMessage("자동으로 보내지 못했어요. 아래 글을 길게 눌러 복사해 주세요.");
     }
   };
-  const confirmedCount = contractFields.filter((e) => e.ok && "" !== String(e.input ?? "").trim()).length;
+
+  const updateField = (index: number, patch: Partial<ContractField>) => {
+    setContractFields((fields) => fields.map((field, i) => (i === index ? { ...field, ...patch } : field)));
+    setReviewError("");
+  };
+
+  const confirmed = contractFields.filter((field) => field.ok && String(field.input ?? "").trim() !== "");
+
+  const applyConfirmed = () => {
+    const next: AppliedContract = {};
+    for (const field of confirmed) {
+      const value = String(field.input ?? "").trim();
+      next[field.key] = field.numeric ? Math.max(0, Number(value)) : value;
+    }
+    if (Object.keys(next).length === 0) {
+      setReviewError("맞다고 확인한 조건이 없어요. 하나 이상 확인해 주세요.");
+      return;
+    }
+    setAppliedContract(next);
+    setContractStage("result");
+    window.scrollTo({ top: 0 });
+  };
+
+  const back = () => {
+    if (contractStage === "result") setContractStage("review");
+    else if (contractStage === "review") setContractStage("upload");
+    else onGoReport();
+  };
+
+  const stageIndex = STAGES.findIndex((stage) => stage.id === contractStage);
+
+  const changedRows = appliedContract
+    ? (
+        [
+          ["보증금", formState.depositMan, appliedContract.deposit, "만원"],
+          ["월세", formState.rentMan, appliedContract.rent, "만원"],
+          ["관리비", formState.maintenanceMan, appliedContract.mgmt, "만원"],
+          ["부가세", formState.rentVatSeparate ? "별도" : "포함", appliedContract.vat, ""],
+          ["연 인상률", "", appliedContract.raise, "%"],
+          ["계약 기간", "", appliedContract.term, "개월"],
+          ["중도해지 위약금", "", appliedContract.penalty, ""],
+          ["원상복구비", "", appliedContract.restore, "만원"],
+        ] as const
+      ).filter(([, , contractValue]) => contractValue !== undefined && contractValue !== "")
+    : [];
+
   return (
-    <div className="space-y-5">
-      <div className="bg-white rounded-[24px] border border-border shadow-sm p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-xl bg-primary-soft text-brand flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </span>
-            <div>
-              <h2 className="text-base sm:text-lg font-extrabold text-foreground">임대차 계약서 검토 · 손익 반영</h2>
-              <p className="text-xs text-muted-foreground">
-                대상 진단: {neighborhood.name} · {category.label} (입력 월세 {formState.rentMan}만원)
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onGoReport}
-            className="px-3 py-1.5 rounded-xl bg-secondary border border-input text-xs font-bold text-ink-600 hover:border-brand-light"
+    <div className="mx-auto max-w-[720px]">
+      <ScreenHeader title="계약서 확인" onBack={back} />
+      <PageTitle
+        title="계약서 확인"
+        description="계약서의 실제 조건으로 손익을 다시 계산하고 위험한 특약을 짚어 봐요."
+      />
+      <FlowSteps current="contract" />
+
+      <ol
+        className="mb-5 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1 text-center text-[14px]"
+        aria-label="계약서 단계"
+      >
+        {STAGES.map((stage, index) => (
+          <li
+            key={stage.id}
+            aria-current={index === stageIndex ? "step" : undefined}
+            className={cn(
+              "flex min-h-10 items-center justify-center rounded-lg",
+              index === stageIndex ? "bg-card font-bold text-foreground shadow-sm" : "text-ink-400",
+            )}
           >
-            진단 리포트로 돌아가기
-          </button>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {STAGE_TABS.map((e) => {
-            const s = contractStage === e.id;
-            const r = ("review" === e.id && 0 === contractFields.length) || ("result" === e.id && !appliedContract);
-            return (
-              <button
-                type="button"
-                disabled={r}
-                onClick={() => !r && setContractStage(e.id)}
-                className={`py-2 px-2 rounded-xl text-xs font-extrabold transition border ${s ? "bg-brand text-white border-brand" : r ? "bg-muted text-ink-200 border-line cursor-not-allowed" : "bg-secondary text-ink-600 border-input hover:bg-background"}`}
-                key={e.id}
-              >
-                {e.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {"upload" === contractStage && (
-        <div className="grid gap-5 items-start grid-cols-1 lg:grid-cols-12">
-          <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-4 lg:col-span-7">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-brand" />
-              <h3 className="text-base font-extrabold text-foreground">1. 분석 전 개인정보 · 원본 삭제 동의 (필수)</h3>
-            </div>
-            <div className="space-y-2.5">
-              {[
-                {
-                  title: "원본 OCR 처리 및 즉시 삭제 요청",
-                  desc: "글자 인식(OCR)은 마스킹 전 원본을 처리하며, 추출 직후 삭제 API를 호출해 즉시 지웁니다.",
-                },
-                {
-                  title: "개인정보 마스킹 후 외부 AI 특약 분석",
-                  desc: "이름·주민번호·계좌번호 등을 가린 텍스트만 AI 분석에 전송하며, 문서 내 지시는 무시합니다.",
-                },
-                {
-                  title: "원본 미보관 정책",
-                  desc: "분석이 완료되거나 실패·취소되면 서버 원본을 즉시 삭제하며, 현재 브라우저 세션에서만 확인합니다.",
-                },
-              ].map((e, s) => (
-                <label
-                  className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition ${consents[s] ? "bg-background border-brand-300" : "bg-secondary border-line"}`}
-                  key={s}
-                >
-                  <input
-                    type="checkbox"
-                    checked={consents[s]}
-                    onChange={(e) => setConsents((t) => t.map((t, r) => (r === s ? e.target.checked : t)))}
-                    className="mt-0.5 w-4 h-4 accent-brand shrink-0"
-                  />
-                  <div>
-                    <div className="text-xs font-extrabold text-foreground">{e.title}</div>
-                    <p className="text-[13px] text-ink-500 mt-0.5 leading-relaxed">{e.desc}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setConsents(allConsented ? [false, false, false] : [true, true, true])}
-              className="text-xs font-bold text-brand hover:underline"
-            >
-              {allConsented ? "모두 해제하기" : "3가지 항목 한 번에 모두 동의하기"}
-            </button>
-          </div>
-          <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-4 lg:col-span-5">
-            <h3 className="text-base font-extrabold text-foreground">2. 계약서 업로드 또는 예시 체험</h3>
-            <p className="text-xs text-muted-foreground">JPG · PNG · PDF 지원 · 파일당 최대 10MB · 최대 10쪽</p>
-            <label
-              className={`block border-2 border-dashed rounded-2xl p-6 text-center transition ${allConsented && !processing ? "border-brand-light bg-background/60 cursor-pointer hover:bg-background" : "border-line-strong bg-muted opacity-65 cursor-not-allowed"}`}
-            >
-              <Upload className="w-8 h-8 mx-auto text-brand mb-2" />
-              <div className="text-sm font-extrabold text-foreground">계약서 사진 또는 PDF 선택</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {allConsented ? "눌러서 파일을 선택하거나 촬영하세요." : "좌측 3가지 동의 후 활성화됩니다."}
-              </div>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,application/pdf"
-                disabled={!allConsented || processing}
-                onChange={(e) => {
-                  const t = e.target.files?.[0];
-                  e.target.value = "";
-                  if (t) {
-                    if (["image/jpeg", "image/png", "application/pdf"].includes(t.type)) {
-                      if (t.size > 0xa00000) {
-                        setUploadError(
-                          `파일 크기가 ${(t.size / 1048576).toFixed(1)}MB입니다. 10MB 이하로 줄여 다시 올려주세요.`,
-                        );
-                      } else {
-                        startAnalysis(t.name);
-                      }
-                    } else {
-                      setUploadError(
-                        "JPG, PNG, PDF 파일만 올릴 수 있습니다. 업로드 시도된 파일은 즉시 폐기되었습니다.",
-                      );
-                    }
-                  }
-                }}
-                className="hidden"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={!allConsented || processing}
-              onClick={() => startAnalysis("예시_상가임대차계약서_공덕동.pdf")}
-              className={`w-full py-3.5 px-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 transition ${allConsented && !processing ? "bg-foreground hover:bg-ink-hover text-white shadow-md" : "bg-line-strong text-ink-300 cursor-not-allowed"}`}
-            >
-              <Sparkles className="w-4 h-4 text-brand-300" />
-              예시 계약서로 바로 검토 체험하기
-            </button>
-            {uploadError && (
-              <div className="p-3 rounded-xl bg-destructive-soft border border-destructive-line text-xs font-semibold text-destructive">
-                {uploadError}
-              </div>
-            )}
-            {processing && (
-              <div className="p-4 rounded-2xl bg-secondary border border-brand-300 space-y-2.5">
-                <div className="flex items-center justify-between text-xs font-extrabold text-brand">
-                  <span>계약서 분석 파이프라인 실행 중</span>
-                  <span className="truncate max-w-[150px] text-muted-foreground">{fileName}</span>
-                </div>
-                <ol className="space-y-1.5">
-                  {CONTRACT_STEPS.map((e, s) => {
-                    const r = processingStep > s;
-                    const a = processingStep === s;
-                    return (
-                      <li className="flex items-center gap-2 text-xs" key={e}>
-                        <span
-                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[12px] font-bold ${r ? "bg-success-500 text-white" : a ? "bg-brand-light text-white animate-pulse" : "bg-line text-ink-400"}`}
-                        >
-                          {r ? <Check className="w-3 h-3" /> : s + 1}
-                        </span>
-                        <span className={r ? "font-bold text-foreground" : a ? "font-bold text-brand" : "text-ink-400"}>
-                          {e}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {"review" === contractStage && (
-        <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-2 pb-3 border-b border-muted">
-            <div>
-              <span className="text-[13px] font-bold px-2 py-0.5 rounded-full bg-primary-soft text-primary">
-                S07 · 추출 값 검증
-              </span>
-              <h3 className="text-lg font-extrabold text-foreground mt-1">계약서에서 뽑아낸 조건을 확인하세요</h3>
-              <p className="text-xs text-muted-foreground">
-                신뢰도 70% 미만 항목은 빈칸으로 비워두었습니다. <strong>체크한 조건만</strong> 손익과 중도 종료 손실에
-                반영됩니다.
+            {stage.label}
+          </li>
+        ))}
+      </ol>
+
+      {contractStage === "upload" && (
+        <div className="space-y-4">
+          {!hasReport && (
+            <div className="flex items-start gap-3 rounded-2xl bg-warning-soft p-4 text-[15px]">
+              <TriangleAlert className="mt-0.5 size-5 shrink-0 text-warning" />
+              <p className="flex-1 text-warning-700">
+                진단을 먼저 하면 계약 전후 손익을 나란히 볼 수 있어요.
+                <button type="button" onClick={onGoDiagnose} className="ml-1 font-bold underline underline-offset-2">
+                  진단하러 가기
+                </button>
               </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setContractFields((e) =>
-                  e.map((e) => ({
-                    ...e,
-                    ok: "" !== String(e.input ?? "").trim(),
-                  })),
-                );
-                setReviewError("");
-              }}
-              className="px-3.5 py-2 rounded-xl bg-background border border-brand-300 text-xs font-extrabold text-primary hover:bg-primary-soft"
-            >
-              값 있는 항목 모두 확인
-            </button>
-          </div>
-          <div className="space-y-2.5">
-            {contractFields.map((e, s) => {
-              const r = e.conf < 0.7;
-              return (
-                <div
-                  className={`p-4 rounded-2xl border grid gap-3 items-center grid-cols-1 md:grid-cols-12 ${r ? "bg-warning-soft border-warning-500" : "bg-secondary border-line"}`}
-                  key={e.key}
-                >
-                  <div className="md:col-span-7">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-extrabold text-foreground">{e.label}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[13px] font-bold tabular-nums ${r ? "bg-warning-soft text-warning" : "bg-success-soft text-success-500"}`}
-                      >
-                        신뢰도 {Math.round(100 * e.conf)}%{r ? " · 낮음 (직접 입력)" : ""}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-ink-500 italic">“{e.src}”</p>
-                  </div>
-                  <div className="space-y-2 md:col-span-5">
-                    <div className="relative">
-                      <input
-                        type={e.numeric ? "number" : "text"}
-                        min={e.numeric ? "0" : undefined}
-                        value={e.input}
-                        placeholder={r ? "계약서 원문 보고 직접 입력" : ""}
-                        onChange={(event) => {
-                          const next = event.target.value;
-                          setContractFields((fields) =>
-                            fields.map((field, index) =>
-                              index === s
-                                ? {
-                                    ...field,
-                                    input: next,
-                                  }
-                                : field,
-                            ),
-                          );
-                          setReviewError("");
-                        }}
-                        className="w-full px-3.5 py-2 pr-12 rounded-xl bg-white border border-line-strong text-sm font-bold text-foreground tabular-nums focus:outline-none focus:border-brand-light"
-                      />
-                      {e.unit && (
-                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-ink-400">
-                          {e.unit}
-                        </span>
-                      )}
-                    </div>
-                    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={e.ok}
-                        onChange={(event) => {
-                          const next = event.target.checked;
-                          setContractFields((fields) =>
-                            fields.map((field, index) =>
-                              index === s
-                                ? {
-                                    ...field,
-                                    ok: next,
-                                  }
-                                : field,
-                            ),
-                          );
-                          setReviewError("");
-                        }}
-                        className="w-4 h-4 accent-brand"
-                      />
-                      <span className="text-xs font-bold text-ink-700">이 값 확인함</span>
-                    </label>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {reviewError && (
-            <div className="p-3 rounded-xl bg-destructive-soft border border-destructive-line text-xs font-bold text-destructive">
-              {reviewError}
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <span className="text-xs text-muted-foreground tabular-nums">
-              총 {contractFields.length}개 중 <strong className="text-brand">{confirmedCount}개</strong> 반영 준비됨
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                const e: AppliedContract = {};
-                if (
-                  (contractFields.forEach((t) => {
-                    const s = String(t.input ?? "").trim();
-                    if (t.ok && "" !== s) {
-                      e[t.key] = t.numeric ? Math.max(0, Number(s)) : s;
-                    }
-                  }),
-                  0 === Object.keys(e).length)
-                ) {
-                  setReviewError('확인 체크된 항목이 없습니다. 손익에 반영할 조건의 "이 값 확인함"을 체크해 주세요.');
-                } else {
-                  setAppliedContract(e);
-                  setContractStage("result");
-                }
+          <Panel>
+            <PanelTitle>계약서를 올려 주세요</PanelTitle>
+            <ContractUpload
+              onComplete={(fields) => {
+                setContractFields(fields);
+                setContractStage("review");
+                window.scrollTo({ top: 0 });
               }}
-              className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-light to-brand hover:from-brand hover:to-primary text-white font-extrabold text-sm shadow-md flex items-center gap-2"
-            >
-              <ClipboardCheck className="w-4 h-4" />
-              확인한 조건 손익에 반영하기
-            </button>
-          </div>
+            />
+          </Panel>
         </div>
       )}
-      {"result" === contractStage && appliedContract && (
-        <div className="space-y-5">
-          <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="text-[13px] font-bold px-2 py-0.5 rounded-full bg-primary-soft text-primary">
-                  S08 · 계약서 반영 결과
-                </span>
-                <h3 className="text-lg font-extrabold text-foreground mt-1">
-                  계약서 조건을 반영하면 숫자가 이렇게 바뀝니다
-                </h3>
-              </div>
+
+      {contractStage === "review" && (
+        <div className="space-y-4">
+          {contractFileName && (
+            <div className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 text-[14px]">
+              <FileText className="size-5 shrink-0 text-ink-400" />
+              <span className="min-w-0 flex-1 truncate text-ink-600">진단할 때 읽은 계약서 · {contractFileName}</span>
               <button
                 type="button"
-                onClick={() => setContractStage("review")}
-                className="px-3 py-1.5 rounded-xl bg-secondary border border-input text-xs font-bold text-ink-600 hover:border-brand-light"
+                onClick={() => setContractStage("upload")}
+                className="min-h-11 shrink-0 font-semibold text-primary"
               >
-                추출 조건 다시 수정
+                다른 계약서
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          )}
+
+          <div>
+            <h2 className="text-[22px] font-extrabold tracking-tight text-foreground">읽은 조건이 맞나요?</h2>
+            <p className="mt-1 text-[15px] text-ink-600">
+              <strong className="text-foreground">맞아요</strong>를 누른 조건만 손익에 반영해요. 흐린 글자는 비워
+              뒀어요.
+            </p>
+          </div>
+
+          <ul className="space-y-3">
+            {contractFields.map((field, index) => {
+              const low = field.conf < LOW_CONFIDENCE;
+              const hasValue = String(field.input ?? "").trim() !== "";
+              return (
+                <li
+                  key={field.key}
+                  className={cn(
+                    "rounded-3xl bg-card p-5 transition-shadow",
+                    field.ok
+                      ? "shadow-[inset_0_0_0_2px_var(--success-500)]"
+                      : low
+                        ? "shadow-[inset_0_0_0_2px_var(--warning-line)]"
+                        : "",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      {field.numeric ? (
+                        <NumberField
+                          id={`term-${field.key}`}
+                          label={field.label}
+                          unit={field.unit}
+                          value={field.input}
+                          placeholder={low ? "계약서를 보고 직접 입력" : undefined}
+                          onChange={(value) => updateField(index, { input: value, ok: false })}
+                        />
+                      ) : (
+                        <div>
+                          <label
+                            htmlFor={`term-${field.key}`}
+                            className="mb-1.5 block text-[15px] font-semibold text-ink-700"
+                          >
+                            {field.label}
+                          </label>
+                          <input
+                            id={`term-${field.key}`}
+                            value={field.input}
+                            onChange={(event) => updateField(index, { input: event.target.value, ok: false })}
+                            className="h-14 w-full rounded-2xl border-2 border-transparent bg-muted px-4 text-[18px] font-semibold text-foreground focus:border-primary focus:bg-card focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[13px] leading-relaxed text-ink-500">
+                    {low && (
+                      <span className="mr-1 font-bold text-warning-700">
+                        <TriangleAlert className="mr-0.5 inline size-3.5 align-[-2px]" />
+                        흐리게 읽힘 ·
+                      </span>
+                    )}
+                    계약서: “{field.src}”
+                  </p>
+                  <button
+                    type="button"
+                    disabled={!hasValue}
+                    aria-pressed={field.ok}
+                    onClick={() => updateField(index, { ok: !field.ok })}
+                    className={cn(
+                      "mt-3 min-h-11 w-full rounded-xl border text-[15px] font-bold transition-colors disabled:border-line disabled:bg-muted disabled:text-ink-300",
+                      field.ok
+                        ? "border-success-500 bg-success-soft text-success-700"
+                        : "border-line-strong bg-card text-ink-600 active:bg-muted",
+                    )}
+                  >
+                    {field.ok ? "✓ 맞아요" : hasValue ? "맞아요" : "값을 넣으면 확인할 수 있어요"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <button
+            type="button"
+            onClick={() => {
+              setContractFields((fields) =>
+                fields.map((field) => ({ ...field, ok: String(field.input ?? "").trim() !== "" })),
+              );
+              setReviewError("");
+            }}
+            className="min-h-11 text-[14px] font-semibold text-primary"
+          >
+            값이 있는 조건 모두 맞아요
+          </button>
+
+          {reviewError && (
+            <p role="alert" className="text-[14px] font-medium text-destructive">
+              {reviewError}
+            </p>
+          )}
+
+          <StickyActionsSpacer />
+          <StickyActions>
+            <button
+              type="button"
+              onClick={applyConfirmed}
+              className={buttonClass("primary", "flex-1 md:flex-none md:px-8")}
+            >
+              확인한 {confirmed.length}개로 다시 계산
+            </button>
+          </StickyActions>
+        </div>
+      )}
+
+      {contractStage === "result" && appliedContract && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-[22px] font-extrabold tracking-tight text-foreground">
+              계약서 조건으로 다시 계산했어요
+            </h2>
+            <p className="mt-1 text-[15px] text-ink-600">생존확률은 그대로이고, 손익과 손실만 바뀌어요.</p>
+          </div>
+
+          <Panel>
+            <ul className="divide-y divide-border">
               {[
                 {
-                  label: "손익분기 매출 (BEP)",
-                  before: baseLoss.bepSalesKrw,
-                  after: contractLoss.bepSalesKrw,
+                  label: "손익분기 매출",
+                  from: before.profit.bepSalesKrw,
+                  to: after.profit.bepSalesKrw,
                   lowerIsBetter: true,
                 },
                 {
                   label: "예상 월손익",
-                  before: baseLoss.expectedMonthlyProfitKrw,
-                  after: contractLoss.expectedMonthlyProfitKrw,
+                  from: before.profit.expectedMonthlyProfitKrw,
+                  to: after.profit.expectedMonthlyProfitKrw,
                   lowerIsBetter: false,
                 },
                 {
-                  label: `${baseParams.exitMonth}개월 종료 시 예상 손실`,
-                  before: baseProfit.totalConservativeLossKrw,
-                  after: contractProfit.totalConservativeLossKrw,
+                  label: `${contractParams.exitMonth}개월에 그만두면 손실`,
+                  from: before.loss.totalConservativeLossKrw,
+                  to: after.loss.totalConservativeLossKrw,
                   lowerIsBetter: true,
                 },
-              ].map((e) => {
-                const s = null !== e.before && null !== e.after;
-                const r = null !== e.before && null !== e.after ? e.after - e.before : 0;
-                const a = e.lowerIsBetter ? r <= 0 : r >= 0;
+              ].map((row, index) => (
+                <ChangeRow key={row.label} {...row} delay={index * 250} />
+              ))}
+            </ul>
+          </Panel>
+
+          <section aria-labelledby="clause-price-title" className="pt-2">
+            <h2 id="clause-price-title" className="px-1 text-[20px] font-extrabold tracking-tight text-foreground">
+              특약마다 걸린 돈
+            </h2>
+            <p className="mt-1 px-1 text-[15px] text-ink-600">문장을 누르면 왜 위험한지, 무엇을 물어볼지 보여 줘요.</p>
+            <ContractPaper className="mt-4">
+              {RISK_CLAUSES.map((clause, index) => {
+                const parts = splitRisky(clause.id, clause.source);
+                const price = clausePrices[clause.id];
                 return (
-                  <div className="p-4 rounded-2xl bg-secondary border border-border space-y-1.5" key={e.label}>
-                    <div className="text-xs font-bold text-muted-foreground">{e.label}</div>
-                    {s ? (
-                      <>
-                        <div className="text-xs text-ink-300 line-through tabular-nums">{formatMan(e.before)}</div>
-                        <div className="text-xl font-extrabold text-foreground tabular-nums">{formatMan(e.after)}</div>
-                        <div
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[13px] font-extrabold tabular-nums ${0 === r ? "bg-muted text-ink-500" : a ? "bg-success-soft text-success-500" : "bg-destructive-soft text-destructive"}`}
-                        >
-                          {0 === r
-                            ? "변화 없음"
-                            : formatMan(r, {
-                                showSign: true,
-                              })}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-sm font-bold text-ink-400">예상 매출 미입력</div>
-                    )}
-                  </div>
+                  <PaperClause
+                    key={clause.id}
+                    article={index + 3}
+                    before={parts.before}
+                    risky={parts.risky}
+                    after={parts.after}
+                    tone={clause.severity === "high" ? "danger" : "warning"}
+                    price={price?.krw ?? null}
+                    priceNote={price?.note}
+                    delay={index * 0.15}
+                    onOpen={() => setOpenClause(clause.id)}
+                  />
                 );
               })}
+            </ContractPaper>
+            <div className="mt-4 flex items-baseline justify-between rounded-3xl bg-foreground px-5 py-4 text-background">
+              <span className="text-[15px] font-semibold">금액이 나온 특약 합계</span>
+              <span className="text-[24px] font-extrabold tracking-tight">
+                <RollingText text={formatMan(shownClauseTotal)} />
+              </span>
             </div>
-            {contractParams.penaltyOverlapsRent && (
-              <p className="text-xs text-primary-hover bg-background border border-brand-200 rounded-xl p-3">
-                * 계약서의 “잔여 기간 차임 전액 위약금”은 종료 후 잔여 월세 부담과 동일한 항목이므로 이중 합산하지 않고
-                1회만 반영했습니다. 연 인상률은 2년 차부터 적용됩니다.
-              </p>
-            )}
-          </div>
-          <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-3">
-            <h3 className="text-base font-extrabold text-foreground">내가 입력한 조건 vs 계약서 조건 비교</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs sm:text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-line text-muted-foreground text-left">
-                    <th className="py-2 pr-3 font-bold">항목</th>
-                    <th className="py-2 px-3 font-bold text-right">내 입력값</th>
-                    <th className="py-2 px-3 font-bold text-right">계약서 (확인함)</th>
-                    <th className="py-2 pl-3 font-bold text-right">차이</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-muted tabular-nums">
-                  {[
-                    ["보증금", Number(formState.depositMan) || 0, appliedContract.deposit, "만원"],
-                    ["월세", Number(formState.rentMan) || 0, appliedContract.rent, "만원"],
-                    ["월 관리비", Number(formState.maintenanceMan) || 0, appliedContract.mgmt, "만원"],
-                    ["월세 부가세", formState.rentVatSeparate ? "별도" : "포함", appliedContract.vat, ""],
-                    ["연 인상률", Number(formState.annualEscalationPct) || 0, appliedContract.raise, "%"],
-                    [
-                      "계약 기간",
-                      "24개월 (가정)",
-                      undefined !== appliedContract.term ? `${appliedContract.term}개월` : undefined,
-                      "",
-                    ],
-                    ["중도해지 위약금", `${formState.penaltyMan}만원`, appliedContract.penalty, ""],
-                    ["원상복구비", Number(formState.restorationMan) || 0, appliedContract.restore, "만원"],
-                  ].map(([e, s, r, a]) => {
-                    const n = undefined !== r && "" !== r;
-                    const l = "number" == typeof s && "number" == typeof r ? r - s : null;
-                    const d = !!a && null !== l;
-                    const i = d ? 0 !== l : n && String(s) !== String(r);
-                    return (
-                      <tr key={e}>
-                        <td className="py-2.5 pr-3 font-bold text-foreground">{e}</td>
-                        <td className="py-2.5 px-3 text-right text-ink-500">
-                          {"number" == typeof s ? `${s.toLocaleString("ko-KR")}${a}` : s}
-                        </td>
-                        <td className={`py-2.5 px-3 text-right font-bold ${i ? "text-brand" : "text-foreground"}`}>
-                          {n ? ("number" == typeof r ? `${r.toLocaleString("ko-KR")}${a}` : r) : "확인 안 함"}
-                        </td>
-                        <td
-                          className={`py-2.5 pl-3 text-right font-extrabold ${i ? "text-destructive" : "text-ink-400"}`}
-                        >
-                          {n
-                            ? d && null !== l
-                              ? 0 === l
-                                ? "같음"
-                                : `${l > 0 ? "+" : ""}${l.toLocaleString("ko-KR")}${a}`
-                              : i
-                                ? "변경됨"
-                                : "같음"
-                            : "-"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h3 className="text-base font-extrabold text-foreground">
-                  중개사·임대인에게 반드시 확인할 특약 ({RISK_CLAUSES.length}건)
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  법률 자문이 아닌 검토 보조 도구입니다. 환산보증금 등에 따라 적용이 달라 위법 여부를 단정하지 않습니다.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={copyQuestions}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-brand hover:bg-primary text-white text-xs font-extrabold shadow-sm transition"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                중개사 질문 4개 복사
-              </button>
-            </div>
-            {copyMessage && (
-              <div className="px-3.5 py-2.5 rounded-xl bg-success-soft border border-success-line text-xs font-bold text-success-700">
-                {copyMessage}
-              </div>
-            )}
-            {showCopyBox && (
+            <p ref={clauseTotalRef} className="mt-3 px-1 text-[13px] leading-relaxed text-ink-400">
+              계약서 숫자로 한 예시 계산이에요. 법률 자문이 아니고, 환산보증금 등에 따라 적용이 달라서 위법 여부는
+              단정하지 않아요.
+            </p>
+            {shareMessage && <p className="mt-3 px-1 text-[14px] font-medium text-success-700">{shareMessage}</p>}
+            {showQuestions && (
               <textarea
-                readOnly={true}
-                value={brokerQuestions}
-                rows={5}
-                className="w-full p-3 rounded-xl border border-brand-300 bg-secondary text-xs text-foreground"
+                readOnly
+                value={questions}
+                rows={6}
+                className="mt-3 w-full rounded-2xl bg-card p-4 text-[14px] text-foreground"
               />
             )}
-            <div className="space-y-3">
-              {RISK_CLAUSES.map((e) => (
-                <article
-                  className={`p-4 rounded-2xl border border-l-[5px] bg-secondary space-y-2 ${"high" === e.severity ? "border-destructive-line border-l-destructive" : "border-warning-line border-l-warning-500"}`}
-                  key={e.id}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-extrabold text-foreground">
-                      {e.id} · {e.title}
-                    </h4>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[13px] font-extrabold ${"high" === e.severity ? "bg-destructive-soft text-destructive" : "bg-warning-soft text-warning"}`}
-                    >
-                      심각도 {"high" === e.severity ? "높음" : "보통"}
-                    </span>
-                  </div>
-                  <p className="text-xs font-semibold text-ink-600 bg-white px-3 py-2 rounded-xl border border-border">
-                    “{e.source}”
-                  </p>
-                  <dl className="grid grid-cols-1 sm:grid-cols-12 gap-y-1.5 gap-x-3 text-xs pt-1">
-                    <dt className="sm:col-span-2 font-bold text-ink-400">위험 이유</dt>
-                    <dd className="sm:col-span-10 text-foreground">{e.reason}</dd>
-                    <dt className="sm:col-span-2 font-bold text-ink-400">확인 포인트</dt>
-                    <dd className="sm:col-span-10 text-foreground">{e.checkPoint}</dd>
-                    <dt className="sm:col-span-2 font-bold text-brand">중개사 질문</dt>
-                    <dd className="sm:col-span-10 font-bold text-primary-hover">{e.question}</dd>
-                  </dl>
-                </article>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-[28px] bg-gradient-to-br from-brand-50 to-brand-100 border border-brand-200 p-6 sm:p-7 space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-[13px] font-bold px-2.5 py-1 rounded-full bg-white text-success border border-success-line">
-                  <CircleCheck className="w-3.5 h-3.5" /> 계약서 검토 완료
-                </span>
-                <h3 className="mt-2 text-[22px] font-extrabold text-foreground">
-                  다음 단계: 받을 수 있는 지원정책 확인하기
-                </h3>
-                <p className="mt-1 text-[15px] text-ink-600">
-                  계약 전에 자금·보증을 알아 두면 보증금과 시설비 부담을 줄일 수 있어요.
-                </p>
+          </section>
+
+          {changedRows.length > 0 && (
+            <Panel>
+              <PanelTitle aside="진단 입력 → 계약서">반영한 조건</PanelTitle>
+              <dl className="divide-y divide-border text-[15px] tabular-nums">
+                {changedRows.map(([label, mine, contract, unit]) => {
+                  const same = String(mine) === String(contract);
+                  return (
+                    <div key={label} className="flex items-center justify-between gap-3 py-2.5">
+                      <dt className="text-ink-600">{label}</dt>
+                      <dd className="text-right">
+                        {mine !== "" && !same && (
+                          <span className="mr-2 text-ink-400 line-through">
+                            {mine}
+                            {unit}
+                          </span>
+                        )}
+                        <span className={cn("font-semibold", same ? "text-foreground" : "text-primary")}>
+                          {contract}
+                          {typeof contract === "number" ? unit : ""}
+                        </span>
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </Panel>
+          )}
+
+          <Panel>
+            <PanelTitle>그만두는 시점 가정</PanelTitle>
+            <NumberField
+              id="exit-month"
+              label="개업 후 몇 개월에 그만두면?"
+              unit="개월"
+              value={formState.exitMonth}
+              onChange={(value) => onChangeForm((previous) => ({ ...previous, exitMonth: value }))}
+              hint="남은 계약 기간의 월세와 위약금은 계약서 조건으로 계산해요. 보증금은 돌려받는다고 가정해요."
+            />
+          </Panel>
+
+          <BottomSheet
+            open={openedClause !== null}
+            onClose={() => setOpenClause(null)}
+            title={openedClause?.title ?? ""}
+          >
+            {openedClause && (
+              <div className="space-y-4 text-[15px] leading-relaxed">
+                <blockquote className="rounded-2xl bg-paper px-4 py-3 font-paper text-[15px] text-paper-ink shadow-paper">
+                  “{openedClause.source}”
+                </blockquote>
+                <p className="text-foreground">{openedClause.reason}</p>
+                <div>
+                  <p className="text-[14px] font-bold text-ink-500">확인할 것</p>
+                  <p className="mt-1 text-foreground">{openedClause.checkPoint}</p>
+                </div>
+                <div className="rounded-2xl bg-primary-soft p-4">
+                  <p className="text-[14px] font-bold text-primary">중개사에게 이렇게 물어보세요</p>
+                  <p className="mt-1 font-semibold text-accent-foreground">{openedClause.question}</p>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onGoPolicy}
-                  className="inline-flex items-center justify-center gap-2 min-h-[48px] px-[22px] rounded-[14px] bg-brand hover:bg-primary text-white text-[16px] font-bold"
-                >
-                  <Landmark className="w-4 h-4" />
-                  지원정책 전체 보기
-                </button>
-                <button
-                  type="button"
-                  onClick={onGoGuide}
-                  className="inline-flex items-center justify-center gap-2 min-h-[48px] px-[22px] rounded-[14px] border-2 border-foreground bg-white hover:bg-background text-foreground text-[16px] font-bold"
-                >
-                  <ClipboardCheck className="w-4 h-4" />
-                  창업 체크리스트
-                </button>
-              </div>
-            </div>
-            <div className="grid gap-[18px] [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
-              {POLICIES.filter((e) => ["자금", "보증", "컨설팅"].includes(e.cat)).map((e) => (
-                <PolicyCard policy={e} key={e.title} />
-              ))}
-            </div>
-          </div>
+            )}
+          </BottomSheet>
+
+          <nav aria-label="다음에 볼 것" className="divide-y divide-border rounded-3xl bg-card">
+            <Link href="/guide" className="flex min-h-14 items-center justify-between px-5 text-[15px] font-semibold">
+              계약 전 체크리스트 보기
+              <ChevronRight className="size-5 text-ink-400" />
+            </Link>
+            <Link href="/policy" className="flex min-h-14 items-center justify-between px-5 text-[15px] font-semibold">
+              받을 수 있는 지원정책 보기
+              <ChevronRight className="size-5 text-ink-400" />
+            </Link>
+          </nav>
+
+          <StickyActionsSpacer />
+          <StickyActions>
+            <button
+              type="button"
+              onClick={shareQuestions}
+              className={buttonClass("primary", "flex-1 md:flex-none md:px-8")}
+            >
+              <Share2 className="size-5" />
+              중개사에게 물어볼 질문 보내기
+            </button>
+          </StickyActions>
         </div>
       )}
     </div>
+  );
+}
+
+/** 계약서 반영 전후 숫자 한 줄. 화면에 들어오면 전 값에서 후 값으로 숫자가 굴러간다 */
+function ChangeRow({
+  label,
+  from,
+  to,
+  lowerIsBetter,
+  delay,
+}: {
+  label: string;
+  from: number | null;
+  to: number | null;
+  lowerIsBetter: boolean;
+  delay: number;
+}) {
+  const known = from !== null && to !== null;
+  const delta = known ? to - from : 0;
+  const good = lowerIsBetter ? delta < 0 : delta > 0;
+  const [shown, ref] = useRevealValue(from ?? 0, to ?? 0, 700 + delay);
+  const settled = shown === (to ?? 0);
+  return (
+    <li className="py-4 first:pt-0 last:pb-0">
+      <div ref={ref}>
+        <p className="text-[14px] text-muted-foreground">{label}</p>
+        {known ? (
+          <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3">
+            <span className="text-[26px] font-extrabold tracking-tight text-foreground">
+              <RollingText text={formatMan(shown)} />
+            </span>
+            <span
+              className={cn(
+                "text-[14px] font-bold tabular-nums transition-opacity duration-300",
+                settled ? "opacity-100" : "opacity-0",
+                delta === 0 ? "text-ink-400" : good ? "text-success" : "text-destructive",
+              )}
+            >
+              {delta === 0 ? "변화 없음" : `${formatMan(delta, { showSign: true })} ${good ? "좋아짐" : "나빠짐"}`}
+            </span>
+          </div>
+        ) : (
+          <p className="mt-1 text-[15px] text-ink-400">예상 매출을 넣으면 계산돼요</p>
+        )}
+      </div>
+    </li>
   );
 }

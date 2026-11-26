@@ -3,15 +3,8 @@ import { describe, expect, it } from "vitest";
 import { isNavActive, NAV_ITEMS } from "@/lib/navigation";
 
 describe("NAV_ITEMS", () => {
-  it("Notion 화면 목록 경로와 팀 회의로 추가한 지원정책 경로를 순서대로 가진다", () => {
-    expect(NAV_ITEMS.map((item) => item.href)).toEqual([
-      "/explore",
-      "/diagnose",
-      "/contract",
-      "/guide",
-      "/policy",
-      "/about-data",
-    ]);
+  it("홈과 사용 순서(지도 → 진단 → 계약서 → 가이드)대로 탭 경로를 가진다", () => {
+    expect(NAV_ITEMS.map((item) => item.href)).toEqual(["/", "/explore", "/diagnose", "/contract", "/guide"]);
   });
 
   it("하단 탭 이름은 4글자 이내다", () => {

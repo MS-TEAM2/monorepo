@@ -3,7 +3,7 @@ import Constants from "expo-constants";
 import { devWebUrl } from "./lib/url-policy";
 
 /** 웹의 globals.css --background 와 같은 값. 로딩 중·안전 영역 배경에 쓴다. */
-export const WEB_BACKGROUND = "#f8f7fc";
+export const WEB_BACKGROUND = "#f3f4f6";
 
 /** 개발 중 Next.js 개발 서버 포트 */
 const DEV_WEB_PORT = 3000;

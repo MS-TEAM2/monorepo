@@ -22,9 +22,11 @@ import type {
 
 type Setter<T> = (value: T | ((previous: T) => T)) => void;
 
+/** 입력값이 어디서 왔는지. 계약서에서 읽었거나 예시값이면 입력칸 옆에 표시한다 */
+export type FieldSource = "contract" | "example";
+export type FieldSources = Partial<Record<keyof FormState, FieldSource>>;
+
 export type StartupState = {
-  entryModalOpen: boolean;
-  setEntryModalOpen: (open: boolean) => void;
   neighborhood: Neighborhood;
   selectNeighborhood: (neighborhood: Neighborhood) => void;
   category: Category;
@@ -39,10 +41,18 @@ export type StartupState = {
   dongSummary: DongSummary;
   formState: FormState;
   setFormState: Setter<FormState>;
+  fieldSources: FieldSources;
+  /** 사용자가 직접 고친 칸은 출처 표시를 지운다 */
+  clearFieldSource: (key: keyof FormState) => void;
   usedExample: boolean;
   exampleConfirmed: boolean;
   setExampleConfirmed: (confirmed: boolean) => void;
+  /** 비어 있는 월 비용 칸만 예시값으로 채운다 */
   fillExample: () => void;
+  /** 계약서에서 읽은 보증금·월세·관리비·부가세로 진단 입력을 채운다. 채운 칸 수를 돌려준다 */
+  fillFromContract: (fields: ContractField[], fileName: string) => number;
+  contractFileName: string;
+  hasValidCosts: boolean;
   buildCostParams: (rentMan?: number | null) => CostParams;
   report: Report | null;
   runDiagnosis: () => void;
@@ -63,17 +73,43 @@ const StartupContext = createContext<StartupState | null>(null);
 const FIRST_NEIGHBORHOOD = NEIGHBORHOODS[0] as Neighborhood;
 const FIRST_CATEGORY = CATEGORIES[0] as Category;
 
+/** 처음에는 비용 칸을 비워 둔다. 종료 가정(중도 종료 손실 계산용)은 기본값을 쓴다 */
+const BLANK_FORM: FormState = {
+  ...INITIAL_FORM,
+  areaM2: "",
+  depositMan: "",
+  rentMan: "",
+  maintenanceMan: "",
+  laborMan: "",
+  otherFixedMan: "",
+  variableCostRate: "",
+  expectedSalesMan: "",
+  keyMoneyMan: "",
+  facilityCostMan: "",
+};
+
+/** 모를 때 예시값으로 채울 수 있는 칸. 기획서 S04: 인건비·기타 고정비·변동비율 */
+const EXAMPLE_KEYS = ["laborMan", "otherFixedMan", "variableCostRate"] as const;
+
+/** 계약서 조건 키 → 진단 입력 칸 */
+const CONTRACT_TO_FORM: Partial<Record<string, "depositMan" | "rentMan" | "maintenanceMan">> = {
+  deposit: "depositMan",
+  rent: "rentMan",
+  mgmt: "maintenanceMan",
+};
+
 /**
  * 화면 시안(SCRUM-191)이 함께 쓰는 상태. 고른 동네·업종·반경, 진단 입력, 계약서 단계를 화면 사이에 유지한다.
  * 실제 API가 연결되면 각 화면이 API 결과를 쓰도록 바꾼다.
  */
 export function StartupProvider({ children }: { children: ReactNode }) {
-  const [entryModalOpen, setEntryModalOpen] = useState(false);
   const [neighborhood, setNeighborhood] = useState<Neighborhood>(FIRST_NEIGHBORHOOD);
   const [category, setCategory] = useState<Category>(FIRST_CATEGORY);
   const [radiusM, setRadiusM] = useState<RadiusM>(500);
   const [pinCenter, setPinCenter] = useState<Point>(INITIAL_PIN);
-  const [formState, setFormState] = useState<FormState>(INITIAL_FORM);
+  const [formState, setFormState] = useState<FormState>(BLANK_FORM);
+  const [fieldSources, setFieldSources] = useState<FieldSources>({});
+  const [contractFileName, setContractFileName] = useState("");
   const [usedExample, setUsedExample] = useState(false);
   const [exampleConfirmed, setExampleConfirmed] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
@@ -128,10 +164,22 @@ export function StartupProvider({ children }: { children: ReactNode }) {
     [formState],
   );
 
+  const hasValidCosts = useMemo(() => {
+    const rent = Number(formState.rentMan);
+    const variable = Number(formState.variableCostRate);
+    return (
+      formState.rentMan !== "" &&
+      rent > 0 &&
+      formState.laborMan !== "" &&
+      formState.otherFixedMan !== "" &&
+      formState.variableCostRate !== "" &&
+      variable >= 0 &&
+      variable <= 95
+    );
+  }, [formState]);
+
   const value = useMemo<StartupState>(
     () => ({
-      entryModalOpen,
-      setEntryModalOpen,
       neighborhood,
       selectNeighborhood: (next) => {
         setNeighborhood(next);
@@ -149,14 +197,58 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       dongSummary,
       formState,
       setFormState,
+      fieldSources,
+      clearFieldSource: (key) =>
+        setFieldSources((previous) => {
+          if (!previous[key]) return previous;
+          const next = { ...previous };
+          delete next[key];
+          return next;
+        }),
       usedExample,
       exampleConfirmed,
       setExampleConfirmed,
       fillExample: () => {
-        setFormState((previous) => ({ ...previous, ...EXAMPLE_FORM }));
+        const filled: FieldSources = {};
+        const next = { ...formState };
+        for (const key of EXAMPLE_KEYS) {
+          const example = EXAMPLE_FORM[key];
+          if (typeof example === "string" && next[key] === "") {
+            next[key] = example;
+            filled[key] = "example";
+          }
+        }
+        if (Object.keys(filled).length === 0) return;
+        setFormState(next);
+        setFieldSources((previous) => ({ ...previous, ...filled }));
         setUsedExample(true);
         setExampleConfirmed(false);
       },
+      fillFromContract: (fields, fileName) => {
+        const filled: FieldSources = {};
+        const next = { ...formState };
+        for (const field of fields) {
+          const value = String(field.input ?? "").trim();
+          if (value === "") continue;
+          if (field.key === "vat") {
+            next.rentVatSeparate = value.includes("별도");
+            filled.rentVatSeparate = "contract";
+            continue;
+          }
+          const key = CONTRACT_TO_FORM[field.key];
+          if (!key) continue;
+          next[key] = value;
+          filled[key] = "contract";
+        }
+        setFormState(next);
+        setFieldSources((previous) => ({ ...previous, ...filled }));
+        setContractFields(fields);
+        setContractStage("review");
+        setContractFileName(fileName);
+        return Object.keys(filled).length;
+      },
+      contractFileName,
+      hasValidCosts,
       buildCostParams,
       report,
       runDiagnosis: () => {
@@ -192,10 +284,11 @@ export function StartupProvider({ children }: { children: ReactNode }) {
         setAppliedContract(null);
         setUsedExample(false);
         setExampleConfirmed(false);
+        setFieldSources({});
+        setContractFileName("");
       },
     }),
     [
-      entryModalOpen,
       neighborhood,
       category,
       radiusM,
@@ -204,8 +297,11 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       radiusStats,
       dongSummary,
       formState,
+      fieldSources,
       usedExample,
       exampleConfirmed,
+      contractFileName,
+      hasValidCosts,
       buildCostParams,
       report,
       sliderRentMan,

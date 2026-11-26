@@ -5,23 +5,37 @@ import { useEffect } from "react";
 import { ContractView } from "@/components/screens/contract-view";
 import { DiagnosisInputView } from "@/components/screens/diagnosis-input-view";
 import { DiagnosisReportView } from "@/components/screens/diagnosis-report-view";
-import { EntryModal } from "@/components/screens/entry-modal";
 import { ExploreMapView } from "@/components/screens/explore-map-view";
 import { GuideView } from "@/components/screens/guide-view";
+import { HomeView } from "@/components/screens/home-view";
+import { Mascot } from "@/components/screens/brand";
 import { PageShell } from "@/components/screens/page-shell";
+import { ScreenHeader, buttonClass } from "@/components/screens/screen-kit";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
 
-/** S02·S03 상권 지도. 홈(/)에서는 시작 선택 창을 열어 둔 채로 보여 준다. */
-export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boolean }) {
+/** S01 홈 */
+export function HomeScreen() {
   const go = useGoScreen();
   const s = useStartup();
-  const { setEntryModalOpen } = s;
+  return (
+    <HomeView
+      neighborhood={s.neighborhood}
+      onSelectNeighborhood={s.selectNeighborhood}
+      category={s.category}
+      onSelectCategory={s.setCategory}
+      onExplore={() => go("map")}
+      onDiagnose={() => go("diagnose")}
+      hasReport={!!s.report}
+      onResume={() => go("report")}
+    />
+  );
+}
 
-  useEffect(() => {
-    setEntryModalOpen(withEntryModal);
-  }, [withEntryModal, setEntryModalOpen]);
-
+/** S02·S03 상권 지도 */
+export function ExploreScreen() {
+  const go = useGoScreen();
+  const s = useStartup();
   return (
     <main className="flex-1">
       <ExploreMapView
@@ -35,24 +49,9 @@ export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boo
         onResetPin={s.resetPin}
         radiusStats={s.radiusStats}
         dongSummary={s.dongSummary}
-        onOpenModal={() => s.setEntryModalOpen(true)}
-        onGoDiagnose={() => go("diagnose")}
-        onGoContract={() => go("contract")}
-      />
-      <EntryModal
-        open={s.entryModalOpen}
-        onClose={() => s.setEntryModalOpen(false)}
-        neighborhood={s.neighborhood}
         onSelectNeighborhood={s.selectNeighborhood}
-        category={s.category}
         onSelectCategory={s.setCategory}
-        radiusM={s.radiusM}
-        onSelectRadius={s.setRadiusM}
-        onNavigate={(screen) => {
-          if (screen !== "map") go(screen);
-        }}
-        hasReport={!!s.report}
-        hasContractApplied={!!s.appliedContract}
+        onGoDiagnose={() => go("diagnose")}
       />
     </main>
   );
@@ -67,58 +66,74 @@ export function DiagnosisInputScreen() {
       <DiagnosisInputView
         neighborhood={s.neighborhood}
         category={s.category}
+        onSelectCategory={s.setCategory}
         radiusM={s.radiusM}
         radiusStats={s.radiusStats}
-        dongSummary={s.dongSummary}
         formState={s.formState}
         onChangeForm={s.setFormState}
+        fieldSources={s.fieldSources}
+        onClearFieldSource={s.clearFieldSource}
         onFillExample={s.fillExample}
         usedExample={s.usedExample}
         exampleConfirmed={s.exampleConfirmed}
         onToggleExampleConfirm={s.setExampleConfirmed}
+        onFillFromContract={s.fillFromContract}
+        contractFileName={s.contractFileName}
         onBackToMap={() => go("map")}
         onRunDiagnosis={() => {
           s.runDiagnosis();
           go("report");
         }}
-        isRunning={false}
       />
     </PageShell>
   );
 }
 
-/** S05 진단 결과. 바로 들어오면 현재 입력값으로 먼저 계산한다. */
+/** S05 진단 결과. 진단 입력이 비어 있으면 입력으로 안내한다 */
 export function DiagnosisReportScreen() {
   const go = useGoScreen();
   const s = useStartup();
-  const { report, runDiagnosis } = s;
+  const { report, runDiagnosis, hasValidCosts } = s;
 
   useEffect(() => {
-    if (!report) runDiagnosis();
-  }, [report, runDiagnosis]);
+    if (!report && hasValidCosts) runDiagnosis();
+  }, [report, hasValidCosts, runDiagnosis]);
+
+  if (!report) {
+    return (
+      <PageShell>
+        <ScreenHeader title="진단 결과" backHref="/" />
+        <div className="mx-auto flex max-w-[480px] flex-col items-center py-14 text-center">
+          <Mascot mood="search" size={110} />
+          <p className="mt-6 text-[20px] font-bold text-foreground">아직 진단한 자리가 없어요</p>
+          <p className="mt-2 text-[15px] text-ink-600">월세와 비용을 넣으면 생존확률과 손익이 나와요.</p>
+          <button type="button" onClick={() => go("diagnose")} className={buttonClass("primary", "mt-6 px-8")}>
+            진단 시작하기
+          </button>
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell>
-      {report && (
-        <DiagnosisReportView
-          neighborhood={s.neighborhood}
-          category={s.category}
-          radiusM={s.radiusM}
-          report={report}
-          sliderRentMan={s.sliderRentMan}
-          initialRentMan={s.initialRentMan}
-          onSliderRentChange={s.changeSliderRent}
-          isSliderSyncing={false}
-          apiFallbackMessage=""
-          onEditInputs={() => go("diagnose")}
-          onGoContract={() => go("contract")}
-        />
-      )}
+      <DiagnosisReportView
+        neighborhood={s.neighborhood}
+        category={s.category}
+        radiusM={s.radiusM}
+        report={report}
+        sliderRentMan={s.sliderRentMan}
+        initialRentMan={s.initialRentMan}
+        onSliderRentChange={s.changeSliderRent}
+        onEditInputs={() => go("diagnose")}
+        onGoContract={() => go("contract")}
+        onGoGuide={() => go("guide")}
+      />
     </PageShell>
   );
 }
 
-/** S06–S08 계약서 검토 */
+/** S06–S08 계약서 확인 */
 export function ContractScreen() {
   const go = useGoScreen();
   const s = useStartup();
@@ -128,16 +143,18 @@ export function ContractScreen() {
         neighborhood={s.neighborhood}
         category={s.category}
         formState={s.formState}
+        onChangeForm={s.setFormState}
         buildCostParams={s.buildCostParams}
+        hasReport={!!s.report}
+        contractFileName={s.contractFileName}
         contractStage={s.contractStage}
         setContractStage={s.setContractStage}
         contractFields={s.contractFields}
         setContractFields={s.setContractFields}
         appliedContract={s.appliedContract}
         setAppliedContract={s.setAppliedContract}
-        onGoReport={() => go("report")}
-        onGoPolicy={() => go("policy")}
-        onGoGuide={() => go("guide")}
+        onGoReport={() => go(s.report ? "report" : "map")}
+        onGoDiagnose={() => go("diagnose")}
       />
     </PageShell>
   );

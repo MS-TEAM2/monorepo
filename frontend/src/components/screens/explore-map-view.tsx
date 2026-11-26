@@ -1,9 +1,13 @@
 "use client";
 
-import { Calculator, ChevronDown, ChevronUp, FileText, List, Lock, MapPin, RotateCcw, Store, X } from "lucide-react";
+import { ChevronDown, List, MapPin, RotateCcw, X } from "lucide-react";
+import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RollingText } from "@/components/screens/motion-kit";
+import { BottomSheet, Chip, buttonClass } from "@/components/screens/screen-kit";
 import { formatCount } from "@/lib/mock/startup/calc";
-import { MAP_SCALE, MAP_SIZE, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
+import { CATEGORIES, MAP_SCALE, MAP_SIZE, NEIGHBORHOODS, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
+import { cn } from "@/lib/utils";
 import type {
   Category,
   DongSummary,
@@ -36,12 +40,15 @@ type ExploreMapViewProps = {
   onResetPin: () => void;
   radiusStats: RadiusStats;
   dongSummary: DongSummary;
-  onOpenModal: () => void;
+  onSelectNeighborhood: (neighborhood: Neighborhood) => void;
+  onSelectCategory: (category: Category) => void;
   onGoDiagnose: () => void;
-  onGoContract: () => void;
 };
 
-/** S02·S03 상권 지도와 상권 요약 화면 시안. 지도는 예시 그림이고 매장은 예시 데이터다 */
+/**
+ * S02·S03 상권 지도와 상권 요약. 지도는 화면을 가득 채우고, 위에는 동네·업종, 아래 시트에는 반경·요약·진단 버튼을 둔다.
+ * 지도는 예시 그림이고 매장은 예시 데이터다.
+ */
 export function ExploreMapView({
   neighborhood,
   category,
@@ -53,9 +60,9 @@ export function ExploreMapView({
   onResetPin,
   radiusStats,
   dongSummary,
-  onOpenModal,
+  onSelectNeighborhood,
+  onSelectCategory,
   onGoDiagnose,
-  onGoContract,
 }: ExploreMapViewProps) {
   const containerRef = useRef<SVGSVGElement>(null);
   const selectionKey = `${neighborhood.dongCode}-${category.id}-${radiusM}`;
@@ -74,7 +81,8 @@ export function ExploreMapView({
         : null,
     );
   const [listOpen, setListOpen] = useState(false);
-  const [summaryOpen, setSummaryOpen] = useState(true);
+  const [placeOpen, setPlaceOpen] = useState(false);
+  const [dongOpen, setDongOpen] = useState(false);
   const radiusPx = radiusM * MAP_SCALE;
   const [scaleX, setScaleX] = useState(1);
   useEffect(() => {
@@ -115,7 +123,7 @@ export function ExploreMapView({
   const pinMoved = Math.abs(pinCenter.x - MAP_SIZE.width / 2) > 2 || Math.abs(pinCenter.y - MAP_SIZE.height / 2) > 2;
   const peakPct = Math.max(...dongSummary.timeSlots.map((e) => e.pct));
   return (
-    <div className="relative w-full overflow-hidden bg-map-bg select-none h-[calc(100dvh-7.5rem-env(safe-area-inset-bottom))] min-h-[520px] md:h-[calc(100dvh-4rem)] md:min-h-[600px]">
+    <div className="relative h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom))] min-h-[520px] w-full overflow-hidden bg-map-bg select-none md:h-[calc(100dvh-4rem)] md:min-h-[600px]">
       <svg
         ref={containerRef}
         viewBox={`0 0 ${MAP_SIZE.width} ${MAP_SIZE.height}`}
@@ -223,6 +231,18 @@ export function ExploreMapView({
             pointerEvents: "none",
           }}
         >
+          <motion.circle
+            key={`ripple-${radiusM}-${pinCenter.x}-${pinCenter.y}`}
+            cx={pinCenter.x}
+            cy={pinCenter.y}
+            fill="none"
+            stroke="var(--brand)"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+            initial={{ r: radiusPx * 0.4, opacity: 0.7 }}
+            animate={{ r: radiusPx * 1.25, opacity: 0 }}
+            transition={{ duration: 0.9, ease: "easeOut" }}
+          />
           <circle
             cx={pinCenter.x}
             cy={pinCenter.y}
@@ -293,7 +313,7 @@ export function ExploreMapView({
               />
             ))}
         </g>
-        <g>
+        <g key={selectionKey}>
           {storesWithDistance
             .filter((e) => "active" === e.status)
             .map((e) => {
@@ -310,7 +330,16 @@ export function ExploreMapView({
                   key={e.id}
                 >
                   {s && <circle cx={e.x} cy={e.y} r="14" fill="var(--brand-light)" opacity="0.25" />}
-                  <circle
+                  <motion.circle
+                    style={{ transformBox: "fill-box", transformOrigin: "center" }}
+                    initial={e.inside ? { scale: 0, y: -12 } : false}
+                    animate={{ scale: 1, y: 0 }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 520,
+                      damping: 20,
+                      delay: e.inside ? Math.min(e.distM / 900, 0.6) : 0,
+                    }}
                     cx={e.x}
                     cy={e.y}
                     r={s ? 8 : e.inside ? 6.2 : 4.2}
@@ -344,242 +373,245 @@ export function ExploreMapView({
           <circle cx="0" cy="-24" r="4.6" fill="var(--card)" />
         </g>
       </svg>
-      <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 space-y-2 p-3 md:left-4 md:w-[420px] md:p-4">
+        <div className="pointer-events-auto flex items-center gap-2">
           <button
             type="button"
-            onClick={onOpenModal}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/95 backdrop-blur border border-line-warm shadow-md hover:bg-background transition"
+            onClick={() => setPlaceOpen(true)}
+            className="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-2xl bg-card px-4 text-left shadow-soft transition-transform active:scale-[0.98]"
           >
-            <MapPin className="w-4 h-4 text-brand" />
-            <span className="text-xs sm:text-sm font-extrabold text-foreground">
-              {neighborhood.name} · {category.label}
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-primary-soft text-primary text-[13px] font-bold">
-              영역·기능 선택
-            </span>
+            <MapPin className="size-5 shrink-0 text-brand" />
+            <span className="min-w-0 flex-1 truncate text-[16px] font-bold text-foreground">{neighborhood.name}</span>
+            <ChevronDown className="size-4 shrink-0 text-ink-400" />
           </button>
-          <div className="inline-flex p-1 rounded-full bg-white/95 backdrop-blur border border-input shadow-md">
-            {RADIUS_OPTIONS.map((e) => (
-              <button
-                type="button"
-                onClick={() => onSelectRadius(e.value)}
-                className={`px-2.5 py-1 rounded-full text-[13px] font-extrabold tabular-nums transition ${radiusM === e.value ? "bg-brand text-white" : "text-ink-500 hover:text-foreground"}`}
-                key={e.value}
-              >
-                {e.label}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setListOpen(true)}
+            className="flex min-h-12 shrink-0 items-center gap-1.5 rounded-2xl bg-card px-4 text-[15px] font-semibold text-foreground shadow-soft transition-transform active:scale-95"
+          >
+            <List className="size-4" />
+            목록
+          </button>
         </div>
-        <div className="flex items-center gap-2 pointer-events-auto">
-          {pinMoved && (
-            <button
-              type="button"
-              onClick={onResetPin}
-              className="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-white/95 backdrop-blur border border-input shadow-md text-xs font-bold text-foreground hover:bg-background"
+        <div className="pointer-events-auto -mx-3 flex gap-2 overflow-x-auto px-3 pb-1 md:mx-0 md:flex-wrap md:px-0">
+          {CATEGORIES.map((item) => (
+            <Chip
+              key={item.id}
+              selected={item.id === category.id}
+              onClick={() => onSelectCategory(item)}
+              className={item.id === category.id ? "" : "shadow-soft"}
             >
-              <RotateCcw className="w-3.5 h-3.5 text-brand" />
-              초기화
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setListOpen((e) => !e)}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full border shadow-md text-xs font-bold transition ${listOpen ? "bg-foreground text-white border-foreground" : "bg-white/95 backdrop-blur text-foreground border-input hover:bg-background"}`}
-          >
-            <List className="w-3.5 h-3.5" />
-            매장 목록 ({activeInside.length})
-          </button>
+              {item.label}
+            </Chip>
+          ))}
         </div>
       </div>
+
+      {pinMoved && (
+        <button
+          type="button"
+          onClick={onResetPin}
+          className="absolute top-[7.75rem] right-3 z-20 flex min-h-10 items-center gap-1 rounded-full border border-border bg-card px-3.5 text-[14px] font-medium text-foreground shadow-soft md:top-4 md:right-4"
+        >
+          <RotateCcw className="size-4 text-brand" />
+          처음 위치로
+        </button>
+      )}
+
       {selectedStore && (
-        <div className="absolute top-16 left-3 z-20 w-72 max-w-[calc(100%-24px)] bg-white/95 backdrop-blur rounded-2xl border border-line-warm shadow-xl p-3.5">
+        <div className="absolute inset-x-3 bottom-[17rem] z-20 rounded-2xl border border-border bg-card p-4 shadow-lifted md:right-auto md:bottom-auto md:left-[460px] md:top-4 md:w-72">
           <div className="flex items-start justify-between gap-2">
-            <div>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-soft text-primary text-[13px] font-bold">
-                <Store className="w-3 h-3" />
-                {selectedStore.categoryLabel}
-              </span>
-              <h4 className="mt-1 text-sm font-extrabold text-foreground">{selectedStore.name}</h4>
+            <div className="min-w-0">
+              <p className="truncate text-[16px] font-bold text-foreground">{selectedStore.name}</p>
+              <p className="mt-0.5 text-[14px] text-ink-600 tabular-nums">
+                {selectedStore.licenseYear}년 개업, 여기서 {selectedStore.distM}m
+              </p>
             </div>
             <button
               type="button"
               onClick={() => selectStore(null)}
-              className="p-1 rounded-full text-ink-400 hover:bg-background"
+              className="-m-2 flex size-11 items-center justify-center rounded-full text-ink-400"
               aria-label="닫기"
             >
-              <X className="w-4 h-4" />
+              <X className="size-5" />
             </button>
           </div>
-          <div className="mt-1.5 flex items-center gap-2 text-xs text-ink-600 tabular-nums">
-            <span>
-              인허가 <strong>{selectedStore.licenseYear}년</strong>
-            </span>
-            <span>·</span>
-            <span>
-              중심에서 <strong className="text-brand">{selectedStore.distM}m</strong>
-            </span>
-          </div>
-          <div className="mt-2 pt-2 border-t border-muted text-[13px] text-ink-400 flex items-center gap-1">
-            <Lock className="w-3 h-3 shrink-0" />
-            공공 인허가 허용 정보만 표기 (폐업 개별 미노출)
-          </div>
+          <p className="mt-2 text-[13px] text-ink-400">공공 인허가 정보만 보여 줘요. 닫은 가게는 숫자로만 셉니다.</p>
         </div>
       )}
-      {listOpen && (
-        <div className="absolute top-16 right-3 z-20 w-72 max-w-[calc(100%-24px)] max-h-[60%] flex flex-col bg-white/95 backdrop-blur rounded-2xl border border-line-warm shadow-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-muted flex items-center justify-between bg-secondary">
-            <span className="text-xs font-extrabold text-foreground">반경 내 영업 매장 ({activeInside.length}곳)</span>
-            <button type="button" onClick={() => setListOpen(false)} className="text-ink-400 hover:text-foreground">
-              <X className="w-4 h-4" />
-            </button>
+
+      <section
+        aria-label="이 자리 요약"
+        className="absolute inset-x-0 bottom-0 z-20 rounded-t-[28px] bg-card shadow-lifted md:bottom-4 md:left-4 md:w-[420px] md:rounded-[28px]"
+      >
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-line-strong md:hidden" aria-hidden="true" />
+        <div className="px-5 pt-3 pb-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-[17px] font-bold text-foreground">반경 안 {category.label} 가게</h2>
+            <span className="text-[13px] text-ink-400 tabular-nums">인허가 기준</span>
           </div>
-          <div className="overflow-y-auto divide-y divide-muted">
-            {0 === activeInside.length ? (
-              <p className="p-4 text-xs text-center text-muted-foreground">선택 반경 내 매장이 없습니다.</p>
-            ) : (
-              activeInside.map((e) => (
-                <div className="px-4 py-2.5 flex items-center justify-between text-xs" key={e.id}>
-                  <div>
-                    <div className="font-bold text-foreground">{e.name}</div>
-                    <div className="text-[13px] text-ink-400 tabular-nums">{e.licenseYear}년 인허가</div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full bg-background text-brand font-bold tabular-nums">
-                    {e.distM}m
-                  </span>
-                </div>
-              ))
-            )}
+
+          <div className="mt-3 grid grid-cols-4 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-label="반경">
+            {RADIUS_OPTIONS.map((option) => {
+              const active = radiusM === option.value;
+              return (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => onSelectRadius(option.value)}
+                  key={option.value}
+                  className={cn(
+                    "min-h-10 rounded-lg text-[14px] tabular-nums transition-colors",
+                    active ? "bg-card font-bold text-foreground shadow-sm" : "font-medium text-ink-500",
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
           </div>
-        </div>
-      )}
-      <div className="absolute z-20 left-2.5 right-2.5 bottom-2.5 md:right-auto md:left-4 md:bottom-4 md:w-[410px] md:max-w-[calc(100%-32px)]">
-        <div className="bg-white/95 backdrop-blur-md rounded-[22px] border border-line-warm shadow-lifted overflow-hidden">
+
+          <dl className="mt-4 grid grid-cols-3 divide-x divide-border text-center">
+            <div>
+              <dt className="text-[13px] text-muted-foreground">영업 중</dt>
+              <dd className="mt-0.5 text-[20px] font-extrabold text-foreground tabular-nums">
+                <RollingText text={formatCount(radiusStats.activeCount)} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[13px] text-muted-foreground">1년 새 개업</dt>
+              <dd className="mt-0.5 text-[20px] font-extrabold text-success tabular-nums">
+                <RollingText text={formatCount(radiusStats.open1yCount)} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[13px] text-muted-foreground">1년 새 폐업</dt>
+              <dd className="mt-0.5 text-[20px] font-extrabold text-destructive tabular-nums">
+                <RollingText text={formatCount(radiusStats.close1yCount)} />
+              </dd>
+            </div>
+          </dl>
+
           <button
             type="button"
-            onClick={() => setSummaryOpen((e) => !e)}
-            className="w-full px-4 py-3 flex items-center justify-between text-left bg-secondary border-b border-muted"
+            onClick={() => setDongOpen((open) => !open)}
+            aria-expanded={dongOpen}
+            className="mt-3 flex min-h-11 w-full items-center justify-between border-t border-border pt-1 text-[14px] font-medium text-ink-600"
           >
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-brand-light" />
-                <span className="text-xs font-extrabold text-foreground">
-                  {neighborhood.shortName} · {category.label} 상권 요약
-                </span>
-                <span className="text-[13px] font-bold text-brand tabular-nums">
-                  (영업 {formatCount(radiusStats.activeCount)})
-                </span>
-              </div>
-              <p className="text-[13px] text-muted-foreground mt-0.5">
-                지도 클릭 시 중심 이동 · 반경 인허가와 행정동 집계는 단위 분리
-              </p>
-            </div>
-            {summaryOpen ? (
-              <ChevronDown className="w-4 h-4 text-ink-400" />
-            ) : (
-              <ChevronUp className="w-4 h-4 text-ink-400" />
-            )}
+            {neighborhood.shortName} 전체 지표 ({dongSummary.quarter})
+            <ChevronDown className={cn("size-4 transition-transform", dongOpen && "rotate-180")} />
           </button>
-          {summaryOpen && (
-            <div className="p-3.5 space-y-3 max-h-[360px] overflow-y-auto">
+          {dongOpen && (
+            <div className="space-y-3 pb-1">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[14px] tabular-nums">
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">하루 유동인구</dt>
+                  <dd className="font-semibold">{dongSummary.floatingPopDaily.toLocaleString("ko-KR")}명</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">점포당 매출</dt>
+                  <dd className="font-semibold">{dongSummary.avgSalesMan.toLocaleString("ko-KR")}만</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">개업률</dt>
+                  <dd className="font-semibold">{dongSummary.openRate}%</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">폐업률</dt>
+                  <dd className="font-semibold">{dongSummary.closeRate}%</dd>
+                </div>
+              </dl>
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="px-2 py-0.5 rounded-full bg-primary-soft text-primary text-[12px] font-extrabold">
-                    반경 {radiusM >= 1000 ? "1km" : `${radiusM}m`} · 인허가 기준
-                  </span>
-                  <span className="text-[12px] text-ink-400 tabular-nums">1~4건은 5건 미만 표기</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5 text-center">
-                  <div className="rounded-xl bg-secondary border border-border py-2 px-1">
-                    <div className="text-[12px] text-muted-foreground">영업 동일업종</div>
-                    <div className="text-sm font-extrabold text-foreground tabular-nums">
-                      {formatCount(radiusStats.activeCount)}
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-success-soft/70 border border-success-line py-2 px-1">
-                    <div className="text-[12px] text-success-700">1년 개업</div>
-                    <div className="text-sm font-extrabold text-success-500 tabular-nums">
-                      {formatCount(radiusStats.open1yCount)}
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-destructive-soft/70 border border-destructive-line py-2 px-1">
-                    <div className="text-[12px] text-destructive-700">1년 폐업</div>
-                    <div className="text-sm font-extrabold text-destructive tabular-nums">
-                      {formatCount(radiusStats.close1yCount)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-muted border border-line space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded-full bg-foreground text-white text-[12px] font-bold">
-                    행정동 집계 · {dongSummary.quarter}
-                  </span>
-                  <span className="text-[13px] font-bold text-brand tabular-nums">
-                    추정매출 {dongSummary.avgSalesMan.toLocaleString("ko-KR")}만
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[13px] text-ink-600 tabular-nums">
-                  <span>일평균 유동 {dongSummary.floatingPopDaily.toLocaleString("ko-KR")}명</span>
-                  <span>
-                    개업 {dongSummary.openRate}% · 폐업 {dongSummary.closeRate}%
-                  </span>
-                </div>
-                <div className="grid grid-cols-6 gap-1.5 items-end h-11 pt-1">
-                  {dongSummary.timeSlots.map((e) => {
-                    const s = e.pct === peakPct;
-                    const r = Math.max(22, Math.round((e.pct / peakPct) * 100));
+                <p className="mb-1.5 text-[13px] text-muted-foreground">시간대별 유동인구</p>
+                <div className="grid h-12 grid-cols-6 items-end gap-1.5">
+                  {dongSummary.timeSlots.map((slot) => {
+                    const peak = slot.pct === peakPct;
                     return (
-                      <div className="flex flex-col items-center h-full justify-end" key={e.slot}>
-                        <div className="w-full bg-line rounded-t h-7 flex items-end overflow-hidden">
-                          <div
-                            style={{
-                              height: `${r}%`,
-                            }}
-                            className={`w-full rounded-t ${s ? "bg-brand-light" : "bg-ink-200"}`}
-                          />
-                        </div>
+                      <div className="flex h-full flex-col justify-end" key={slot.slot}>
+                        <div
+                          style={{ height: `${Math.max(18, Math.round((slot.pct / peakPct) * 100))}%` }}
+                          className={cn("rounded-t", peak ? "bg-brand-light" : "bg-ink-200")}
+                        />
                         <span
-                          className={`text-[11px] tabular-nums mt-0.5 ${s ? "font-bold text-brand" : "text-ink-400"}`}
+                          className={cn(
+                            "mt-1 text-center text-[11px] tabular-nums",
+                            peak ? "font-bold text-brand" : "text-ink-400",
+                          )}
                         >
-                          {e.slot.slice(0, 2)}시
+                          {slot.slot.slice(0, 2)}시
                         </span>
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={onGoDiagnose}
-                  className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-brand-light to-brand hover:from-brand hover:to-primary text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1 transition"
-                >
-                  <Calculator className="w-3.5 h-3.5" />이 자리 진단하기
-                </button>
-                <button
-                  type="button"
-                  onClick={onGoContract}
-                  className="py-2.5 px-3 rounded-xl bg-foreground hover:bg-ink-hover text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1 transition"
-                >
-                  <FileText className="w-3.5 h-3.5 text-brand-300" />
-                  계약서 검토하기
-                </button>
-              </div>
+              <p className="text-[13px] text-ink-400">
+                동 전체 추정값이에요. 가게 앞 통행량이나 특정 가게 매출이 아니에요.
+              </p>
             </div>
           )}
+
+          <button type="button" onClick={onGoDiagnose} className={buttonClass("primary", "mt-3 w-full")}>
+            이 자리 진단하기
+          </button>
+          <p className="mt-2 hidden text-center text-[13px] text-ink-400 md:block">
+            지도를 누르면 그 자리로 핀이 옮겨져요
+          </p>
         </div>
-      </div>
-      <div className="absolute right-4 bottom-4 z-10 px-3 py-2 rounded-full bg-white/90 backdrop-blur border border-input shadow-sm hidden md:flex items-center gap-3 text-[13px] text-ink-600">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-brand-light" /> 영업 (클릭)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-map-closed" /> 1년 폐업 (집계)
-        </span>
-        <span className="text-ink-400">· 지도 클릭으로 핀 이동</span>
-      </div>
+      </section>
+
+      <BottomSheet open={placeOpen} onClose={() => setPlaceOpen(false)} title="동네 고르기">
+        <ul className="divide-y divide-border">
+          {NEIGHBORHOODS.map((item) => (
+            <li key={item.dongCode}>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectNeighborhood(item);
+                  setPlaceOpen(false);
+                }}
+                className="flex min-h-14 w-full items-center justify-between py-2 text-left"
+              >
+                <span>
+                  <span className="block text-[16px] font-semibold text-foreground">{item.name}</span>
+                  <span className="block text-[13px] text-muted-foreground">{item.addr}</span>
+                </span>
+                {item.dongCode === neighborhood.dongCode && (
+                  <span className="text-[14px] font-bold text-primary">선택됨</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[13px] text-ink-400">주소·상호 검색은 실제 지도를 연결하면 이 자리에 들어가요.</p>
+      </BottomSheet>
+
+      <BottomSheet
+        open={listOpen}
+        onClose={() => setListOpen(false)}
+        title={`반경 안 ${category.label} ${activeInside.length}곳`}
+      >
+        {activeInside.length === 0 ? (
+          <p className="py-8 text-center text-[15px] text-muted-foreground">
+            이 반경에는 영업 중인 가게가 없어요. 반경을 넓혀 보세요.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {activeInside.map((store) => (
+              <li className="flex min-h-14 items-center justify-between py-2" key={store.id}>
+                <span>
+                  <span className="block text-[16px] font-semibold text-foreground">{store.name}</span>
+                  <span className="block text-[13px] text-muted-foreground tabular-nums">
+                    {store.licenseYear}년 개업
+                  </span>
+                </span>
+                <span className="text-[14px] font-semibold text-ink-600 tabular-nums">{store.distM}m</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </BottomSheet>
     </div>
   );
 }

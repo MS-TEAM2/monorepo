@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#f8f7fc",
+    "backgroundColor": "#f3f4f6",
     "ios": {
       "bundleIdentifier": "com.axteam.service",
       "supportsTablet": false,
@@ -33,6 +33,13 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#f8f7fc"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "계약서를 찍어 조건을 읽으려면 카메라 권한이 필요해요.",
+          "recordAudioAndroid": false
         }
       ]
     ]

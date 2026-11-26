@@ -10,7 +10,7 @@
  */
 
 /** 앱과 웹이 서로 다른 버전일 때(앱은 스토어 심사로 늦게 배포된다) 기능 지원 여부를 판단하는 번호. */
-export const BRIDGE_VERSION = 1;
+export const BRIDGE_VERSION = 2;
 
 /** 앱이 웹뷰 User-Agent 끝에 붙이는 이름. 예: "... AXApp/0.1.0" */
 export const APP_USER_AGENT_NAME = "AXApp";
@@ -41,6 +41,22 @@ export type BridgeRequests = {
     payload: { url: string };
     result: { opened: boolean };
   };
+  /**
+   * 기기의 문서 스캐너(iOS VisionKit, Android ML Kit)로 계약서 등을 찍는다. 테두리 인식·원근 보정을 기기가 한다.
+   * 사용자가 취소하면 pages 가 빈 배열이다. BRIDGE_VERSION 2부터 지원한다.
+   */
+  scanDocument: {
+    payload: { maxPages?: number };
+    result: { pages: ScannedPage[] };
+  };
+};
+
+/** 스캔한 한 쪽. 이미지는 JPEG data URL 이다 */
+export type ScannedPage = { dataUrl: string; width: number; height: number };
+
+/** 요청별 응답 제한 시간(ms). 사람이 촬영하는 요청은 길게 둔다 */
+export const REQUEST_TIMEOUT_MS: Partial<Record<keyof BridgeRequests, number>> = {
+  scanDocument: 10 * 60_000,
 };
 
 export type BridgeRequestType = keyof BridgeRequests;
@@ -51,7 +67,7 @@ export type WebToAppMessage = {
 
 export type AppToWebMessage = { id: string; ok: true; result: unknown } | { id: string; ok: false; error: string };
 
-const REQUEST_TYPES: readonly BridgeRequestType[] = ["share", "openExternal"];
+const REQUEST_TYPES: readonly BridgeRequestType[] = ["share", "openExternal", "scanDocument"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -68,6 +84,8 @@ function isValidPayload(type: BridgeRequestType, payload: unknown): boolean {
       return typeof payload.message === "string" && isOptionalString(payload.url) && isOptionalString(payload.title);
     case "openExternal":
       return typeof payload.url === "string";
+    case "scanDocument":
+      return payload.maxPages === undefined || (Number.isInteger(payload.maxPages) && (payload.maxPages as number) > 0);
   }
 }
 
