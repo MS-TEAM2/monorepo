@@ -25,7 +25,9 @@ dependencies = [
     { name = "joblib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "scikit-learn" },
+    { name = "sqlalchemy" },
 ]
 
 [package.metadata]
@@ -33,7 +35,9 @@ requires-dist = [
     { name = "joblib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.9" },
     { name = "scikit-learn" },
+    { name = "sqlalchemy", specifier = ">=2.1.9" },
 ]
 
 [[package]]
