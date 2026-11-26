@@ -51,8 +51,8 @@ export type BridgeRequests = {
   };
 };
 
-/** 스캔한 한 쪽. 이미지는 JPEG data URL 이다 */
-export type ScannedPage = { dataUrl: string; width: number; height: number };
+/** 스캔한 한 쪽. 이미지는 JPEG data URL 이다. 크기는 알 수 있을 때만 준다 */
+export type ScannedPage = { dataUrl: string; width?: number; height?: number };
 
 /** 요청별 응답 제한 시간(ms). 사람이 촬영하는 요청은 길게 둔다 */
 export const REQUEST_TIMEOUT_MS: Partial<Record<keyof BridgeRequests, number>> = {
