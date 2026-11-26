@@ -4,6 +4,7 @@ import { LocateFixed, MapPinOff, RotateCw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AddressSearch } from "@/components/address-search";
+import { AreaSummaryPanel } from "@/components/explore/area-summary";
 import { CategoryFilter, RadiusFilter } from "@/components/explore/explore-filters";
 import { MapCanvas, type MapPoint } from "@/components/explore/map-canvas";
 import { NaverExploreMap } from "@/components/explore/naver-explore-map";
@@ -99,10 +100,10 @@ export function ExploreView() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col md:flex-row md:gap-6 md:px-6 md:py-6">
+    <main className="mx-auto grid w-full max-w-6xl flex-1 content-start md:grid-cols-[24rem_1fr] md:gap-x-6 md:px-6 md:py-6">
       <section
         aria-label="탐색 조건"
-        className="order-2 flex flex-col gap-5 px-4 py-5 md:order-1 md:w-96 md:shrink-0 md:px-0 md:py-0"
+        className="order-2 flex flex-col gap-5 px-4 py-5 md:order-none md:col-start-1 md:row-span-2 md:row-start-1 md:px-0 md:py-0"
       >
         <AddressSearch
           onSelect={(value) => {
@@ -135,7 +136,7 @@ export function ExploreView() {
         <RadiusFilter value={radius} onChange={setRadius} />
       </section>
 
-      <section aria-label="지도" className="order-1 flex flex-col md:order-2 md:flex-1">
+      <section aria-label="지도" className="order-1 flex flex-col md:order-none md:col-start-2 md:row-start-1">
         <div className="flex items-center justify-between gap-2 px-4 py-2 md:px-0">
           <p className="min-w-0 truncate text-sm font-semibold text-foreground" aria-live="polite">
             {center.address}
@@ -231,6 +232,10 @@ export function ExploreView() {
           </p>
         </div>
       </section>
+
+      <div className="order-3 px-4 pt-6 pb-4 md:order-none md:col-start-2 md:row-start-2 md:px-0 md:pb-0">
+        <AreaSummaryPanel center={center} radius={radius} selectedCategories={categories} />
+      </div>
     </main>
   );
 }
