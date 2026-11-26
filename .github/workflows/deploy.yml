@@ -1,15 +1,11 @@
 name: deploy
 
 # main 머지 → 프론트(Static Web Apps) + 백엔드(Container Apps) 배포.
-# 프론트 변경 PR에는 미리보기 환경을 만든다.
+# PR 미리보기는 쓰지 않는다(Free 플랜 환경 3개 한도, SCRUM-190).
 # Azure 로그인은 OIDC. 레포 Variables 에 AZURE_CLIENT_ID 가 없으면 전부 건너뛴다(Azure 셋업 전에도 머지 가능).
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, closed]
-    paths: ['frontend/**', 'packages/**', 'docs/api/**']
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -23,15 +19,11 @@ env:
 
 jobs:
   frontend:
-    # fork PR 은 OIDC 로그인을 할 수 없으므로 제외
-    if: |
-      vars.AZURE_CLIENT_ID != '' && github.event.action != 'closed' &&
-      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: vars.AZURE_CLIENT_ID != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -59,41 +51,13 @@ jobs:
       - uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ steps.swa.outputs.token }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
           app_location: frontend/out
           skip_app_build: true
           skip_api_build: true
 
-  frontend-preview-close:
-    if: |
-      vars.AZURE_CLIENT_ID != '' && github.event.action == 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: azure/login@v3
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - id: swa
-        env:
-          SWA_NAME: ${{ vars.AZURE_SWA_NAME }}
-        run: |
-          token=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$RESOURCE_GROUP" --query properties.apiKey -o tsv)
-          echo "::add-mask::$token"
-          echo "token=$token" >> "$GITHUB_OUTPUT"
-      - uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ steps.swa.outputs.token }}
-          action: close
-          app_location: frontend/out
-
   backend:
-    if: vars.AZURE_CLIENT_ID != '' && github.event_name == 'push'
+    if: vars.AZURE_CLIENT_ID != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
