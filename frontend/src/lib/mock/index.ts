@@ -4,3 +4,4 @@
  */
 import "./regions";
 import "./diagnoses";
+import "./stores";

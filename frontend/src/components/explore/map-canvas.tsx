@@ -6,7 +6,8 @@ import { offsetToLatLng, type RadiusM } from "@/lib/explore";
 
 /** 화면에 보이는 범위(미터). 1km 반경이 들어가도록 잡는다 */
 export const MAP_SPAN_M = 2400;
-const VIEW = 1000;
+export const MAP_VIEW = 1000;
+const VIEW = MAP_VIEW;
 const LONG_PRESS_MS = 500;
 const MOVE_TOLERANCE_PX = 10;
 
