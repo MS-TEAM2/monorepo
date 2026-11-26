@@ -8,7 +8,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     """환경 변수로 덮어쓴다. 비밀 값은 Key Vault → Container Apps 환경 변수로 주입한다."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # 실행 위치와 상관없이 항상 backend/.env 를 읽는다 (레포 루트에서 uv run 해도 같다).
+    model_config = SettingsConfigDict(env_file=REPO_ROOT / "backend" / ".env", extra="ignore")
 
     model_path: Path = REPO_ROOT / "ai" / "artifacts" / "model.joblib"
     cors_origins: list[str] = ["http://localhost:3000"]

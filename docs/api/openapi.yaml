@@ -16,6 +16,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /health/db:
+    get:
+      tags:
+      - system
+      summary: Health Db
+      operationId: health_db_health_db_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DbHealthResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/predict:
     post:
       tags:
@@ -36,22 +55,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/PredictResponse'
         '422':
-          description: Validation Error
+          description: Unprocessable Content
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
-    HTTPValidationError:
+    DbHealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          examples:
+          - ok
+      type: object
+      required:
+      - status
+      title: DbHealthResponse
+    ErrorResponse:
       properties:
         detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
+          anyOf:
+          - type: string
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
           title: Detail
+        code:
+          type: string
+          title: Code
       type: object
-      title: HTTPValidationError
+      required:
+      - detail
+      - code
+      title: ErrorResponse
     HealthResponse:
       properties:
         status:
@@ -98,29 +143,3 @@ components:
       required:
       - predictions
       title: PredictResponse
-    ValidationError:
-      properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
-          type: string
-          title: Message
-        type:
-          type: string
-          title: Error Type
-        input:
-          title: Input
-        ctx:
-          type: object
-          title: Context
-      type: object
-      required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
