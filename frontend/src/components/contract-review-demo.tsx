@@ -40,7 +40,7 @@ export function ContractReviewDemo() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 lg:px-8">
+    <main className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col px-4 pb-10 pt-6 sm:px-6 sm:pt-10 lg:px-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         {stage === "upload" ? (
           <Link

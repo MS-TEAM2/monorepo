@@ -10,18 +10,18 @@ export type NavItem = {
   href: string;
   /** 상단 메뉴 이름 */
   label: string;
-  /** 하단 탭 이름. 375px에서 한 줄에 들어가도록 3글자 이내 */
+  /** 하단 탭 이름. 375px에서 탭 폭(약 62px)에 한 줄로 들어가도록 4글자 이내 */
   shortLabel: string;
   icon: NavIconName;
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: "/explore", label: "상권 탐색", shortLabel: "탐색", icon: "explore" },
+  { href: "/explore", label: "상권 지도", shortLabel: "지도", icon: "explore" },
   { href: "/diagnose", label: "창업 진단", shortLabel: "진단", icon: "diagnose" },
-  { href: "/contract", label: "계약서 확인", shortLabel: "계약서", icon: "contract" },
+  { href: "/contract", label: "계약서 검토", shortLabel: "계약서", icon: "contract" },
   { href: "/guide", label: "창업 가이드", shortLabel: "가이드", icon: "guide" },
-  { href: "/policy", label: "지원정책", shortLabel: "정책", icon: "policy" },
-  { href: "/about-data", label: "데이터 안내", shortLabel: "데이터", icon: "data" },
+  { href: "/policy", label: "지원정책", shortLabel: "지원정책", icon: "policy" },
+  { href: "/about-data", label: "데이터·한계", shortLabel: "데이터", icon: "data" },
 ];
 
 /** 현재 경로가 메뉴 경로이거나 그 하위 경로면 활성. 끝 슬래시는 무시한다. */

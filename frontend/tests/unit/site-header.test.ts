@@ -13,14 +13,13 @@ describe("SiteHeader", () => {
 
     expect(markup).toContain("전지적 창업시점");
     expect(markup).not.toContain("주요 메뉴");
-    expect(markup).not.toContain("메뉴 열기");
   });
 
   it("shows the desktop menu and marks the current screen", () => {
     const markup = renderToStaticMarkup(createElement(SiteHeader, { navigation: NAV_ITEMS }));
 
     expect(markup).toContain("주요 메뉴");
-    expect(markup).toContain("메뉴 열기");
+    expect(markup).toContain("서울 외식 · 계약서 검토");
     for (const item of NAV_ITEMS) {
       expect(markup).toContain(`href="${item.href}"`);
     }
