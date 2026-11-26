@@ -3,7 +3,15 @@ name = "ai-core"
 version = "0.1.0"
 description = "학습·평가·추론 패키지. 백엔드가 이 패키지를 import 해서 모델을 서빙한다."
 requires-python = ">=3.13"
-dependencies = ["scikit-learn", "joblib", "numpy", "pandas"]
+dependencies = [
+    "scikit-learn",
+    "joblib",
+    "numpy",
+    "pandas",
+    # 수집 결과를 DB에 반영한다(SCRUM-98). 백엔드와 같은 라이브러리·버전 범위
+    "sqlalchemy>=2.1.9",
+    "psycopg[binary]>=3.3.9",
+]
 
 [build-system]
 requires = ["hatchling"]
