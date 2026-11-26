@@ -103,7 +103,7 @@ backend/
 - 접속 주소는 `DATABASE_URL` 환경 변수(`backend/.env`)로만 준다. 코드·`alembic.ini`·로그에 쓰지 않는다. 비밀번호가 든 값이므로 Key Vault → Container Apps 환경 변수로 주입한다.
 - 형식: `postgresql://사용자:비밀번호@호스트:5432/DB이름`. Azure Database for PostgreSQL은 끝에 `?sslmode=require`를 붙인다. `postgresql://`은 코드가 psycopg(v3) 드라이버용으로 바꿔 쓴다.
 - 요청 안에서는 `app/deps.py`의 `get_db`로 세션을 받는다. 주소가 없으면 503이다. 접속 확인은 `GET /health/db` (실패 시 503, 기존 `/health`는 DB와 무관).
-- 로컬 DB 예시: `docker run --name ax-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres:17` 후 `DATABASE_URL=postgresql://postgres:dev@localhost:5432/postgres`.
+- 로컬 DB 예시: `docker run --name ax-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgis/postgis:18-3.6` 후 `DATABASE_URL=postgresql://postgres:dev@localhost:5432/postgres`. 마이그레이션 테스트에는 같은 주소를 `TEST_DATABASE_URL`로 준다.
 - 마이그레이션은 레포 루트에서 실행한다.
 
 | 목적 | 명령 |
@@ -115,6 +115,7 @@ backend/
 
 - 테이블은 공통 `app.models.Base`를 상속한다. 제약 이름은 Base의 규칙을 따르고 CHECK에는 이름을 직접 붙인다.
 - 마이그레이션은 되돌릴 수 있게 쓰고 머지된 리비전은 고치지 않는다. BE 담당만 만든다.
-- 쿼리의 실제 동작은 가짜 세션으로 확인할 수 없다. 테이블을 만드는 티켓에서 PostGIS 테스트 환경을 함께 정한다.
+- DB에는 PostGIS가 필요하다. Azure Database for PostgreSQL은 마이그레이션 전에 서버 매개변수 `azure.extensions`에 `POSTGIS`를 허용해야 한다(AX 담당 승인 필요).
+- 쿼리의 실제 동작은 가짜 세션으로 확인할 수 없다. 마이그레이션·제약·공간 쿼리는 `TEST_DATABASE_URL`의 PostGIS 서버에서 테스트한다(예: `tests/test_migrations.py`). 테스트는 임시 DB를 만들어 쓰고 지운다. 값이 없으면 건너뛰며 CI는 항상 실행한다.
 - 그 밖의 테스트는 외부 DB를 쓰지 않는다. `app.dependency_overrides[get_db]`로 가짜 세션을 넣거나, 앱을 시작하기 전에 `settings.database_url`을 monkeypatch 한다(엔진은 시작할 때 만들어진다).
 - psycopg의 비동기 연결은 Windows 기본 이벤트 루프(Proactor)에서 동작하지 않는다. Windows에서는 WSL로 실행한다.
