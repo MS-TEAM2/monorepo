@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Menu } from "lucide-react";
 
+import { NavLinks } from "@/components/layout/nav-links";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
@@ -10,20 +11,8 @@ export type NavigationItem = {
 };
 
 type SiteHeaderProps = {
-  navigation?: NavigationItem[];
+  navigation?: readonly NavigationItem[];
 };
-
-function NavigationLinks({ items }: { items: NavigationItem[] }) {
-  return (
-    <>
-      {items.map((item) => (
-        <Button key={item.href} variant="ghost" asChild className="min-h-11 justify-start px-3">
-          <Link href={item.href}>{item.label}</Link>
-        </Button>
-      ))}
-    </>
-  );
-}
 
 export function SiteHeader({ navigation = [] }: SiteHeaderProps) {
   return (
@@ -39,7 +28,7 @@ export function SiteHeader({ navigation = [] }: SiteHeaderProps) {
         {navigation.length > 0 && (
           <>
             <nav className="hidden items-center gap-1 md:flex" aria-label="주요 메뉴">
-              <NavigationLinks items={navigation} />
+              <NavLinks items={navigation} />
             </nav>
 
             <Sheet>
@@ -53,7 +42,7 @@ export function SiteHeader({ navigation = [] }: SiteHeaderProps) {
                   <SheetTitle>메뉴</SheetTitle>
                 </SheetHeader>
                 <nav className="mt-6 flex flex-col gap-1" aria-label="모바일 주요 메뉴">
-                  <NavigationLinks items={navigation} />
+                  <NavLinks items={navigation} closeSheet />
                 </nav>
               </SheetContent>
             </Sheet>
