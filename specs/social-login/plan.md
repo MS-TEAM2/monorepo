@@ -20,7 +20,7 @@
 
 - 변경: A01 `POST /auth/token`(기존 `POST /sessions` 대체), A02 `DELETE /users/me/data`(기존 `DELETE /sessions/me` 대체, 구현은 SCRUM-156)
 - 변경: A07 `GET /areas/summary`는 로그인 선택. 로그인 전 `dong_stats: null`, `locked: ["dong_stats"]`
-- 변경: A06·A08은 로그인 필수
+- 변경: A06은 로그인 필수
 - 추가: A26 `GET /auth/{provider}/start`, A27 `GET /auth/{provider}/callback`, A28 `GET /users/me`, A29 `POST /auth/logout`, A30 `DELETE /users/me`
 
 ## 데이터·모델
