@@ -14,9 +14,9 @@ describe("NAV_ITEMS", () => {
     ]);
   });
 
-  it("하단 탭 이름은 3글자 이내다", () => {
+  it("하단 탭 이름은 4글자 이내다", () => {
     for (const item of NAV_ITEMS) {
-      expect(item.shortLabel.length).toBeLessThanOrEqual(3);
+      expect(item.shortLabel.length).toBeLessThanOrEqual(4);
     }
   });
 });

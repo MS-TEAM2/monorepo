@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
 import { BOTTOM_TAB_BAR_SPACE, BottomTabBar } from "@/components/layout/bottom-tab-bar";
+import { StartupProvider } from "@/components/screens/startup-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteHeader } from "@/components/ui/site-header";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#EA580C",
+  themeColor: "#C2410C",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -37,9 +38,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ko" className={`${pretendard.variable} h-full`}>
       <body className="flex min-h-full flex-col">
         <TooltipProvider delayDuration={200}>
-          <SiteHeader navigation={NAV_ITEMS} />
-          <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>{children}</div>
-          <BottomTabBar />
+          <StartupProvider>
+            <SiteHeader navigation={NAV_ITEMS} />
+            <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>{children}</div>
+            <BottomTabBar />
+          </StartupProvider>
         </TooltipProvider>
         <Toaster />
       </body>

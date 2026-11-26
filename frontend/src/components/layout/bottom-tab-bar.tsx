@@ -19,7 +19,7 @@ export function BottomTabBar({ items = NAV_ITEMS }: { items?: readonly NavItem[]
   return (
     <nav
       aria-label="하단 메뉴"
-      className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur md:hidden"
+      className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur-md md:hidden"
     >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
         {items.map((item) => {
@@ -35,7 +35,7 @@ export function BottomTabBar({ items = NAV_ITEMS }: { items?: readonly NavItem[]
                 )}
               >
                 {active && (
-                  <span aria-hidden="true" className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-primary" />
+                  <span aria-hidden="true" className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-primary" />
                 )}
                 <NavIcon name={item.icon} className="size-5" />
                 {item.shortLabel}
