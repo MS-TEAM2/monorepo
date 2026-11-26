@@ -9,6 +9,7 @@ from ai_core.survival.contract import (
     HORIZON_MONTHS,
     REASON_MODEL_NOT_READY,
     Factor,
+    LocationHistory,
     SurvivalQuery,
     SurvivalResult,
 )
@@ -48,6 +49,10 @@ def test_without_model_returns_unavailable_without_probabilities(tmp_path):
         replace(QUERY, category_id="convenience_store"),
         replace(QUERY, lat=float("nan")),
         replace(QUERY, dong_code="1111"),
+        replace(QUERY, area_sqm=0),
+        replace(QUERY, area_sqm=float("nan")),
+        replace(QUERY, area_sqm=1000.1),
+        replace(QUERY, location_history=LocationHistory(-1, 0, 0, 0)),
     ],
 )
 def test_invalid_query_raises_value_error(query):
@@ -66,9 +71,7 @@ def test_to_dict_matches_a11_shape():
 
     assert set(body) == {"survival", "factors"}
     assert set(body["survival"]) == {
-        "scope",
         "available",
-        "method",
         "model_version",
         "points",
         "interval_level",
@@ -77,6 +80,8 @@ def test_to_dict_matches_a11_shape():
     }
     assert set(body["survival"]["points"][0]) == {
         "month",
+        "method",
+        "scope",
         "probability",
         "lower",
         "upper",
@@ -94,10 +99,38 @@ def test_model_result_is_validated_before_returning():
 
 
 def test_baseline_result_has_no_factors():
-    baseline = replace(EXAMPLE_SURVIVAL_RESULT, method="km_baseline")
+    first = replace(
+        EXAMPLE_SURVIVAL_RESULT.points[0],
+        method="km_baseline",
+        scope="seoul_category",
+        probability=0.84,
+    )
+    baseline = replace(EXAMPLE_SURVIVAL_RESULT, points=(first, *EXAMPLE_SURVIVAL_RESULT.points[1:]))
     with pytest.raises(ValueError):
         baseline.validate()
     replace(baseline, factors=()).validate()
+
+
+@pytest.mark.parametrize(
+    ("index", "change"),
+    [
+        (0, {"method": "unknown"}),
+        (0, {"scope": "unknown"}),
+        (1, {"method": "logistic"}),
+        (1, {"scope": "location_category"}),
+        (1, {"baseline": 0.66}),
+    ],
+)
+def test_each_point_follows_method_and_scope_rules(index, change):
+    points = list(EXAMPLE_SURVIVAL_RESULT.points)
+    points[index] = replace(points[index], **change)
+    with pytest.raises(ValueError):
+        replace(EXAMPLE_SURVIVAL_RESULT, points=tuple(points)).validate()
+
+
+def test_valid_location_input_is_accepted():
+    query = replace(QUERY, area_sqm=33.0, location_history=LocationHistory(4, 1, 1, 0))
+    assert predict_survival(FixedModel(EXAMPLE_SURVIVAL_RESULT), query).available is True
 
 
 def test_at_most_three_factors_per_direction():
