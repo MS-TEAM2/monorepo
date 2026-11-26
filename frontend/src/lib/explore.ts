@@ -22,7 +22,13 @@ export function isRadius(value: number): value is RadiusM {
  * 탐색 선택값(위치·반경·업종). 로그인하러 갔다 돌아올 때 주소 쿼리로 되살린다 (specs/social-login R4).
  * 정적 내보내기라 쿼리 문자열로 넘긴다(routes.ts 와 같은 방식).
  */
-export type ExploreSelection = { center: ExploreCenter; radius: RadiusM; categories: CategoryId[] };
+export type ExploreSelection = {
+  center: ExploreCenter;
+  radius: RadiusM;
+  categories: CategoryId[];
+  /** 상권 요약(A07)에서 고른 업종 1개. 없으면 화면이 다시 고르게 한다 */
+  summaryCategory?: CategoryId | null;
+};
 
 const ADDRESS_MAX_LENGTH = 200;
 
@@ -35,6 +41,7 @@ export function exploreHref(selection?: ExploreSelection): string {
     radius: String(selection.radius),
   });
   if (selection.categories.length > 0) params.set("categories", selection.categories.join(","));
+  if (selection.summaryCategory) params.set("summary", selection.summaryCategory);
   return `/explore?${params.toString()}`;
 }
 
@@ -53,11 +60,12 @@ export function parseExploreQuery(query: QueryInput): ExploreSelection | null {
   const rawCategories = query.get("categories")?.split(",").filter(Boolean) ?? [];
   if (!rawCategories.every((id) => isCategoryId(id))) return null;
   const selected = new Set<string>(rawCategories);
-  return {
-    center: { lat, lng, address },
-    radius,
-    categories: CATEGORY_IDS.filter((id) => selected.has(id)),
-  };
+  const categories = CATEGORY_IDS.filter((id) => selected.has(id));
+  // 요약 업종은 고른 업종 안에 있어야 한다(고르지 않았으면 9종 중 아무거나). 틀리면 버리고 다시 고르게 한다
+  const summary = query.get("summary");
+  const summaryCategory =
+    isCategoryId(summary) && (categories.length === 0 || categories.includes(summary)) ? summary : null;
+  return { center: { lat, lng, address }, radius, categories, summaryCategory };
 }
 
 /** 업종 칩을 누르면 넣고 빼기. 순서는 9종 순서로 맞춘다 */

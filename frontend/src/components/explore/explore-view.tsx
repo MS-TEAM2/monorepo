@@ -302,7 +302,12 @@ export function ExploreView({ initial = null }: { initial?: ExploreSelection | n
         id="area-summary-section"
         className="order-3 scroll-mt-20 px-4 pt-6 pb-4 md:order-none md:col-start-2 md:row-start-2 md:px-0 md:pb-0"
       >
-        <AreaSummaryPanel center={center} radius={radius} selectedCategories={categories} />
+        <AreaSummaryPanel
+          center={center}
+          radius={radius}
+          selectedCategories={categories}
+          initialCategory={initial?.summaryCategory ?? null}
+        />
       </div>
     </main>
   );

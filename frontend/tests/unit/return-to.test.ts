@@ -135,6 +135,7 @@ describe("탐색 선택값 복원", () => {
     center: { lat: 37.5563, lng: 126.9236, address: "서울 마포구 양화로 160" },
     radius: 300,
     categories: ["japanese", "cafe"],
+    summaryCategory: "cafe",
   };
 
   it("위치·반경·업종을 주소로 넘기고 그대로 되살린다", () => {
@@ -151,9 +152,22 @@ describe("탐색 선택값 복원", () => {
   });
 
   it("업종을 고르지 않았으면 업종 없이 되살린다", () => {
-    const href = exploreHref({ ...selection, categories: [] });
+    const href = exploreHref({ ...selection, categories: [], summaryCategory: null });
     expect(href).not.toContain("categories");
-    expect(parseExploreQuery(new URL(href, "https://jcs.invalid").searchParams)?.categories).toEqual([]);
+    expect(href).not.toContain("summary");
+    expect(parseExploreQuery(new URL(href, "https://jcs.invalid").searchParams)).toMatchObject({
+      categories: [],
+      summaryCategory: null,
+    });
+  });
+
+  it("요약 업종은 고른 업종 안에 있을 때만 되살린다", () => {
+    const base = "lat=37.5&lng=127&address=a&radius=500";
+    expect(parseExploreQuery(new URLSearchParams(`${base}&summary=cafe`))?.summaryCategory).toBe("cafe");
+    expect(
+      parseExploreQuery(new URLSearchParams(`${base}&categories=cafe&summary=korean`))?.summaryCategory,
+    ).toBeNull();
+    expect(parseExploreQuery(new URLSearchParams(`${base}&summary=unknown`))?.summaryCategory).toBeNull();
   });
 
   it.each([
