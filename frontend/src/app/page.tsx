@@ -21,6 +21,22 @@ export default function HomePage() {
         </p>
       </section>
 
+      <section
+        className="rounded-2xl border border-primary/20 bg-primary-soft/50 p-4"
+        aria-labelledby="prototype-title"
+      >
+        <p className="text-xs font-bold text-primary">기획 검증용 · 가상 데이터</p>
+        <h2 id="prototype-title" className="mt-1 text-base font-extrabold text-foreground">
+          상권 탐색부터 계약 조건 비교까지
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          지도·진단·계약 흐름을 한 번에 시연합니다. 실제 API, 인증, OCR은 연결되지 않았습니다.
+        </p>
+        <Button asChild variant="outline" className="mt-3 min-h-11 w-full bg-card">
+          <Link href="/prototype">핵심 흐름 시연하기</Link>
+        </Button>
+      </section>
+
       <section className="flex flex-col gap-3" aria-label="시작하기">
         <Button asChild className="min-h-12 text-base">
           <Link href="/explore">
