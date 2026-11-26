@@ -58,12 +58,15 @@ export const ERROR_COPY: Record<ApiErrorKind, ErrorCopy> = {
 export class ApiError extends Error {
   readonly kind: ApiErrorKind;
   readonly status: number | null;
+  /** 서버 오류 본문의 `code` (API 명세 1장). 화면 분기용 고정값. 예: out_of_service_area, contract_processing */
+  readonly code: string | null;
 
-  constructor(kind: ApiErrorKind, status: number | null, message?: string) {
+  constructor(kind: ApiErrorKind, status: number | null, code: string | null = null, message?: string) {
     super(message ?? ERROR_COPY[kind].title);
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -73,7 +76,7 @@ export function errorKindFromStatus(status: number | null): ApiErrorKind {
   if (status === 401) return "unauthorized";
   if (status === 403 || status === 404) return "not_found";
   if (status === 409) return "conflict";
-  if (status === 400 || status === 422) return "validation";
+  if (status === 400 || status === 413 || status === 415 || status === 422) return "validation";
   return "server";
 }
 
