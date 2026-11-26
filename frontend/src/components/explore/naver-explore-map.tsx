@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import type { MapPoint } from "@/components/explore/map-canvas";
 import type { StoreItem } from "@/lib/api/stores";
@@ -68,7 +68,33 @@ export function NaverExploreMap({
     latest.current = { center, radius, stores, onLongPress, onMoved, onSelectStore, onLoadError };
   });
 
-  function drawStores() {
+  const broken = useRef(false);
+
+  /**
+   * 네이버지도 호출은 모두 여기를 거친다. 인증 실패 등으로 스크립트가 고장 나면 지도 호출이 예외를 던지는데,
+   * 그대로 두면 React effect 에서 페이지 전체가 오류 화면으로 바뀐다. 한 번 실패하면 더 부르지 않고 임시 지도로 바꾼다.
+   */
+  const fail = useCallback(() => {
+    if (broken.current) return;
+    broken.current = true;
+    naver.current = null;
+    storeMarkers.current = [];
+    latest.current.onLoadError();
+  }, []);
+
+  const guard = useCallback(
+    (action: () => void) => {
+      if (broken.current) return;
+      try {
+        action();
+      } catch {
+        fail();
+      }
+    },
+    [fail],
+  );
+
+  const drawStoresUnsafe = useCallback(() => {
     const ctx = naver.current;
     if (!ctx) return;
     storeMarkers.current.forEach((marker) => marker.setMap(null));
@@ -99,87 +125,98 @@ export function NaverExploreMap({
       if (single) ctx.maps.Event.addListener(marker, "click", () => latest.current.onSelectStore(first));
       return marker;
     });
-  }
+  }, []);
+
+  const drawStores = useCallback(() => guard(drawStoresUnsafe), [guard, drawStoresUnsafe]);
 
   useEffect(() => {
     let disposed = false;
     const listeners: NListener[] = [];
-    const offAuthFailure = onNaverAuthFailure(() => !disposed && latest.current.onLoadError());
+    broken.current = false;
+    const offAuthFailure = onNaverAuthFailure(() => !disposed && fail());
     loadNaverMaps(clientId)
-      .then((maps) => {
-        if (disposed || !element.current) return;
-        const { center: c, radius: r } = latest.current;
-        const position = new maps.LatLng(c.lat, c.lng);
-        const map = new maps.Map(element.current, {
-          center: position,
-          zoom: ZOOM_FOR_RADIUS[r],
-          zoomControl: false,
-          scaleControl: true,
-          mapDataControl: false,
-        });
-        const primary = cssToken("--primary");
-        const circle = new maps.Circle({
-          map,
-          center: position,
-          radius: r,
-          strokeColor: primary,
-          strokeOpacity: 0.9,
-          strokeWeight: 2,
-          strokeStyle: "shortdash",
-          fillColor: primary,
-          fillOpacity: 0.08,
-          clickable: false,
-        });
-        const pin = new maps.Marker({
-          map,
-          position,
-          icon: { content: CENTER_PIN, anchor: new maps.Point(0, 0) },
-          zIndex: 100,
-          clickable: false,
-        });
-        naver.current = { maps, map, circle, pin };
-        const press = (event: { coord?: { lat(): number; lng(): number } }) => {
-          if (event.coord) latest.current.onLongPress({ lat: event.coord.lat(), lng: event.coord.lng() });
-        };
-        listeners.push(
-          maps.Event.addListener(map, "longtap", press),
-          maps.Event.addListener(map, "rightclick", press),
-          maps.Event.addListener(map, "dragend", () => {
-            const moved = map.getCenter();
-            latest.current.onMoved({ lat: moved.lat(), lng: moved.lng() });
-          }),
-          maps.Event.addListener(map, "idle", drawStores),
-        );
-        drawStores();
-      })
-      .catch(() => !disposed && latest.current.onLoadError());
+      .then((maps) =>
+        guard(() => {
+          if (disposed || !element.current) return;
+          const { center: c, radius: r } = latest.current;
+          const position = new maps.LatLng(c.lat, c.lng);
+          const map = new maps.Map(element.current, {
+            center: position,
+            zoom: ZOOM_FOR_RADIUS[r],
+            zoomControl: false,
+            scaleControl: true,
+            mapDataControl: false,
+          });
+          const primary = cssToken("--primary");
+          const circle = new maps.Circle({
+            map,
+            center: position,
+            radius: r,
+            strokeColor: primary,
+            strokeOpacity: 0.9,
+            strokeWeight: 2,
+            strokeStyle: "shortdash",
+            fillColor: primary,
+            fillOpacity: 0.08,
+            clickable: false,
+          });
+          const pin = new maps.Marker({
+            map,
+            position,
+            icon: { content: CENTER_PIN, anchor: new maps.Point(0, 0) },
+            zIndex: 100,
+            clickable: false,
+          });
+          naver.current = { maps, map, circle, pin };
+          const press = (event: { coord?: { lat(): number; lng(): number } }) => {
+            if (event.coord) latest.current.onLongPress({ lat: event.coord.lat(), lng: event.coord.lng() });
+          };
+          listeners.push(
+            maps.Event.addListener(map, "longtap", press),
+            maps.Event.addListener(map, "rightclick", press),
+            maps.Event.addListener(map, "dragend", () => {
+              const moved = map.getCenter();
+              latest.current.onMoved({ lat: moved.lat(), lng: moved.lng() });
+            }),
+            maps.Event.addListener(map, "idle", drawStores),
+          );
+          drawStores();
+        }),
+      )
+      .catch(() => !disposed && fail());
 
     return () => {
       disposed = true;
       offAuthFailure();
       const ctx = naver.current;
       if (ctx) {
-        listeners.forEach((listener) => ctx.maps.Event.removeListener(listener));
-        ctx.map.destroy();
+        try {
+          listeners.forEach((listener) => ctx.maps.Event.removeListener(listener));
+          ctx.map.destroy();
+        } catch {
+          // 고장 난 지도는 정리하지 못해도 화면에는 영향이 없다
+        }
       }
       naver.current = null;
       storeMarkers.current = [];
     };
-  }, [clientId]);
+  }, [clientId, drawStores, fail, guard]);
 
   // 중심·반경이 바뀌면 지도를 옮기고 원을 다시 그린다
   useEffect(() => {
-    const ctx = naver.current;
-    if (!ctx) return;
-    const position = new ctx.maps.LatLng(center.lat, center.lng);
-    ctx.map.setCenter(position);
-    ctx.map.setZoom(ZOOM_FOR_RADIUS[radius]);
-    ctx.circle.setCenter(position);
-    ctx.circle.setRadius(radius);
-    ctx.pin.setPosition(position);
-  }, [center.lat, center.lng, radius]);
+    guard(() => {
+      const ctx = naver.current;
+      if (!ctx) return;
+      const position = new ctx.maps.LatLng(center.lat, center.lng);
+      ctx.map.setCenter(position);
+      ctx.map.setZoom(ZOOM_FOR_RADIUS[radius]);
+      ctx.circle.setCenter(position);
+      ctx.circle.setRadius(radius);
+      ctx.pin.setPosition(position);
+    });
+  }, [center.lat, center.lng, radius, guard]);
 
-  useEffect(drawStores, [stores]);
+  useEffect(() => drawStores(), [stores, drawStores]);
 
   return (
     <div
