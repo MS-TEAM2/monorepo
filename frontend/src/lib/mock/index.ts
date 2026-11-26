@@ -6,3 +6,4 @@ import "./regions";
 import "./diagnoses";
 import "./stores";
 import "./areas";
+import "./auth";
