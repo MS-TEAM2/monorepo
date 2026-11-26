@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_core.predict import load_model
+from app.auth.router import router as auth_router
 from app.config import settings
 from app.db import create_engine, create_session_factory
 from app.errors import register_error_handlers
 from app.prediction.router import router as prediction_router
 from app.system.router import router as system_router
+from app.users.router import router as users_router
 
 API_PREFIX = "/api/v1"
 
@@ -40,3 +42,5 @@ register_error_handlers(app)
 # 도메인 라우터는 여기서만 등록한다.
 app.include_router(system_router)
 app.include_router(prediction_router, prefix=API_PREFIX)
+app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(users_router, prefix=API_PREFIX)
