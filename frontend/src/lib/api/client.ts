@@ -2,6 +2,8 @@ import { ApiError, errorKindFromStatus } from "./errors";
 import { findMock, isMockMode, MOCK_DELAY_MS, type HttpMethod } from "./mock";
 import type { components } from "./schema";
 import { clearSession, getSessionToken } from "@/lib/session";
+// 예시 응답 등록 (실제 데이터 구축 전). NEXT_PUBLIC_API_MODE=live 면 쓰지 않는다
+import "@/lib/mock";
 
 // 타입은 docs/api/openapi.yaml 에서 생성한다: pnpm --filter frontend gen:api
 export type Health = components["schemas"]["HealthResponse"];
