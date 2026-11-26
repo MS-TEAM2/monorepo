@@ -5,7 +5,9 @@ Claude Code와 Codex가 함께 읽는 팀 규칙 원본이다. `CLAUDE.md`는 �
 
 ## 프로젝트
 
-7인 팀의 8주 프로젝트. 웹 서비스(Next.js + FastAPI)와 머신러닝 모델을 모노레포 하나에서 개발하고 Azure 서버리스로 배포한다. 모바일 앱은 웹을 띄우는 React Native 웹뷰라서, **화면은 웹 하나만 만든다.**
+서비스는 **전지적창업시점**(서울 외식업 예비창업자의 상권·생존·손익·계약서 확인)이다. 환승결제는 이전 기획이므로 참고하지 않는다.
+
+7인 팀의 프로젝트. 웹 서비스(Next.js + FastAPI)와 머신러닝 모델을 모노레포 하나에서 개발하고 Azure 서버리스로 배포한다. 모바일 앱은 웹을 띄우는 React Native 웹뷰라서, **화면은 웹 하나만 만든다.**
 
 ## 폴더 구조
 
@@ -16,6 +18,7 @@ Claude Code와 Codex가 함께 읽는 팀 규칙 원본이다. `CLAUDE.md`는 �
 | `packages/bridge/` | 웹 ↔ 앱 메시지 계약 (`@ax/bridge`) | TypeScript, vitest |
 | `backend/` | FastAPI API + 모델 추론 | uv, ruff, pytest |
 | `ai/` | 학습·평가·추론 패키지 `ai_core` | uv, scikit-learn |
+| `docs/notion.md` | 기준 문서(Notion) 주소, 읽는 조건, 연결 방법 | |
 | `docs/api/openapi.yaml` | FE·BE·AI 사이의 API 계약 (백엔드 코드에서 생성) | |
 | `specs/<기능>/` | 기능별 `spec.md` → `plan.md` → `tasks.md` | |
 | `.agents/skills/` | 팀 공용 스킬 원본 (`.claude/skills`는 심볼릭 링크) | |
@@ -38,6 +41,19 @@ Claude Code와 Codex가 함께 읽는 팀 규칙 원본이다. `CLAUDE.md`는 �
 | 파이썬 전체 검사 | `pnpm check:py` |
 | 전체 검사 (PR 전 필수) | `pnpm check` |
 | API 명세 갱신 | `uv run python -m app.export_openapi` 후 `pnpm --filter frontend gen:api` |
+
+## 기준 문서 (Notion)
+
+API 명세나 테이블을 만들거나 바꾸는 작업은 **반드시 Notion 문서를 이번 세션에서 읽은 뒤** 시작한다. 주소와 조건은 [docs/notion.md](docs/notion.md)에 있다.
+
+- API(라우트·요청·응답·오류·인증)는 API 명세서의 해당 A번호, 테이블(모델·마이그레이션)은 테이블 정의서의 해당 테이블을 읽는다. 생존모델은 `specs/survival-diagnosis/`와 데이터 전처리를 읽는다.
+- 주소로 직접 연다. 제목으로 검색해 열지 않는다. 같은 제목의 환승결제 문서가 있다.
+- **읽을 수 없으면 코드를 고치지 않는다.** 기억, 예전 대화, 레포의 다른 문서로 대신하지 않고 [연결 안내](docs/notion.md#연결-방법)를 사용자에게 보여 준 뒤 멈춘다. 연결되면 문서를 읽고 이어서 한다.
+- 이미 `docs/api/openapi.yaml`에 있는 API를 **호출만** 할 때는 그 파일이 기준이다. 없는 API는 Notion 명세를 읽고 명세 PR을 먼저 올린다.
+- 티켓, 스펙, Notion, openapi.yaml이 서로 다르면 구현하지 말고 무엇이 다른지 묻는다.
+- 읽은 문서와 A번호·테이블을 구현 계획과 PR에 적는다.
+
+Claude Code는 `.claude/hooks/require-notion-docs.mjs`가 백엔드의 라우트·스키마·모델·마이그레이션·openapi.yaml 편집 전에 검사한다. Codex는 같은 규칙을 직접 지킨다.
 
 ## 작업 방식
 
@@ -75,7 +91,7 @@ PR 설명에는 작성자가 **직접 이해한** 변경 요약을 적는다. "A
 
 ## 도구 연결
 
-- Jira·Notion·Slack은 MCP로 연결한다(`.mcp.json`, `.codex/config.toml`). 로그인은 각자 본인 계정으로 한다.
+- Jira·Notion·Slack은 MCP로 연결한다(`.mcp.json`, `.codex/config.toml`). 로그인은 각자 본인 계정으로 한다. Notion 게스트는 `notion-bot`을 쓴다([docs/notion.md](docs/notion.md#연결-방법)).
 - GitHub 작업(PR·이슈·CI 조회)은 `gh` CLI를 쓴다.
 - Jira 상태 전환은 Jira Automation이 아니라 스킬이 MCP로 처리한다.
 
@@ -83,6 +99,4 @@ PR 설명에는 작성자가 **직접 이해한** 변경 요약을 적는다. "A
 
 `spec` `ticket` `start` `pr` `standup` `retro` — Claude Code는 `/이름`, Codex는 `$이름`으로 부른다.
 
-환승결제 프론트엔드 구현에는 [frontend-task](.agents/skills/frontend-task/SKILL.md)를 사용한다.
-
-백엔드 구현에는 [backend-task](.agents/skills/backend-task/SKILL.md)를 사용한다.
+전지적창업시점 프론트엔드 구현에는 [frontend-task](.agents/skills/frontend-task/SKILL.md)를 사용한다.
