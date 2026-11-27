@@ -136,7 +136,7 @@ export function DiagnosisInputScreen() {
   const handleRun = () => {
     if (isRunning) return;
     setIsRunning(true);
-    s.runDiagnosis();
+    s.runDiagnosis({ record: true });
     runTimer.current = window.setTimeout(() => go("report"), PROGRESS_STEP_MS * 4);
   };
 

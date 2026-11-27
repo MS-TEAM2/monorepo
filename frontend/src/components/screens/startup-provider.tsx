@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useMemo, useState, useSyncExter
 
 import { buildDongSummary, buildSurvival, calcLoss, calcProfit, generateStores } from "@/lib/mock/startup/calc";
 import { CATEGORIES, EXAMPLE_FORM, INITIAL_FORM, INITIAL_PIN, MAP_SCALE, NEIGHBORHOODS } from "@/lib/mock/startup/data";
+import { recordContract, recordDiagnosis } from "@/lib/my-report";
+import { getSessionStatus } from "@/lib/session";
 import {
   clearSelection as clearSavedSelection,
   parseSelection,
@@ -60,7 +62,8 @@ export type StartupState = {
   fillExample: () => void;
   buildCostParams: (rentMan?: number | null) => CostParams;
   report: Report | null;
-  runDiagnosis: () => void;
+  /** record: 사용자가 `진단하기`를 눌렀을 때만 true. 결과 화면을 바로 열어 다시 계산할 때는 분석기록에 남기지 않는다 */
+  runDiagnosis: (options?: { record?: boolean }) => void;
   sliderRentMan: number;
   initialRentMan: number;
   changeSliderRent: (rentMan: number) => void;
@@ -235,7 +238,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       },
       buildCostParams,
       report,
-      runDiagnosis: () => {
+      runDiagnosis: (options) => {
         const rent = Math.max(0, Number(formState.rentMan) || 0);
         const params = buildCostParams(rent);
         setReport({
@@ -245,6 +248,14 @@ export function StartupProvider({ children }: { children: ReactNode }) {
         });
         setInitialRentMan(rent);
         setSliderRentMan(rent);
+        // 로그인한 사용자의 진단은 분석기록에 남긴다 (예시 화면이라 이 브라우저에만, lib/my-report)
+        if (options?.record && getSessionStatus() === "logged_in") {
+          recordDiagnosis({
+            address: `${neighborhood.name} 선택 위치`,
+            category_id: category.id,
+            dong_name: neighborhood.shortName,
+          });
+        }
       },
       sliderRentMan,
       initialRentMan,
@@ -260,7 +271,11 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       contractFields,
       setContractFields,
       appliedContract,
-      setAppliedContract,
+      setAppliedContract: (contract) => {
+        setAppliedContract(contract);
+        // 계약서 검토를 마쳐 손익에 반영하면 분석기록에 남긴다
+        if (contract && getSessionStatus() === "logged_in") recordContract("confirmed");
+      },
       resetAll: () => {
         setReport(null);
         setContractStage("upload");
