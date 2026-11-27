@@ -60,6 +60,8 @@ describe("validateChecklist — 완료 조건: 구분·조건·출처·확인일
 
   it("빈 값도 없는 것으로 본다", () => {
     expect(errorsOf({ ...validEntry(), tag: "" })).toContain("sample-item: 구분이 없어요");
+    expect(errorsOf({ ...validEntry(), tag: " " })).toContain("sample-item: 구분이 없어요");
+    expect(errorsOf({ ...validEntry(), tag: null })).toContain("sample-item: 구분이 없어요");
     expect(errorsOf({ ...validEntry(), condition: { text: " " } })).toContain("sample-item: 적용 조건이 없어요");
     expect(errorsOf({ ...validEntry(), source: { name: "", url: "https://www.gov.kr" } })).toContain(
       "sample-item: 출처가 없어요",

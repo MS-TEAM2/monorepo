@@ -59,7 +59,8 @@ function checkEntry(raw: unknown, label: string, today: string): string[] {
   if (!isNonEmptyString(raw.title)) fail("제목이 없어요");
   if (!isNonEmptyString(raw.description)) fail("설명이 없어요");
 
-  if (raw.tag === undefined || raw.tag === "") fail("구분이 없어요");
+  if (raw.tag === undefined || raw.tag === null || (typeof raw.tag === "string" && raw.tag.trim() === ""))
+    fail("구분이 없어요");
   else if (!includes(CHECKLIST_TAGS, raw.tag)) fail(`구분은 ${CHECKLIST_TAGS.join("·")} 중 하나여야 해요`);
 
   if (!Array.isArray(raw.reportTypes) || raw.reportTypes.length === 0) fail("적용 신고 종류가 없어요");
