@@ -248,7 +248,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/diagnoses/{diagnosis_id}/contracts": {
+    "/api/v1/contracts": {
         parameters: {
             query?: never;
             header?: never;
@@ -259,9 +259,9 @@ export interface paths {
         put?: never;
         /**
          * 계약서 업로드 (A15)
-         * @description 파일 확장자가 아니라 실제 형식을 검사하고 이미지 1장은 1쪽으로 센다. 크기 초과는 413 `file_too_large`, 형식 오류는 415 `unsupported_file`이다. 10쪽 초과는 422 `too_many_pages`, 암호 PDF는 422 `encrypted_file`, 동의가 없거나 허용하지 않는 동의 버전은 422 `consent_required`다. 처리 중인 계약이 있으면 409 `contract_processing`이다.
+         * @description 파일 확장자가 아니라 실제 형식을 검사하고 이미지 1장은 1쪽으로 센다. 크기 초과는 413 `file_too_large`, 형식 오류는 415 `unsupported_file`이다. 10쪽 초과는 422 `too_many_pages`, 암호 PDF는 422 `encrypted_file`, 동의가 없거나 허용하지 않는 동의 버전은 422 `consent_required`다. `diagnosis_id`를 보내면 만든 계약을 그 진단에 연결한다. 다른 사용자의 진단, 만료·삭제 요청한 진단이면 404다. 사용자당 처리 중인 계약은 1개이며, 이미 있으면 409 `contract_processing`이다. 실패·확인한 계약이 있어도 새로 올릴 수 있다.
          */
-        post: operations["create_contract_api_v1_diagnoses__diagnosis_id__contracts_post"];
+        post: operations["create_contract_api_v1_contracts_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -396,10 +396,10 @@ export interface components {
             id: string;
             /**
              * Diagnosis Id
-             * Format: uuid
+             * @description 연결 전이거나 진단 만료·삭제로 연결이 풀리면 null
              * @example 00000000-0000-4000-8000-000000000001
              */
-            diagnosis_id: string;
+            diagnosis_id: string | null;
             /**
              * Status
              * @enum {string}
@@ -425,6 +425,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             * @description 계약 생성 후 30일. 진단 만료와 따로 계산한다
+             */
+            expires_at: string;
             /**
              * Notice
              * @example 법률 자문이 아닌 검토 보조입니다
@@ -1928,13 +1934,11 @@ export interface operations {
             };
         };
     };
-    create_contract_api_v1_diagnoses__diagnosis_id__contracts_post: {
+    create_contract_api_v1_contracts_post: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                diagnosis_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -1946,6 +1950,11 @@ export interface operations {
                     consent_version: string;
                     /** @description true여야 한다 */
                     consented: boolean;
+                    /**
+                     * Format: uuid
+                     * @description 선택. 진단 결과에서 올리면 그 진단 ID. 없으면 진단 연결 없이 만든다
+                     */
+                    diagnosis_id?: string;
                 };
             };
         };

@@ -16,7 +16,7 @@
 
 ## API 변경
 
-추가: `POST /diagnoses/{id}/contracts`(A15), `GET /contracts/{id}`(A16), `PATCH /contracts/{id}/terms`(A17)
+추가: `POST /contracts`(A15), `GET /contracts/{id}`(A16), `PATCH /contracts/{id}/terms`(A17)
 
 기본 경로는 `/api/v1`이다. 백엔드 스키마에서 `docs/api/openapi.yaml`과 프론트 생성 타입을 갱신해 같은 PR에 넣는다.
 

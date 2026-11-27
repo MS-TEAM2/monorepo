@@ -6,10 +6,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 ID = "00000000-0000-4000-8000-000000000004"
-UPLOAD_PATH = "/api/v1/diagnoses/{diagnosis_id}/contracts"
+UPLOAD_PATH = "/api/v1/contracts"
 DETAIL_PATH = "/api/v1/contracts/{contract_id}"
 TERMS_PATH = "/api/v1/contracts/{contract_id}/terms"
-UPLOAD = UPLOAD_PATH.format(diagnosis_id=ID)
+UPLOAD = UPLOAD_PATH
 DETAIL = DETAIL_PATH.format(contract_id=ID)
 TERMS = TERMS_PATH.format(contract_id=ID)
 AUTH = {"Authorization": "Bearer any"}
@@ -84,6 +84,7 @@ DETAIL_EXAMPLE = {
     "application": None,
     "error_code": None,
     "created_at": "2026-11-25T00:00:00Z",
+    "expires_at": "2026-12-25T00:00:00Z",
     "notice": "법률 자문이 아닌 검토 보조입니다",
 }
 
@@ -218,6 +219,21 @@ def test_description_lists_error_codes(path, method, codes):
     assert [code for code in codes if f"`{code}`" not in description] == []
 
 
+def test_upload_does_not_require_a_diagnosis():
+    paths = app.openapi()["paths"]
+
+    assert "/api/v1/diagnoses/{diagnosis_id}/contracts" not in paths
+    assert "parameters" not in operation(UPLOAD_PATH, "post")
+
+
+def test_upload_description_states_processing_limit_and_diagnosis_404():
+    description = operation(UPLOAD_PATH, "post")["description"]
+
+    assert "사용자당 처리 중인 계약은 1개" in description
+    assert "`diagnosis_id`" in description
+    assert "404" in description
+
+
 def test_upload_is_documented_as_multipart():
     request_body = operation(UPLOAD_PATH, "post")["requestBody"]
     schema = request_body["content"]["multipart/form-data"]["schema"]
@@ -225,7 +241,9 @@ def test_upload_is_documented_as_multipart():
     assert request_body["required"] is True
     assert set(request_body["content"]) == {"multipart/form-data"}
     assert set(schema["required"]) == {"files", "consent_version", "consented"}
-    assert set(schema["properties"]) == set(schema["required"])
+    assert set(schema["properties"]) == {*schema["required"], "diagnosis_id"}
+    diagnosis_id = schema["properties"]["diagnosis_id"]
+    assert (diagnosis_id["type"], diagnosis_id["format"]) == ("string", "uuid")
     files = schema["properties"]["files"]
     assert (files["type"], files["minItems"]) == ("array", 1)
     assert files["items"] == {"type": "string", "format": "binary"}
@@ -250,9 +268,10 @@ def test_upload_is_documented_as_multipart():
                 "application",
                 "error_code",
                 "created_at",
+                "expires_at",
                 "notice",
             },
-            {"step", "application", "error_code"},
+            {"diagnosis_id", "step", "application", "error_code"},
         ),
         (
             "ContractTerm",
@@ -398,9 +417,10 @@ def test_response_keeps_term_value_type(value):
     assert type(dumped["confirmed_value"]) is type(value)
 
 
+@pytest.mark.parametrize("diagnosis_id", [DETAIL_EXAMPLE["diagnosis_id"], None])
 @pytest.mark.parametrize("application", [None, APPLICATION_EXAMPLE])
-def test_spec_example_fits_detail_response(application):
-    example = {**DETAIL_EXAMPLE, "application": application}
+def test_spec_example_fits_detail_response(application, diagnosis_id):
+    example = {**DETAIL_EXAMPLE, "application": application, "diagnosis_id": diagnosis_id}
 
     model = contract_model("ContractDetailResponse").model_validate(example)
 
@@ -437,11 +457,12 @@ def assert_invalid(response):
     assert response.json()["code"] == "validation_error"
 
 
-def test_upload_is_not_implemented_yet(client):
+@pytest.mark.parametrize("extra", [{}, {"diagnosis_id": ID}])
+def test_upload_is_not_implemented_yet(client, extra):
     response = client.post(
         UPLOAD,
         files=[("files", ("contract.pdf", b"%PDF-1.7", "application/pdf"))],
-        data={"consent_version": "example", "consented": "true"},
+        data={"consent_version": "example", "consented": "true", **extra},
         headers=AUTH,
     )
 
@@ -492,7 +513,6 @@ def test_invalid_update_is_rejected(client, payload):
 @pytest.mark.parametrize(
     ("method", "url"),
     [
-        ("POST", UPLOAD_PATH.format(diagnosis_id="not-a-uuid")),
         ("GET", DETAIL_PATH.format(contract_id="not-a-uuid")),
         ("PATCH", TERMS_PATH.format(contract_id="not-a-uuid")),
     ],

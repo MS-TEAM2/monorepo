@@ -137,7 +137,10 @@ class ContractDetailResponse(BaseModel):
     """처리 중과 실패에는 terms, findings가 빈 배열이다. 처리가 끝나면 terms는 9개다."""
 
     id: UUID = Field(examples=["00000000-0000-4000-8000-000000000004"])
-    diagnosis_id: UUID = Field(examples=["00000000-0000-4000-8000-000000000001"])
+    diagnosis_id: UUID | None = Field(
+        description="연결 전이거나 진단 만료·삭제로 연결이 풀리면 null",
+        examples=["00000000-0000-4000-8000-000000000001"],
+    )
     status: ContractStatus
     step: ContractStep | None = Field(description="processing일 때만 값이 있다")
     original_deleted: bool
@@ -146,6 +149,7 @@ class ContractDetailResponse(BaseModel):
     application: ContractApplication | None = Field(description="가장 최근 계약 반영 결과")
     error_code: ContractErrorCode | None
     created_at: datetime
+    expires_at: datetime = Field(description="계약 생성 후 30일. 진단 만료와 따로 계산한다")
     notice: str = Field(examples=["법률 자문이 아닌 검토 보조입니다"])
 
 
