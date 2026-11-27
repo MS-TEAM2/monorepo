@@ -218,7 +218,12 @@ export function calculateSampleApplication(
     term_changes: [],
     assumptions: resolved.assumptions,
     simulation_id: "00000000-0000-4000-8000-000000000153",
-    exit: { ...resolved.request.exit, restoration_cost: resolved.restorationKrw, penalty_amount: resolved.penaltyKrw },
+    exit: {
+      ...resolved.request.exit,
+      restoration_cost: resolved.restorationKrw,
+      penalty_amount: resolved.penaltyKrw,
+      penalty_covers_remaining_rent: resolved.request.exit.penalty_covers_remaining_rent ?? null,
+    },
     created_at: "2026-11-27T00:00:00Z",
   };
 }
