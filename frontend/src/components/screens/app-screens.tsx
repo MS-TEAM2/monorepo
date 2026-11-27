@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ContractView } from "@/components/screens/contract-view";
 import { DiagnosisInputView } from "@/components/screens/diagnosis-input-view";
@@ -13,6 +13,7 @@ import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
+import { calcLoss } from "@/lib/mock/startup/calc";
 import { loginRequiredHref } from "@/lib/return-to";
 import { useSessionStatus } from "@/lib/use-session";
 
@@ -117,11 +118,14 @@ export function DiagnosisInputScreen() {
 export function DiagnosisReportScreen() {
   const go = useGoScreen();
   const s = useStartup();
-  const { report, runDiagnosis } = s;
+  const { report, runDiagnosis, buildCostParams, sliderRentMan } = s;
 
   useEffect(() => {
     if (!report) runDiagnosis();
   }, [report, runDiagnosis]);
+
+  // 중도 종료 조건은 결과 화면에서 바꾸므로 손실만 지금 입력값으로 다시 계산한다. 생존확률은 그대로다.
+  const loss = useMemo(() => calcLoss(buildCostParams(sliderRentMan)), [buildCostParams, sliderRentMan]);
 
   return (
     <PageShell>
@@ -130,7 +134,10 @@ export function DiagnosisReportScreen() {
           neighborhood={s.neighborhood}
           category={s.category}
           radiusM={s.radiusM}
-          report={report}
+          report={{ ...report, loss }}
+          areaProvided={Number(s.formState.areaM2) > 0}
+          formState={s.formState}
+          onChangeForm={s.setFormState}
           sliderRentMan={s.sliderRentMan}
           initialRentMan={s.initialRentMan}
           onSliderRentChange={s.changeSliderRent}
