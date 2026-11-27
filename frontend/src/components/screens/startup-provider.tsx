@@ -50,8 +50,6 @@ export type StartupState = {
   /** 비어 있는 월 비용 칸만 예시값으로 채운다 */
   fillExample: () => void;
   /** 계약서에서 읽은 보증금·월세·관리비·부가세로 진단 입력을 채운다. 채운 칸 수를 돌려준다 */
-  fillFromContract: (fields: ContractField[], fileName: string) => number;
-  contractFileName: string;
   hasValidCosts: boolean;
   buildCostParams: (rentMan?: number | null) => CostParams;
   report: Report | null;
@@ -91,13 +89,6 @@ const BLANK_FORM: FormState = {
 /** 모를 때 예시값으로 채울 수 있는 칸. 기획서 S04: 인건비·기타 고정비·변동비율 */
 const EXAMPLE_KEYS = ["laborMan", "otherFixedMan", "variableCostRate"] as const;
 
-/** 계약서 조건 키 → 진단 입력 칸 */
-const CONTRACT_TO_FORM: Partial<Record<string, "depositMan" | "rentMan" | "maintenanceMan">> = {
-  deposit: "depositMan",
-  rent: "rentMan",
-  mgmt: "maintenanceMan",
-};
-
 /**
  * 화면 시안(SCRUM-191)이 함께 쓰는 상태. 고른 동네·업종·반경, 진단 입력, 계약서 단계를 화면 사이에 유지한다.
  * 실제 API가 연결되면 각 화면이 API 결과를 쓰도록 바꾼다.
@@ -109,7 +100,6 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   const [pinCenter, setPinCenter] = useState<Point>(INITIAL_PIN);
   const [formState, setFormState] = useState<FormState>(BLANK_FORM);
   const [fieldSources, setFieldSources] = useState<FieldSources>({});
-  const [contractFileName, setContractFileName] = useState("");
   const [usedExample, setUsedExample] = useState(false);
   const [exampleConfirmed, setExampleConfirmed] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
@@ -224,30 +214,6 @@ export function StartupProvider({ children }: { children: ReactNode }) {
         setUsedExample(true);
         setExampleConfirmed(false);
       },
-      fillFromContract: (fields, fileName) => {
-        const filled: FieldSources = {};
-        const next = { ...formState };
-        for (const field of fields) {
-          const value = String(field.input ?? "").trim();
-          if (value === "") continue;
-          if (field.key === "vat") {
-            next.rentVatSeparate = value.includes("별도");
-            filled.rentVatSeparate = "contract";
-            continue;
-          }
-          const key = CONTRACT_TO_FORM[field.key];
-          if (!key) continue;
-          next[key] = value;
-          filled[key] = "contract";
-        }
-        setFormState(next);
-        setFieldSources((previous) => ({ ...previous, ...filled }));
-        setContractFields(fields);
-        setContractStage("review");
-        setContractFileName(fileName);
-        return Object.keys(filled).length;
-      },
-      contractFileName,
       hasValidCosts,
       buildCostParams,
       report,
@@ -285,7 +251,6 @@ export function StartupProvider({ children }: { children: ReactNode }) {
         setUsedExample(false);
         setExampleConfirmed(false);
         setFieldSources({});
-        setContractFileName("");
       },
     }),
     [
@@ -300,7 +265,6 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       fieldSources,
       usedExample,
       exampleConfirmed,
-      contractFileName,
       hasValidCosts,
       buildCostParams,
       report,

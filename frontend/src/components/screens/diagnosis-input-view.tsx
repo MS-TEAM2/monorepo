@@ -1,12 +1,10 @@
 "use client";
 
-import { Camera, CircleCheck, MapPin, TriangleAlert } from "lucide-react";
+import { MapPin, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AnalyzingScene, Awning } from "@/components/screens/brand";
-import { ContractUpload } from "@/components/screens/contract-upload";
 import {
-  BottomSheet,
   Chip,
   FlowSteps,
   NumberField,
@@ -20,12 +18,12 @@ import {
 import type { FieldSources } from "@/components/screens/startup-provider";
 import { formatCount } from "@/lib/mock/startup/calc";
 import { CATEGORIES } from "@/lib/mock/startup/data";
-import type { Category, ContractField, FormState, Neighborhood, RadiusM, RadiusStats } from "@/lib/mock/startup/types";
+import type { Category, FormState, Neighborhood, RadiusM, RadiusStats } from "@/lib/mock/startup/types";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
   { title: "자리와 면적", description: "지도에서 고른 자리가 맞는지 보고 매장 면적을 넣어요." },
-  { title: "매달 나가는 돈", description: "계약서가 있으면 찍어서 채울 수 있어요." },
+  { title: "매달 나가는 돈", description: "월세는 꼭 넣고, 나머지는 모르면 예시값을 써도 돼요." },
   { title: "처음 들어가는 돈", description: "없으면 비워 두고 넘어가도 돼요." },
 ] as const;
 
@@ -52,15 +50,13 @@ type DiagnosisInputViewProps = {
   usedExample: boolean;
   exampleConfirmed: boolean;
   onToggleExampleConfirm: (confirmed: boolean) => void;
-  onFillFromContract: (fields: ContractField[], fileName: string) => number;
-  contractFileName: string;
   onBackToMap: () => void;
   onRunDiagnosis: () => void;
 };
 
 /**
  * S04 진단 입력. 기획서대로 탐색 정보 → 월 비용 → 초기 비용 3단계를 한 화면에 하나씩 보여 준다.
- * 월 비용 단계에서는 계약서를 찍어 보증금·월세·관리비·부가세를 채울 수 있다(기획서에 없는 제안 기능, 예시 데이터).
+ * 계약서는 보통 진단 뒤에 받으므로 여기서는 직접 입력과 예시값만 쓴다. 계약서 조건은 계약서 확인 단계에서 진단에 반영한다.
  */
 export function DiagnosisInputView({
   neighborhood,
@@ -76,15 +72,11 @@ export function DiagnosisInputView({
   usedExample,
   exampleConfirmed,
   onToggleExampleConfirm,
-  onFillFromContract,
-  contractFileName,
   onBackToMap,
   onRunDiagnosis,
 }: DiagnosisInputViewProps) {
   const [step, setStep] = useState(0);
   const [triedNext, setTriedNext] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
-  const [scanResult, setScanResult] = useState<{ filled: number; missing: string[] } | null>(null);
   const [analyzeStep, setAnalyzeStep] = useState(-1);
 
   // 진단 실행: 분석 로딩을 보여 준 뒤 결과로 간다. 실제 API(A09)가 붙으면 응답을 기다리는 동안 보여 준다
@@ -233,42 +225,6 @@ export function DiagnosisInputView({
 
       {step === 1 && (
         <div className="space-y-4">
-          {contractFileName ? (
-            <div className="flex items-start gap-3 rounded-3xl bg-success-soft p-5">
-              <CircleCheck className="mt-0.5 size-5 shrink-0 text-success" />
-              <div className="min-w-0 flex-1 text-[15px]">
-                <p className="font-bold text-success-700">계약서에서 읽은 값을 채웠어요</p>
-                <p className="mt-0.5 text-[14px] text-success-700">
-                  <span className="rounded bg-card px-1 font-bold">계약서</span> 표시가 붙은 칸이에요. 틀리면 바로
-                  고치면 돼요.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setScanOpen(true)}
-                className="-my-2 min-h-11 shrink-0 text-[14px] font-semibold text-success-700"
-              >
-                다시 찍기
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setScanOpen(true)}
-              className="flex w-full items-center gap-4 rounded-3xl bg-foreground p-5 text-left text-background transition-transform active:scale-[0.98]"
-            >
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                <Camera className="size-6" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[17px] font-bold">계약서로 채우기</span>
-                <span className="mt-0.5 block text-[14px] text-ink-300">
-                  가계약서나 계약서 초안을 찍으면 보증금, 월세, 관리비를 넣어 드려요
-                </span>
-              </span>
-            </button>
-          )}
-
           <Panel className="space-y-5">
             <div className="grid gap-5 sm:grid-cols-2">
               <NumberField
@@ -453,60 +409,6 @@ export function DiagnosisInputView({
         </button>
       </StickyActions>
 
-      <BottomSheet
-        open={scanOpen}
-        onClose={() => {
-          setScanOpen(false);
-          setScanResult(null);
-        }}
-        title={scanResult ? "계약서를 읽었어요" : "계약서로 채우기"}
-        footer={
-          scanResult ? (
-            <button
-              type="button"
-              onClick={() => {
-                setScanOpen(false);
-                setScanResult(null);
-              }}
-              className={buttonClass("primary", "w-full")}
-            >
-              확인하고 이어서 입력
-            </button>
-          ) : undefined
-        }
-      >
-        {scanResult ? (
-          <div className="space-y-3 text-[15px]">
-            <p className="text-foreground">
-              <strong>{scanResult.filled}개 칸</strong>을 채웠어요. 입력칸에서 값이 맞는지 한 번 봐 주세요.
-            </p>
-            {scanResult.missing.length > 0 && (
-              <p className="rounded-xl bg-warning-soft px-4 py-3 text-[14px] text-warning-700">
-                글자가 흐려서 비워 둔 칸: <strong>{scanResult.missing.join(", ")}</strong>. 직접 넣어 주세요.
-              </p>
-            )}
-            <p className="text-[13px] text-ink-400">
-              읽은 계약서는 계약서 확인 단계에서 다시 올리지 않고 그대로 이어서 볼 수 있어요.
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="mb-4 text-[15px] text-ink-600">
-              보증금·월세·관리비·부가세를 읽어서 넣어 드려요. 나머지 조건은 계약서 확인 단계에서 살펴봐요.
-            </p>
-            <ContractUpload
-              onComplete={(fields, fileName) => {
-                const filled = onFillFromContract(fields, fileName);
-                const missing = fields
-                  .filter((field) => ["deposit", "rent", "mgmt", "vat"].includes(field.key))
-                  .filter((field) => String(field.input ?? "").trim() === "")
-                  .map((field) => field.label);
-                setScanResult({ filled, missing });
-              }}
-            />
-          </>
-        )}
-      </BottomSheet>
       {analyzeStep >= 0 && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-background" role="status">
           <Awning className="h-6" />

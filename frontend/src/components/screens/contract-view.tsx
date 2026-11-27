@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, FileText, Share2, TriangleAlert } from "lucide-react";
+import { ChevronRight, Share2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -49,7 +49,6 @@ type ContractViewProps = {
   onChangeForm: (update: (previous: FormState) => FormState) => void;
   buildCostParams: (rentMan?: number | null) => CostParams;
   hasReport: boolean;
-  contractFileName: string;
   contractStage: ContractStage;
   setContractStage: (stage: ContractStage) => void;
   contractFields: ContractField[];
@@ -89,7 +88,6 @@ export function ContractView({
   onChangeForm,
   buildCostParams,
   hasReport,
-  contractFileName,
   contractStage,
   setContractStage,
   contractFields,
@@ -244,20 +242,6 @@ export function ContractView({
 
       {contractStage === "review" && (
         <div className="space-y-4">
-          {contractFileName && (
-            <div className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 text-[14px]">
-              <FileText className="size-5 shrink-0 text-ink-400" />
-              <span className="min-w-0 flex-1 truncate text-ink-600">진단할 때 읽은 계약서 · {contractFileName}</span>
-              <button
-                type="button"
-                onClick={() => setContractStage("upload")}
-                className="min-h-11 shrink-0 font-semibold text-primary"
-              >
-                다른 계약서
-              </button>
-            </div>
-          )}
-
           <div>
             <h2 className="text-[22px] font-extrabold tracking-tight text-foreground">읽은 조건이 맞나요?</h2>
             <p className="mt-1 text-[15px] text-ink-600">

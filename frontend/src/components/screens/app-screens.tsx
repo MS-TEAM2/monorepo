@@ -77,8 +77,6 @@ export function DiagnosisInputScreen() {
         usedExample={s.usedExample}
         exampleConfirmed={s.exampleConfirmed}
         onToggleExampleConfirm={s.setExampleConfirmed}
-        onFillFromContract={s.fillFromContract}
-        contractFileName={s.contractFileName}
         onBackToMap={() => go("map")}
         onRunDiagnosis={() => {
           s.runDiagnosis();
@@ -146,7 +144,6 @@ export function ContractScreen() {
         onChangeForm={s.setFormState}
         buildCostParams={s.buildCostParams}
         hasReport={!!s.report}
-        contractFileName={s.contractFileName}
         contractStage={s.contractStage}
         setContractStage={s.setContractStage}
         contractFields={s.contractFields}
