@@ -10,7 +10,7 @@
  */
 
 /** 앱과 웹이 서로 다른 버전일 때(앱은 스토어 심사로 늦게 배포된다) 기능 지원 여부를 판단하는 번호. */
-export const BRIDGE_VERSION = 1;
+export const BRIDGE_VERSION = 2;
 
 /** 앱이 웹뷰 User-Agent 끝에 붙이는 이름. 예: "... AXApp/0.1.0" */
 export const APP_USER_AGENT_NAME = "AXApp";
@@ -41,6 +41,11 @@ export type BridgeRequests = {
     payload: { url: string };
     result: { opened: boolean };
   };
+  /** 시스템 인증 브라우저를 열고 지정한 앱 콜백 주소에서 결과를 돌려준다. */
+  openAuthSession: {
+    payload: { url: string; returnUrl: string; timeoutMs: number };
+    result: { type: "success"; url: string } | { type: "cancel" | "dismiss" | "timeout" };
+  };
 };
 
 export type BridgeRequestType = keyof BridgeRequests;
@@ -51,7 +56,7 @@ export type WebToAppMessage = {
 
 export type AppToWebMessage = { id: string; ok: true; result: unknown } | { id: string; ok: false; error: string };
 
-const REQUEST_TYPES: readonly BridgeRequestType[] = ["share", "openExternal"];
+const REQUEST_TYPES: readonly BridgeRequestType[] = ["share", "openExternal", "openAuthSession"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -68,6 +73,15 @@ function isValidPayload(type: BridgeRequestType, payload: unknown): boolean {
       return typeof payload.message === "string" && isOptionalString(payload.url) && isOptionalString(payload.title);
     case "openExternal":
       return typeof payload.url === "string";
+    case "openAuthSession":
+      return (
+        typeof payload.url === "string" &&
+        typeof payload.returnUrl === "string" &&
+        typeof payload.timeoutMs === "number" &&
+        Number.isSafeInteger(payload.timeoutMs) &&
+        payload.timeoutMs > 0 &&
+        payload.timeoutMs <= 5 * 60_000
+      );
   }
 }
 

@@ -32,11 +32,12 @@ description: '스펙의 tasks.md 또는 대화 내용을 팀 양식의 Jira 이�
 - [ ] 검증 가능한 조건 (테스트, 화면 동작, 지표 등)
 
 ## 참고
-관련 API(docs/api/openapi.yaml 경로), Notion 링크, 선행 티켓
+관련 API(A번호, docs/api/openapi.yaml 경로), 관련 테이블, Notion 링크(docs/notion.md의 주소), 선행 티켓
 ```
 
 ## 규칙
 
 - 이슈 하나는 한 사람, 한 브랜치, 한 영역 크기로 만든다. 크면 나눈다.
+- API나 테이블을 바꾸는 이슈는 Notion 문서를 읽고 A번호·테이블과 링크를 적는다. 읽을 수 없으면 `docs/notion.md`의 안내를 보여 주고 멈춘다.
 - 완료 조건이 없는 이슈는 만들지 않는다. 모르면 묻는다.
 - Jira 호출은 필요한 만큼만 한다(무료 플랜 한도는 사이트당 시간당 500회).
