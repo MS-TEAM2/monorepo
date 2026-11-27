@@ -823,7 +823,7 @@ function TextField({
   return (
     <div>
       <div className="mb-1.5 flex min-h-8 flex-wrap items-center gap-1.5">
-        <label htmlFor={id} className="text-sm font-bold text-ink-700">
+        <label htmlFor={id} className="text-base font-bold text-ink-700">
           {label}
         </label>
         {badge}
