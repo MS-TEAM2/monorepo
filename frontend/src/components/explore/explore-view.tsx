@@ -18,18 +18,28 @@ import { isMockMode } from "@/lib/api/mock";
 import { resolveRegion } from "@/lib/api/regions";
 import { listStores, type StoreItem, type StoreList } from "@/lib/api/stores";
 import { categoryLabel } from "@/lib/categories";
-import { DEFAULT_CENTER, DEFAULT_RADIUS, queryCategories, type ExploreCenter, type RadiusM } from "@/lib/explore";
+import {
+  DEFAULT_CENTER,
+  DEFAULT_RADIUS,
+  queryCategories,
+  type ExploreCenter,
+  type ExploreSelection,
+  type RadiusM,
+} from "@/lib/explore";
 import { resultNotice } from "@/lib/explore-states";
 import { naverMapClientId } from "@/lib/naver-map";
 import type { CategoryId } from "@/lib/routes";
 
 type Notice = { kind: "location_denied" } | { kind: "out_of_service" } | { kind: "error"; error: ApiErrorKind } | null;
 
-/** S02 상권 탐색: 위치(주소·현재 위치·길게 누르기), 업종 9종 복수 선택, 반경 4종 */
-export function ExploreView() {
-  const [center, setCenter] = useState<ExploreCenter>(DEFAULT_CENTER);
-  const [categories, setCategories] = useState<CategoryId[]>([]);
-  const [radius, setRadius] = useState<RadiusM>(DEFAULT_RADIUS);
+/**
+ * S02 상권 탐색: 위치(주소·현재 위치·길게 누르기), 업종 9종 복수 선택, 반경 4종.
+ * initial 은 로그인하고 돌아왔을 때 되살릴 선택값이다(specs/social-login R4).
+ */
+export function ExploreView({ initial = null }: { initial?: ExploreSelection | null }) {
+  const [center, setCenter] = useState<ExploreCenter>(initial?.center ?? DEFAULT_CENTER);
+  const [categories, setCategories] = useState<CategoryId[]>(initial?.categories ?? []);
+  const [radius, setRadius] = useState<RadiusM>(initial?.radius ?? DEFAULT_RADIUS);
   const [notice, setNotice] = useState<Notice>(null);
   const [locating, setLocating] = useState(false);
   const [stores, setStores] = useState<StoreList | null>(null);
@@ -292,7 +302,12 @@ export function ExploreView() {
         id="area-summary-section"
         className="order-3 scroll-mt-20 px-4 pt-6 pb-4 md:order-none md:col-start-2 md:row-start-2 md:px-0 md:pb-0"
       >
-        <AreaSummaryPanel center={center} radius={radius} selectedCategories={categories} />
+        <AreaSummaryPanel
+          center={center}
+          radius={radius}
+          selectedCategories={categories}
+          initialCategory={initial?.summaryCategory ?? null}
+        />
       </div>
     </main>
   );

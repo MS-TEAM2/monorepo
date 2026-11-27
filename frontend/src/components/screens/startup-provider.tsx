@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { buildDongSummary, buildSurvival, calcLoss, calcProfit, generateStores } from "@/lib/mock/startup/calc";
 import { CATEGORIES, EXAMPLE_FORM, INITIAL_FORM, INITIAL_PIN, MAP_SCALE, NEIGHBORHOODS } from "@/lib/mock/startup/data";
+import { parseSelection, readSelectionRaw, saveSelection } from "@/lib/startup-selection";
 import type {
   AppliedContract,
   Category,
@@ -63,16 +64,60 @@ const StartupContext = createContext<StartupState | null>(null);
 const FIRST_NEIGHBORHOOD = NEIGHBORHOODS[0] as Neighborhood;
 const FIRST_CATEGORY = CATEGORIES[0] as Category;
 
+type Selection = { neighborhood: Neighborhood; category: Category; radiusM: RadiusM; pinCenter: Point };
+
+const DEFAULT_SELECTION: Selection = {
+  neighborhood: FIRST_NEIGHBORHOOD,
+  category: FIRST_CATEGORY,
+  radiusM: 500,
+  pinCenter: INITIAL_PIN,
+};
+
+const noSubscribe = () => () => {};
+
+/** 저장값을 예시 데이터의 동네·업종으로 되살린다. 없는 동네·업종이면 null */
+function restoreSelection(raw: string | null): Selection | null {
+  const parsed = parseSelection(raw);
+  if (!parsed) return null;
+  const neighborhood = NEIGHBORHOODS.find((n) => n.dongCode === parsed.dongCode);
+  const category = CATEGORIES.find((c) => c.id === parsed.categoryId);
+  if (!neighborhood || !category) return null;
+  return { neighborhood, category, radiusM: parsed.radiusM, pinCenter: parsed.pin };
+}
+
 /**
  * 화면 시안(SCRUM-191)이 함께 쓰는 상태. 고른 동네·업종·반경, 진단 입력, 계약서 단계를 화면 사이에 유지한다.
  * 실제 API가 연결되면 각 화면이 API 결과를 쓰도록 바꾼다.
  */
 export function StartupProvider({ children }: { children: ReactNode }) {
   const [entryModalOpen, setEntryModalOpen] = useState(false);
-  const [neighborhood, setNeighborhood] = useState<Neighborhood>(FIRST_NEIGHBORHOOD);
-  const [category, setCategory] = useState<Category>(FIRST_CATEGORY);
-  const [radiusM, setRadiusM] = useState<RadiusM>(500);
-  const [pinCenter, setPinCenter] = useState<Point>(INITIAL_PIN);
+  // 선택값(동네·업종·반경·핀)은 이 탭의 sessionStorage 에도 둔다. 로그인하러 사이트를 떠났다 와도 되살린다
+  // (Notion 기획서 2장). 정적 HTML 은 기본값으로 그리고 브라우저에서 저장값으로 맞춘다
+  const savedRaw = useSyncExternalStore(
+    noSubscribe,
+    () => readSelectionRaw(),
+    () => null,
+  );
+  const saved = useMemo(() => restoreSelection(savedRaw), [savedRaw]);
+  const [chosen, setChosen] = useState<Selection | null>(null);
+  const selection = chosen ?? saved ?? DEFAULT_SELECTION;
+  const { neighborhood, category, radiusM, pinCenter } = selection;
+  const choose = useCallback(
+    (patch: Partial<Selection>) => {
+      const next = { ...selection, ...patch };
+      setChosen(next);
+      saveSelection({
+        dongCode: next.neighborhood.dongCode,
+        categoryId: next.category.id,
+        radiusM: next.radiusM,
+        pin: next.pinCenter,
+      });
+    },
+    [selection],
+  );
+  const setCategory = useCallback((next: Category) => choose({ category: next }), [choose]);
+  const setRadiusM = useCallback((next: RadiusM) => choose({ radiusM: next }), [choose]);
+  const setPinCenter = useCallback((next: Point) => choose({ pinCenter: next }), [choose]);
   const [formState, setFormState] = useState<FormState>(INITIAL_FORM);
   const [usedExample, setUsedExample] = useState(false);
   const [exampleConfirmed, setExampleConfirmed] = useState(false);
@@ -133,10 +178,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       entryModalOpen,
       setEntryModalOpen,
       neighborhood,
-      selectNeighborhood: (next) => {
-        setNeighborhood(next);
-        setPinCenter(INITIAL_PIN);
-      },
+      selectNeighborhood: (next) => choose({ neighborhood: next, pinCenter: INITIAL_PIN }),
       category,
       setCategory,
       radiusM,
@@ -196,6 +238,10 @@ export function StartupProvider({ children }: { children: ReactNode }) {
     }),
     [
       entryModalOpen,
+      choose,
+      setCategory,
+      setRadiusM,
+      setPinCenter,
       neighborhood,
       category,
       radiusM,

@@ -1,7 +1,8 @@
 "use client";
 
-import { Lock, Stethoscope } from "lucide-react";
+import { Lock, LogIn, Stethoscope } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ErrorNotice } from "@/components/feedback/error-notice";
@@ -21,7 +22,8 @@ import {
   TIME_SLOT_LABELS,
 } from "@/lib/area-summary";
 import { CATEGORY_LABELS } from "@/lib/categories";
-import { radiusLabel, type ExploreCenter, type RadiusM } from "@/lib/explore";
+import { exploreHref, radiusLabel, type ExploreCenter, type RadiusM } from "@/lib/explore";
+import { loginRequiredHref } from "@/lib/return-to";
 import { CATEGORY_IDS, diagnoseHref, type CategoryId } from "@/lib/routes";
 import { useSessionStatus } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
@@ -66,10 +68,13 @@ export function AreaSummaryCards({
   summary,
   category,
   center,
+  onLogin,
 }: {
   summary: AreaSummary;
   category: CategoryId;
   center: ExploreCenter;
+  /** 잠긴 행정동 지표를 보려고 로그인하러 간다 (specs/social-login R4) */
+  onLogin?: () => void;
 }) {
   const { radius_stats: radiusStats, dong_stats: dong, region } = summary;
   const categoryName = CATEGORY_LABELS[category];
@@ -100,10 +105,19 @@ export function AreaSummaryCards({
         </div>
 
         {dongLocked ? (
-          <p className="flex gap-2 text-sm text-muted-foreground">
-            <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            유동인구·추정매출·개업·폐업률은 로그인하면 볼 수 있어요.
-          </p>
+          <div className="flex flex-col gap-3">
+            <p className="flex gap-2 text-sm text-muted-foreground">
+              <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              유동인구·추정매출·개업·폐업률은 로그인하면 볼 수 있어요. 로그인하면 지금 고른 위치·반경·업종으로 다시 보여
+              드려요.
+            </p>
+            {onLogin && (
+              <Button type="button" className="min-h-11 self-start" onClick={onLogin}>
+                <LogIn aria-hidden="true" />
+                로그인하고 보기
+              </Button>
+            )}
+          </div>
         ) : !dong ? (
           <p className="text-sm text-muted-foreground">이 행정동의 상권 자료가 없어요.</p>
         ) : (
@@ -149,14 +163,18 @@ export function AreaSummaryPanel({
   center,
   radius,
   selectedCategories,
+  initialCategory = null,
 }: {
   center: ExploreCenter;
   radius: RadiusM;
   selectedCategories: readonly CategoryId[];
+  /** 로그인하고 돌아왔을 때 되살릴 요약 업종 */
+  initialCategory?: CategoryId | null;
 }) {
   const session = useSessionStatus();
+  const router = useRouter();
   const options = selectedCategories.length > 0 ? selectedCategories : CATEGORY_IDS;
-  const [picked, setPicked] = useState<CategoryId | null>(null);
+  const [picked, setPicked] = useState<CategoryId | null>(initialCategory);
   // A07 은 업종 1개만 받는다. 탐색에서 여러 개를 골랐으면 그중 하나를 고르게 한다 (기획서 14장 미결정 사항)
   const category = picked && options.includes(picked) ? picked : selectedCategories.length === 1 ? options[0]! : null;
 
@@ -226,7 +244,18 @@ export function AreaSummaryPanel({
           <ErrorNotice kind={error} context="상권 요약을 불러오지 못했어요." onRetry={() => setReload((n) => n + 1)} />
         ) : summary ? (
           <div className={cn("transition-opacity", loading && "opacity-60")} aria-busy={loading}>
-            <AreaSummaryCards summary={summary} category={category} center={center} />
+            <AreaSummaryCards
+              summary={summary}
+              category={category}
+              center={center}
+              onLogin={() =>
+                router.push(
+                  loginRequiredHref(
+                    exploreHref({ center, radius, categories: [...selectedCategories], summaryCategory: category }),
+                  ),
+                )
+              }
+            />
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">상권 요약을 불러오는 중이에요…</p>
