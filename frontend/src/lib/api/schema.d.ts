@@ -204,6 +204,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/areas/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상권 요약 (A07)
+         * @description 인증 선택. 로그인하지 않으면 `dong_stats`는 null, `locked`는 `["dong_stats"]`이고 `missing`에는 넣지 않는다. 로그인하면 `locked`는 빈 배열이다. 형식이 잘못된 토큰은 401, 중심이 서울 밖이면 400 `out_of_service_area`다. 개업·폐업 수가 5건 미만이면 정확한 값을 주지 않는다.
+         */
+        get: operations["get_area_summary_api_v1_areas_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnoses": {
         parameters: {
             query?: never;
@@ -332,6 +352,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AreaRegion */
+        AreaRegion: {
+            /**
+             * Dong Code
+             * @example 11110515
+             */
+            dong_code: string;
+            /**
+             * Dong Name
+             * @example 청운효자동
+             */
+            dong_name: string;
+            /**
+             * Gu Name
+             * @example 종로구
+             */
+            gu_name: string;
+        };
+        /**
+         * AreaSummaryResponse
+         * @description 반경 값과 행정동 값은 단위가 달라 한 점수로 섞지 않는다.
+         */
+        AreaSummaryResponse: {
+            region: components["schemas"]["AreaRegion"];
+            radius_stats: components["schemas"]["RadiusStats"];
+            /** @description 로그인 전이면 null(`locked`에 들어감). 행정동 자료가 전혀 없어도 null(`missing`에 들어감) */
+            dong_stats: components["schemas"]["DongStats"] | null;
+            /**
+             * Missing
+             * @description 값이 없어 null인 필드 이름. 로그인 전 잠긴 값은 넣지 않는다
+             * @example [
+             *       "avg_sales_per_store"
+             *     ]
+             */
+            missing: string[];
+            /**
+             * Locked
+             * @description 로그인해야 볼 수 있어 비운 값. 로그인하면 빈 배열
+             */
+            locked: "dong_stats"[];
+        };
         /** CategoryCount */
         CategoryCount: {
             /**
@@ -654,6 +715,30 @@ export interface components {
             facility_cost?: number;
         };
         /**
+         * CountValue
+         * @description 최근 1년 개업·폐업 수. 5건 미만이면 정확한 값을 주지 않는다.
+         */
+        CountValue: {
+            /**
+             * Status
+             * @description exact: 5건 이상 정확한 값, masked: 0–4건, unavailable: 최근 1년을 확인할 수 없어 숨김
+             * @enum {string}
+             */
+            status: "exact" | "masked" | "unavailable";
+            /**
+             * Count
+             * @description exact일 때만 값이 있다
+             * @example 6
+             */
+            count: number | null;
+            /**
+             * Display
+             * @description 화면 표시 문구. masked는 `5건 미만`, unavailable은 `자료 없음`
+             * @example 6
+             */
+            display: string;
+        };
+        /**
          * DataBasis
          * @description 쓰지 않았거나 없는 자료는 null이다.
          */
@@ -881,6 +966,96 @@ export interface components {
             next_cursor: string | null;
         };
         /**
+         * DongStats
+         * @description 로그인한 사용자에게만 준다. 값이 없으면 null이고 `missing`에 필드 이름이 들어간다.
+         */
+        DongStats: {
+            /**
+             * Source Regions
+             * @description merged면 여러 개
+             */
+            source_regions: components["schemas"]["SourceRegion"][];
+            /**
+             * Relation
+             * @description split이면 분동 전 통합 값임을 화면에 표시한다
+             * @enum {string}
+             */
+            relation: "same" | "split" | "merged";
+            /**
+             * Quarter
+             * @description 점포·추정매출·유동인구 수집이 모두 성공한 가장 최근 분기
+             * @example 20262
+             */
+            quarter: string;
+            /**
+             * Population Quarter
+             * @description 유동인구 기준 분기. 중단되면 마지막 정상 분기
+             * @example 20262
+             */
+            population_quarter: string | null;
+            /**
+             * Population Reference Only
+             * @description 유동인구가 중단돼 마지막 정상 분기를 참고로만 보여 줄 때 true
+             */
+            population_reference_only: boolean;
+            /**
+             * Floating Population
+             * @example 100000
+             */
+            floating_population: number | null;
+            /**
+             * Population By Time
+             * @description 키: 00_06, 06_11, 11_14, 14_17, 17_21, 21_24
+             * @example {
+             *       "11_14": 18000
+             *     }
+             */
+            population_by_time: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Population By Age
+             * @description 키: 10, 20, 30, 40, 50, 60_plus
+             * @example {
+             *       "30": 20000
+             *     }
+             */
+            population_by_age: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Population Per Store
+             * @description 두 분기(quarter, population_quarter)가 다르면 null
+             * @example 420
+             */
+            population_per_store: number | null;
+            /**
+             * Avg Sales Per Store
+             * @description 분모는 프랜차이즈를 포함한 similar_store_count. 매출 단위 확인 전에는 null
+             */
+            avg_sales_per_store: number | null;
+            /**
+             * Sales Unit Verified
+             * @description 추정매출 금액 단위를 확인했는지
+             */
+            sales_unit_verified: boolean;
+            /**
+             * Open Rate
+             * @example 0.04
+             */
+            open_rate: number | null;
+            /**
+             * Close Rate
+             * @example 0.03
+             */
+            close_rate: number | null;
+            /**
+             * Franchise Ratio
+             * @example 0.2
+             */
+            franchise_ratio: number | null;
+        };
+        /**
          * EarlyTerminationValue
          * @description `early_termination`의 값. 모르는 항목은 null이다.
          */
@@ -982,6 +1157,28 @@ export interface components {
          * @enum {integer}
          */
         Radius: 150 | 300 | 500 | 1000;
+        /** RadiusStats */
+        RadiusStats: {
+            /**
+             * Radius M
+             * @example 500
+             */
+            radius_m: number;
+            /**
+             * Same Category Count
+             * @description 반경 안 같은 업종 영업 매장 수
+             * @example 24
+             */
+            same_category_count: number;
+            opened_1y: components["schemas"]["CountValue"];
+            closed_1y: components["schemas"]["CountValue"];
+            /**
+             * Base Date
+             * @description 인허가 자료 기준일. 최근 1년은 이 날을 포함해 거슬러 센다. 성공한 수집이 없으면 null
+             * @example 2026-11-22
+             */
+            base_date: string | null;
+        };
         /**
          * RegionResolveResponse
          * @description 서울 밖이면 supported는 false이고 나머지는 null이다.
@@ -1086,6 +1283,20 @@ export interface components {
             estimated_loss: number | null;
             /** Assumptions */
             assumptions: string[];
+        };
+        /** SourceRegion */
+        SourceRegion: {
+            /**
+             * Code
+             * @description 상권 자료의 행정동 코드
+             * @example 11110515
+             */
+            code: string;
+            /**
+             * Name
+             * @example 청운효자동
+             */
+            name: string;
         };
         /** StoreItem */
         StoreItem: {
@@ -1795,6 +2006,80 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_area_summary_api_v1_areas_summary_get: {
+        parameters: {
+            query: {
+                /** @description 중심 위도 (WGS84) */
+                lat: number;
+                /** @description 중심 경도 (WGS84) */
+                lng: number;
+                /** @description 업종 ID 1개 */
+                category: string;
+                /** @description 반경(m) */
+                radius?: components["schemas"]["Radius"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AreaSummaryResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
