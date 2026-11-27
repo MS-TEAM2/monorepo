@@ -268,6 +268,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnoses/{diagnosis_id}/simulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 손익 다시 계산 (A13)
+         * @description `overrides`는 보낸 비용만 진단 입력에 덮어쓰고, `exit`가 있으면 예상 손실도 계산한다. 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다. 결과의 `source`는 user다. 다른 사용자의 진단이나 삭제 요청했거나 만료된 진단은 404다.
+         */
+        post: operations["create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contracts": {
         parameters: {
             query?: never;
@@ -659,6 +679,40 @@ export interface components {
              * @description true면 확인을 마치고, false면 확인 중으로 둔다
              */
             complete: boolean;
+        };
+        /**
+         * CostOverrides
+         * @description A13. 보낸 값만 진단 입력에 덮어쓴다. 값은 A09 `costs`와 같은 규칙이고 null은 받지 않는다.
+         *
+         *     빠진 값은 진단 입력을 쓴다. 예: `monthly_rent`만 보내면 부가세 포함 여부는 진단 입력과 같다.
+         */
+        CostOverrides: {
+            /** Deposit */
+            deposit?: number;
+            /**
+             * Monthly Rent
+             * @example 2200000
+             */
+            monthly_rent?: number;
+            /** Rent Vat Included */
+            rent_vat_included?: boolean;
+            /** Management Fee */
+            management_fee?: number;
+            /** Labor Cost */
+            labor_cost?: number;
+            /** Other Fixed Cost */
+            other_fixed_cost?: number;
+            /**
+             * Variable Cost Rate
+             * @description 0–0.95, 소수 넷째 자리까지
+             */
+            variable_cost_rate?: number;
+            /** Expected Monthly Sales */
+            expected_monthly_sales?: number;
+            /** Key Money */
+            key_money?: number;
+            /** Facility Cost */
+            facility_cost?: number;
         };
         /**
          * CountValue
@@ -1160,6 +1214,45 @@ export interface components {
              * @description 원
              */
             estimated_cost: number | null;
+        };
+        /**
+         * SimulationCreateRequest
+         * @description `overrides`와 `exit`는 각각 선택이며 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다.
+         */
+        SimulationCreateRequest: {
+            overrides?: components["schemas"]["CostOverrides"] | null;
+            /** @description 없으면 `estimated_loss`는 null */
+            exit?: components["schemas"]["SimulationExit"] | null;
+        };
+        /**
+         * SimulationExit
+         * @description A13 종료 조건. 값이 없으면 A18에서만 확인한 계약값을 쓰고, 그것도 없으면 0과 가정 표시.
+         */
+        SimulationExit: {
+            /**
+             * Month
+             * @description 종료 시점(개업 후 개월)
+             * @example 12
+             */
+            month: number;
+            /**
+             * Obligation Months
+             * @description 종료 후 남은 의무 개월 수
+             * @example 3
+             */
+            obligation_months: number;
+            /**
+             * Restoration Cost
+             * @example 5000000
+             */
+            restoration_cost?: number | null;
+            /** Penalty Amount */
+            penalty_amount?: number | null;
+            /**
+             * Penalty Covers Remaining Rent
+             * @description true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을 표시
+             */
+            penalty_covers_remaining_rent?: boolean | null;
         };
         /** SimulationResponse */
         SimulationResponse: {
@@ -2170,6 +2263,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagnosisDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnosis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationResponse"];
                 };
             };
             /** @description Unauthorized */

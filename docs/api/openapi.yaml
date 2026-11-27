@@ -840,6 +840,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           description: Service Unavailable
+  /api/v1/diagnoses/{diagnosis_id}/simulations:
+    post:
+      tags:
+      - diagnoses
+      summary: 손익 다시 계산 (A13)
+      description: '`overrides`는 보낸 비용만 진단 입력에 덮어쓰고, `exit`가 있으면 예상 손실도 계산한다. 둘 다
+        없으면 422다. 생존확률은 다시 계산하지 않는다. 결과의 `source`는 user다. 다른 사용자의 진단이나 삭제 요청했거나 만료된
+        진단은 404다.'
+      operationId: create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: diagnosis_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Diagnosis Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
   /api/v1/contracts:
     post:
       tags:
@@ -1660,6 +1722,66 @@ components:
       - terms
       - complete
       title: ContractTermsUpdateRequest
+    CostOverrides:
+      properties:
+        deposit:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Deposit
+        monthly_rent:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 1.0
+          title: Monthly Rent
+          examples:
+          - 2200000
+        rent_vat_included:
+          type: boolean
+          title: Rent Vat Included
+        management_fee:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Management Fee
+        labor_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Labor Cost
+        other_fixed_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Other Fixed Cost
+        variable_cost_rate:
+          type: number
+          maximum: 0.95
+          minimum: 0.0
+          title: Variable Cost Rate
+          description: 0–0.95, 소수 넷째 자리까지
+        expected_monthly_sales:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Expected Monthly Sales
+        key_money:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Key Money
+        facility_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Facility Cost
+      additionalProperties: false
+      type: object
+      title: CostOverrides
+      description: 'A13. 보낸 값만 진단 입력에 덮어쓴다. 값은 A09 `costs`와 같은 규칙이고 null은 받지 않는다.
+
+
+        빠진 값은 진단 입력을 쓴다. 예: `monthly_rent`만 보내면 부가세 포함 여부는 진단 입력과 같다.'
     CountValue:
       properties:
         status:
@@ -2421,6 +2543,69 @@ components:
       - estimated_cost
       title: RestorationValue
       description: '`restoration`의 값. 모르는 항목은 null이다.'
+    SimulationCreateRequest:
+      properties:
+        overrides:
+          anyOf:
+          - $ref: '#/components/schemas/CostOverrides'
+          - type: 'null'
+        exit:
+          anyOf:
+          - $ref: '#/components/schemas/SimulationExit'
+          - type: 'null'
+          description: 없으면 `estimated_loss`는 null
+      additionalProperties: false
+      type: object
+      title: SimulationCreateRequest
+      description: '`overrides`와 `exit`는 각각 선택이며 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다.'
+    SimulationExit:
+      properties:
+        month:
+          type: integer
+          maximum: 120.0
+          minimum: 1.0
+          title: Month
+          description: 종료 시점(개업 후 개월)
+          examples:
+          - 12
+        obligation_months:
+          type: integer
+          maximum: 120.0
+          minimum: 0.0
+          title: Obligation Months
+          description: 종료 후 남은 의무 개월 수
+          examples:
+          - 3
+        restoration_cost:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Restoration Cost
+          examples:
+          - 5000000
+        penalty_amount:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Penalty Amount
+        penalty_covers_remaining_rent:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Penalty Covers Remaining Rent
+          description: true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을
+            표시
+      additionalProperties: false
+      type: object
+      required:
+      - month
+      - obligation_months
+      title: SimulationExit
+      description: A13 종료 조건. 값이 없으면 A18에서만 확인한 계약값을 쓰고, 그것도 없으면 0과 가정 표시.
     SimulationResponse:
       properties:
         id:

@@ -9,6 +9,8 @@ from app.diagnoses.schemas import (
     DiagnosisCreateRequest,
     DiagnosisDetailResponse,
     DiagnosisListResponse,
+    SimulationCreateRequest,
+    SimulationResponse,
 )
 from app.errors import error_responses
 
@@ -53,3 +55,21 @@ async def list_diagnoses(
 )
 async def get_diagnosis(token: BearerToken, diagnosis_id: UUID) -> DiagnosisDetailResponse:
     return await service.get_diagnosis()
+
+
+@router.post(
+    "/{diagnosis_id}/simulations",
+    status_code=201,
+    response_model=SimulationResponse,
+    responses=error_responses(401, 404, 422, 429, 503),
+    summary="손익 다시 계산 (A13)",
+    description=(
+        "`overrides`는 보낸 비용만 진단 입력에 덮어쓰고, `exit`가 있으면 예상 손실도 계산한다. "
+        "둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다. 결과의 `source`는 user다. "
+        "다른 사용자의 진단이나 삭제 요청했거나 만료된 진단은 404다."
+    ),
+)
+async def create_simulation(
+    token: BearerToken, diagnosis_id: UUID, body: SimulationCreateRequest
+) -> SimulationResponse:
+    return await service.create_simulation()
