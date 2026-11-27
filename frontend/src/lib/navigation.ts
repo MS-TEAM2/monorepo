@@ -24,6 +24,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/about-data", label: "데이터·한계", shortLabel: "데이터", icon: "data" },
 ];
 
+/**
+ * 상단 헤더 메뉴. 데이터·한계(S11)는 헤더에서 빼고 하단 탭과 `내 계정` 메뉴로 들어간다 (SCRUM-193).
+ * 그 자리에는 로그인·계정 메뉴가 온다.
+ */
+export const HEADER_NAV_ITEMS: readonly NavItem[] = NAV_ITEMS.filter((item) => item.href !== "/about-data");
+
 /** 현재 경로가 메뉴 경로이거나 그 하위 경로면 활성. 끝 슬래시는 무시한다. */
 export function isNavActive(pathname: string, href: string): boolean {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;

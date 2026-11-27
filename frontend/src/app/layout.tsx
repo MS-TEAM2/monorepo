@@ -2,13 +2,14 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { LoginRequiredProvider } from "@/components/auth/login-required";
 import { BOTTOM_TAB_BAR_SPACE, BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { StartupProvider } from "@/components/screens/startup-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { SiteHeader } from "@/components/ui/site-header";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/navigation";
+import { HEADER_NAV_ITEMS } from "@/lib/navigation";
 import "./globals.css";
 
 const pretendard = localFont({
@@ -40,11 +41,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <TooltipProvider delayDuration={200}>
           <StartupProvider>
-            <SiteHeader navigation={NAV_ITEMS} />
-            <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>
-              <AuthGuard>{children}</AuthGuard>
-            </div>
-            <BottomTabBar />
+            <LoginRequiredProvider>
+              <SiteHeader navigation={HEADER_NAV_ITEMS} />
+              <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>
+                <AuthGuard>{children}</AuthGuard>
+              </div>
+              <BottomTabBar />
+            </LoginRequiredProvider>
           </StartupProvider>
         </TooltipProvider>
         <Toaster />

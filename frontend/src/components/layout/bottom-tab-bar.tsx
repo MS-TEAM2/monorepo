@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useRequireLogin } from "@/components/auth/login-required";
 import { NavIcon } from "@/components/layout/nav-icon";
 import { isNavActive, NAV_ITEMS, type NavItem } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
  */
 export function BottomTabBar({ items = NAV_ITEMS }: { items?: readonly NavItem[] }) {
   const pathname = usePathname() ?? "/";
+  const { prompt } = useRequireLogin();
 
   return (
     <nav
@@ -29,6 +31,10 @@ export function BottomTabBar({ items = NAV_ITEMS }: { items?: readonly NavItem[]
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
+                // 로그아웃 상태로 보호 화면을 누르면 이동 대신 로그인 필요 안내 창을 띄운다
+                onClick={(event) => {
+                  if (prompt(item.href)) event.preventDefault();
+                }}
                 className={cn(
                   "relative flex h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors",
                   active ? "font-bold text-primary" : "font-medium text-muted-foreground",
