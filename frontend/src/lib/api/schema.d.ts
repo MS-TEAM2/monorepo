@@ -368,6 +368,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 데이터 수집 상태와 기준일 (A24)
+         * @description 로그인 없이 부른다. `items`는 매장 3종과 분기 자료 3종을 수집 전에도 모두 준다. `base_date`·`base_quarter`는 마지막 성공 기준이며 성공한 적이 없으면 null이고 `stale`은 true다. `model`은 사용 중인 생존모델이 없으면 null이다.
+         */
+        get: operations["get_data_status_api_v1_data_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -807,6 +827,88 @@ export interface components {
             commercial_quarter: string | null;
             /** Population Quarter */
             population_quarter: string | null;
+        };
+        /** DataStatusItem */
+        DataStatusItem: {
+            /**
+             * Dataset
+             * @enum {string}
+             */
+            dataset: "stores_general" | "stores_rest" | "stores_bakery" | "region_population" | "region_store_stats" | "region_sales";
+            /**
+             * Base Date
+             * @description 마지막 성공 수집의 기준일. 성공한 적이 없으면 null
+             * @example 2026-11-22
+             */
+            base_date: string | null;
+            /**
+             * Base Quarter
+             * @description 분기 자료의 기준 분기(예: 20262). 성공한 적이 없으면 null
+             * @example null
+             */
+            base_quarter: string | null;
+            /**
+             * Last Run Status
+             * @description 마지막 수집 상태. 수집한 적이 없으면 null
+             */
+            last_run_status: ("running" | "succeeded" | "failed") | null;
+            /** Last Run At */
+            last_run_at: string | null;
+            /** Last Success At */
+            last_success_at: string | null;
+            /**
+             * Stale
+             * @description 인허가는 원천 기준일로 7일, 분기 자료는 기준 분기 종료 후 6개월을 넘으면 true. 성공한 적이 없어도 true
+             */
+            stale: boolean;
+            /**
+             * Missing Location Count
+             * @description 영업 중이고 업종이 매핑된 매장 중 좌표가 없는 수. 매장 자료에만 있다
+             * @example 100
+             */
+            missing_location_count: number | null;
+            /**
+             * Source Url
+             * @example https://data.seoul.go.kr/dataList/OA-16094/S/1/datasetView.do
+             */
+            source_url: string;
+        };
+        /**
+         * DataStatusModel
+         * @description 사용 중인 생존모델과 실측 검증 지표.
+         */
+        DataStatusModel: {
+            /**
+             * Version
+             * @example example-v1
+             */
+            version: string;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "km_baseline" | "logistic" | "lightgbm";
+            /**
+             * Data Until
+             * Format: date
+             * @description 학습 데이터 기준일
+             * @example 2026-11-22
+             */
+            data_until: string;
+            /**
+             * Metrics
+             * @description 실측 검증 지표. 수치는 지어내지 않는다
+             */
+            metrics: {
+                [key: string]: number;
+            };
+        };
+        /** DataStatusResponse */
+        DataStatusResponse: {
+            /** Items */
+            items: components["schemas"]["DataStatusItem"][];
+            /** @description 사용 중인 모델이 없으면 null */
+            model: components["schemas"]["DataStatusModel"] | null;
         };
         /** DbHealthResponse */
         DbHealthResponse: {
@@ -2754,6 +2856,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_data_status_api_v1_data_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataStatusResponse"];
                 };
             };
             /** @description Too Many Requests */

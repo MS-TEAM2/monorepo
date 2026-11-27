@@ -16,6 +16,7 @@ import pytest
 
 from ai_core.ingest import licenses
 from ai_core.ingest.categories import CATEGORIES, UPTAE_TO_CATEGORY, mapping_status
+from ai_core.ingest.coords import locate
 from ai_core.ingest.licenses import SOURCES, FetchError, clean, read_csv_file
 
 GENERAL = SOURCES["general"]
@@ -181,6 +182,11 @@ def test_api_error_message_does_not_contain_the_key(monkeypatch):
 
 
 # ---------- DB 반영 (PostGIS 필요) ----------
+def located(result, boundaries=None):
+    result.stores = locate(result.stores, boundaries)
+    return result
+
+
 SERVER_URL = os.environ.get("TEST_DATABASE_URL")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 needs_db = pytest.mark.skipif(not SERVER_URL, reason="TEST_DATABASE_URL이 없음 (PostGIS 필요)")
@@ -233,7 +239,7 @@ def test_rerun_creates_no_duplicates(engine, tmp_path):
     from ai_core.ingest.load import load_stores
 
     rows = [csv_row("A1"), csv_row("A2", 업태구분명="기타"), csv_row("A3", 업태구분명="편의점")]
-    result = clean(GENERAL, read_csv_file(write_csv(tmp_path, rows)))
+    result = located(clean(GENERAL, read_csv_file(write_csv(tmp_path, rows))))
 
     first = load_stores(engine, GENERAL, result)
     after_first = counts(engine)
@@ -250,11 +256,13 @@ def test_failure_keeps_previous_successful_data(engine, tmp_path, monkeypatch):
 
     from ai_core.ingest import load
 
-    good = clean(GENERAL, read_csv_file(write_csv(tmp_path, [csv_row("A1", 사업장명="이전")])))
+    good = located(
+        clean(GENERAL, read_csv_file(write_csv(tmp_path, [csv_row("A1", 사업장명="이전")])))
+    )
     load.load_stores(engine, GENERAL, good)
 
-    new = clean(GENERAL, read_csv_file(write_csv(tmp_path, [csv_row("A1", 사업장명="새것"),
-                                                            csv_row("A2")])))  # fmt: skip
+    new = located(clean(GENERAL, read_csv_file(write_csv(tmp_path, [csv_row("A1", 사업장명="새것"),
+                                                                    csv_row("A2")]))))  # fmt: skip
     calls = {"n": 0}
     real = load._upsert_stores
 
@@ -284,3 +292,49 @@ def test_phone_number_column_does_not_exist_in_db(engine):
 
     columns = {c["name"] for c in inspect(engine).get_columns("stores")}
     assert not any("tel" in c or "phone" in c or "rprs" in c for c in columns)
+
+
+@needs_db
+def test_regions_and_store_location_are_loaded(engine, tmp_path):
+    from shapely.geometry import MultiPolygon, box
+    from sqlalchemy import text
+
+    from ai_core.ingest.load import load_regions, load_stores, read_boundaries
+
+    result = clean(GENERAL, read_csv_file(write_csv(tmp_path, [csv_row("A1"), csv_row("A2",
+                   **{"좌표정보(X)": "", "좌표정보(Y)": ""})])))  # fmt: skip
+    lon, lat = locate(result.stores, None).loc[0, ["lon", "lat"]]
+    regions = pd.DataFrame(
+        {
+            "dong_code": ["11000010", "11000020"],
+            "dong_name": ["가상동", "옛동"],
+            "gu_name": ["가상구", "가상구"],
+            "boundary": [
+                MultiPolygon([box(lon - 0.01, lat - 0.01, lon + 0.01, lat + 0.01)]),
+                MultiPolygon([box(lon + 0.02, lat, lon + 0.03, lat + 0.01)]),
+            ],
+            "boundary_version": [date(2026, 10, 1)] * 2,
+            "is_active": [True, True],
+        }
+    )
+    assert load_regions(engine, regions) == []
+    assert load_regions(engine, regions.iloc[:1]) == ["11000020"]  # 이번에 없는 동은 비활성
+    assert load_regions(engine, regions.iloc[:1]) == []  # 다시 실행해도 같다
+    boundaries = read_boundaries(engine)  # 비활성 동도 읽되 결합에는 쓰지 않는다
+    assert dict(zip(boundaries.codes, boundaries.active, strict=True)) == {
+        "11000010": True,
+        "11000020": False,
+    }
+
+    load_stores(engine, GENERAL, located(result, boundaries))
+
+    with engine.connect() as conn:
+        got = conn.execute(
+            text("SELECT management_no, dong_code, ST_X(location), ST_Y(location), "
+                 "ST_SRID(location) FROM stores ORDER BY management_no")
+        ).all()  # fmt: skip
+        active = conn.execute(text("SELECT dong_code FROM regions WHERE is_active")).scalars().all()
+    assert got[0][1].strip() == "11000010"
+    assert got[0][2:] == (pytest.approx(lon), pytest.approx(lat), 4326)
+    assert got[1][1:] == (None, None, None, None)  # 좌표 없음
+    assert [c.strip() for c in active] == ["11000010"]
