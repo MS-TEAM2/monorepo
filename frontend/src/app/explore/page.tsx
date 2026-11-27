@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { ExploreView } from "@/components/explore/explore-view";
+import { ExploreScreen } from "@/components/screens/app-screens";
 
-export const metadata: Metadata = { title: "상권 탐색" };
+export const metadata: Metadata = { title: "상권 지도" };
 
 export default function Page() {
-  return <ExploreView />;
+  return <ExploreScreen />;
 }

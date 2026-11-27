@@ -243,7 +243,7 @@ export function ContractTermsStep({
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-4 py-3 backdrop-blur safe-bottom">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-[1240px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Button type="button" variant="outline" className="min-h-11" onClick={onBack}>
             <ArrowLeft className="size-4" aria-hidden="true" />
             이전

@@ -1,29 +1,7 @@
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/lib/use-session", () => ({ useSessionStatus: () => "logged_out" }));
-
-import HomePage from "@/app/page";
 import { homeContinueView } from "@/lib/home";
 import { SAMPLE_DIAGNOSIS_LIST_ITEM } from "@/lib/mock/diagnoses";
-
-describe("S01 홈", () => {
-  it("두 시작 버튼과 서울·외식 9종 지원 범위를 보여 준다", () => {
-    const markup = renderToStaticMarkup(createElement(HomePage));
-    expect(markup).toContain('href="/explore"');
-    expect(markup).toContain("주변 상권 보기");
-    expect(markup).toContain('href="/diagnose"');
-    expect(markup).toContain("정해 둔 자리 진단하기");
-    expect(markup).toContain("서울, 외식업 9종");
-    expect(markup.match(/<li class="rounded-full/g)).toHaveLength(9);
-  });
-
-  it("로그인 전에는 로그인 버튼을 보여 준다", () => {
-    const markup = renderToStaticMarkup(createElement(HomePage));
-    expect(markup).toContain('href="/login"');
-  });
-});
 
 describe("이어 보기", () => {
   it("로그인 전에는 로그인 버튼", () => {

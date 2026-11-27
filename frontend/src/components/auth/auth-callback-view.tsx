@@ -5,10 +5,8 @@ import { useEffect, useRef } from "react";
 
 import { completeLogin } from "@/lib/api/auth";
 import { loginHref, parseCallbackQuery } from "@/lib/auth";
+import { takeLoginReturn } from "@/lib/return-to";
 import { forgetTermsAgreement } from "@/lib/terms";
-
-/** 로그인 후 돌아갈 화면. 원래 화면 복귀는 SCRUM-179 에서 바꾼다 */
-const AFTER_LOGIN_HREF = "/";
 
 /**
  * 로그인 콜백 (A27 이 돌려보내는 화면). 1회용 코드를 주소에서 바로 지우고 A01 로 교환한다.
@@ -34,7 +32,8 @@ export function AuthCallbackView() {
       return;
     }
     void completeLogin(result.code).then((outcome) => {
-      router.replace(outcome.ok ? AFTER_LOGIN_HREF : loginHref(outcome.error));
+      // 성공하면 로그인 전에 보던 화면과 선택값으로 돌아간다. 실패하면 복귀 주소를 남겨 두고 다시 시도하게 한다
+      router.replace(outcome.ok ? takeLoginReturn() : loginHref(outcome.error));
     });
   }, [router]);
 
