@@ -19,3 +19,8 @@ async def list_diagnoses() -> NoReturn:
 
 async def get_diagnosis() -> NoReturn:
     _not_implemented()
+
+
+async def create_simulation() -> NoReturn:
+    # 계산 저장은 SCRUM-127에서 채운다.
+    _not_implemented()
