@@ -39,6 +39,10 @@ type Props = {
   origin: LatLng;
   pinCenter: Point;
   radiusM: RadiusM;
+  /** 중심 핀을 그릴지. 시작 선택 패널에서 위치를 고르기 전에는 false */
+  showPin?: boolean;
+  /** 반경 원을 그릴지. 반경을 고르기 전에는 false */
+  showRadius?: boolean;
   stores: readonly MapLayerStore[];
   selectedStoreId: string | null;
   /** 지도를 누른 지점(목업 좌표) */
@@ -55,6 +59,8 @@ export function NaverMapLayer({
   origin,
   pinCenter,
   radiusM,
+  showPin = true,
+  showRadius = true,
   stores,
   selectedStoreId,
   onPressMap,
@@ -68,6 +74,8 @@ export function NaverMapLayer({
     origin,
     pinCenter,
     radiusM,
+    showPin,
+    showRadius,
     stores,
     selectedStoreId,
     onPressMap,
@@ -75,7 +83,18 @@ export function NaverMapLayer({
     onLoadError,
   });
   useLayoutEffect(() => {
-    latest.current = { origin, pinCenter, radiusM, stores, selectedStoreId, onPressMap, onSelectStore, onLoadError };
+    latest.current = {
+      origin,
+      pinCenter,
+      radiusM,
+      showPin,
+      showRadius,
+      stores,
+      selectedStoreId,
+      onPressMap,
+      onSelectStore,
+      onLoadError,
+    };
   });
 
   const broken = useRef(false);
@@ -165,6 +184,8 @@ export function NaverMapLayer({
             zIndex: 100,
             clickable: false,
           });
+          if (!latest.current.showRadius) circle.setMap(null);
+          if (!latest.current.showPin) pin.setMap(null);
           naver.current = { maps, map, circle, pin };
           listeners.push(
             maps.Event.addListener(map, "click", (event) => {
@@ -221,6 +242,16 @@ export function NaverMapLayer({
   }, [origin, pinCenter, radiusM, guard]);
 
   useEffect(() => drawStores(), [stores, selectedStoreId, origin, drawStores]);
+
+  // 시작 선택 패널에서 고른 단계에 맞춰 핀과 반경 원을 보이거나 숨긴다
+  useEffect(() => {
+    guard(() => {
+      const ctx = naver.current;
+      if (!ctx) return;
+      ctx.pin.setMap(showPin ? ctx.map : null);
+      ctx.circle.setMap(showRadius ? ctx.map : null);
+    });
+  }, [showPin, showRadius, guard]);
 
   // 네이버지도가 지도 요소의 position 을 relative 로 바꾸므로 위치는 바깥 요소가 잡는다
   return (
