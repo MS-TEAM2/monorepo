@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ai_core.ingest.categories import UPTAE_TO_CATEGORY
+from ai_core.ingest.categories import classify_store
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ STORE_COLUMNS = [
 
 @dataclass
 class CleanResult:
-    stores: pd.DataFrame  # STORE_COLUMNS + 원천 좌표 x, y
+    stores: pd.DataFrame  # STORE_COLUMNS + 원천 좌표 x, y + 업종 분류 mapping_status·mapping_reason
     rows_read: int
     excluded: dict[str, int] = field(default_factory=dict)
 
@@ -174,13 +174,22 @@ def clean(source: Source, raw: pd.DataFrame) -> CleanResult:
         # 빈 응답을 성공으로 기록하지 않는다. 실패로 끝내 직전 성공본과 기준일을 유지한다.
         raise FetchError(f"{source.service}: 받은 행이 없습니다")
     df = raw.apply(_clean_str)
+    # 업종은 업태와 상호를 함께 본다(categories.classify_store). 뺀 매장·미분류는 NULL.
+    classified = [
+        classify_store(n, source.name, t)
+        for n, t in zip(df["name"], df["source_type"], strict=True)
+    ]
     out = pd.DataFrame(
         {
             "source": source.name,
             "management_no": df["management_no"],
             "name": df["name"],
             "source_type": df["source_type"],
-            "category_id": df["source_type"].map(UPTAE_TO_CATEGORY),
+            "category_id": pd.Series(
+                [c.category_id for c in classified], index=df.index, dtype=object
+            ),
+            "mapping_status": [c.status for c in classified],
+            "mapping_reason": [c.reason for c in classified],
             "status": df["status_code"].str.zfill(2).map(STATUS).fillna("other"),
             "licensed_on": _to_date(df["licensed_on"]),
             "closed_on": _to_date(df["closed_on"]),

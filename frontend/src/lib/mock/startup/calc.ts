@@ -27,9 +27,20 @@ export function formatCount(count: number): string {
 export function formatMan(krw: number | null | undefined, { showSign = false } = {}): string {
   if (krw === null || krw === undefined || Number.isNaN(krw)) return "-";
   const man = Math.round(krw / 1e4);
-  const text = Math.abs(man).toLocaleString("ko-KR");
-  if (man < 0) return `-${text}만원`;
-  return showSign && man > 0 ? `+${text}만원` : `${text}만원`;
+  const text = formatManAmount(Math.abs(man));
+  if (man < 0) return `-${text}`;
+  return showSign && man > 0 ? `+${text}` : text;
+}
+
+/** 만원 단위 금액을 읽기 쉽게 쓴다. 1억 이상이면 억과 만원을 나눈다. 예: 15000 → "1억 5,000만원", 10000 → "1억원" */
+export function formatManAmount(man: number): string {
+  const sign = man < 0 ? "-" : "";
+  const abs = Math.round(Math.abs(man));
+  const eok = Math.floor(abs / 10000);
+  const rest = abs % 10000;
+  if (eok === 0) return `${sign}${rest.toLocaleString("ko-KR")}만원`;
+  if (rest === 0) return `${sign}${eok.toLocaleString("ko-KR")}억원`;
+  return `${sign}${eok.toLocaleString("ko-KR")}억 ${rest.toLocaleString("ko-KR")}만원`;
 }
 
 /** 같은 입력이면 항상 같은 수열을 주는 난수 (예시 매장 배치용) */

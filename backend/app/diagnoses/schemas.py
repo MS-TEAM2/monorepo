@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from app.diagnoses.calculations import rate_to_basis
 
@@ -10,6 +10,7 @@ from app.diagnoses.calculations import rate_to_basis
 MAX_AMOUNT = 10_000_000_000
 
 Amount = Annotated[int, Field(ge=0, le=MAX_AMOUNT)]
+MonthlyRent = Annotated[int, Field(ge=1, le=MAX_AMOUNT)]
 
 
 def _four_decimals(value: float) -> float:
@@ -26,7 +27,7 @@ VariableCostRate = Annotated[
 
 class DiagnosisCostsInput(BaseModel):
     deposit: Amount = 0
-    monthly_rent: Annotated[int, Field(ge=1, le=MAX_AMOUNT, examples=[2_500_000])]
+    monthly_rent: MonthlyRent = Field(examples=[2_500_000])
     rent_vat_included: bool
     management_fee: Amount = 0
     labor_cost: Amount
@@ -38,6 +39,61 @@ class DiagnosisCostsInput(BaseModel):
     )
     key_money: Amount = 0
     facility_cost: Amount = 0
+
+
+class CostOverrides(BaseModel):
+    """A13. 보낸 값만 진단 입력에 덮어쓴다. 값은 A09 `costs`와 같은 규칙이고 null은 받지 않는다.
+
+    빠진 값은 진단 입력을 쓴다. 예: `monthly_rent`만 보내면 부가세 포함 여부는 진단 입력과 같다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # 기본값 None은 '보내지 않음'이다. 타입이 null을 허용하지 않아 명시한 null은 422다.
+    deposit: Amount = None  # type: ignore[assignment]
+    monthly_rent: MonthlyRent = Field(default=None, examples=[2_200_000])  # type: ignore[assignment]
+    rent_vat_included: bool = None  # type: ignore[assignment]
+    management_fee: Amount = None  # type: ignore[assignment]
+    labor_cost: Amount = None  # type: ignore[assignment]
+    other_fixed_cost: Amount = None  # type: ignore[assignment]
+    variable_cost_rate: VariableCostRate = None  # type: ignore[assignment]
+    expected_monthly_sales: Amount = None  # type: ignore[assignment]
+    key_money: Amount = None  # type: ignore[assignment]
+    facility_cost: Amount = None  # type: ignore[assignment]
+
+
+class SimulationExit(BaseModel):
+    """A13 종료 조건. 값이 없으면 A18에서만 확인한 계약값을 쓰고, 그것도 없으면 0과 가정 표시."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    month: Annotated[int, Field(ge=1, le=120, description="종료 시점(개업 후 개월)", examples=[12])]
+    obligation_months: Annotated[
+        int, Field(ge=0, le=120, description="종료 후 남은 의무 개월 수", examples=[3])
+    ]
+    restoration_cost: Amount | None = Field(default=None, examples=[5_000_000])
+    penalty_amount: Amount | None = None
+    penalty_covers_remaining_rent: bool | None = Field(
+        default=None,
+        description="true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. "
+        "모르면 큰 값과 확인 필요 가정을 표시",
+    )
+
+
+class SimulationCreateRequest(BaseModel):
+    """`overrides`와 `exit`는 각각 선택이며 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    overrides: CostOverrides | None = None
+    exit: SimulationExit | None = Field(default=None, description="없으면 `estimated_loss`는 null")
+
+    @model_validator(mode="after")
+    def _requires_change(self) -> "SimulationCreateRequest":
+        # 빈 overrides({})는 덮어쓸 값이 없으므로 보내지 않은 것과 같다.
+        if (self.overrides is None or not self.overrides.model_fields_set) and self.exit is None:
+            raise ValueError("overrides나 exit 중 하나는 있어야 합니다")
+        return self
 
 
 class DiagnosisCreateRequest(BaseModel):

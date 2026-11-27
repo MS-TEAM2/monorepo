@@ -19,3 +19,8 @@ async def resolve_region() -> NoReturn:
 
 async def list_stores() -> NoReturn:
     _not_implemented()
+
+
+async def get_area_summary() -> NoReturn:
+    # 반경 집계는 SCRUM-111, 행정동 지표는 SCRUM-113에서 채운다.
+    _not_implemented()

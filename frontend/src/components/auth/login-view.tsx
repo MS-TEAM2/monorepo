@@ -9,11 +9,19 @@ import { SampleDataNotice } from "@/components/feedback/sample-data";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { prepareLogin } from "@/lib/api/auth";
+import { completeLogin, prepareLogin } from "@/lib/api/auth";
 import { isMockMode } from "@/lib/api/mock";
-import { LOGIN_ERROR_COPY, parseLoginError, type LoginError, type LoginProvider } from "@/lib/auth";
+import { callApp, getAppInfo, isInApp } from "@/lib/bridge";
+import { LOGIN_ERROR_COPY, parseCallbackQuery, parseLoginError, type LoginError, type LoginProvider } from "@/lib/auth";
 import { isLoginRequired, lastPublicPath } from "@/lib/return-to";
-import { hasAgreedTerms, PRIVACY_HREF, rememberTermsAgreement, TERMS_HREF, TERMS_VERSION } from "@/lib/terms";
+import {
+  forgetTermsAgreement,
+  hasAgreedTerms,
+  PRIVACY_HREF,
+  rememberTermsAgreement,
+  TERMS_HREF,
+  TERMS_VERSION,
+} from "@/lib/terms";
 
 const noSubscribe = () => () => {};
 
@@ -54,13 +62,56 @@ export function LoginView() {
     setPending(provider);
     setLocalError(null);
     setDismissed(true);
-    const url = await prepareLogin(provider);
+    const inApp = isInApp();
+    if (inApp && (getAppInfo()?.bridgeVersion ?? 0) < 2) {
+      setPending(null);
+      setLocalError("app_update_required");
+      return;
+    }
+    const url = await prepareLogin(provider, inApp ? "app" : "web");
     if (!url) {
       setPending(null);
       setLocalError("invalid_request");
       return;
     }
-    window.location.assign(url);
+    if (!inApp || isMockMode()) {
+      window.location.assign(url);
+      return;
+    }
+
+    try {
+      const result = await callApp(
+        "openAuthSession",
+        { url, returnUrl: "axservice://auth/callback", timeoutMs: 180_000 },
+        { timeoutMs: 180_000 },
+      );
+      if (result.type !== "success") {
+        setLocalError(result.type === "timeout" ? "browser_timeout" : "cancelled");
+        setPending(null);
+        return;
+      }
+
+      const callback = new URL(result.url);
+      if (`${callback.protocol}//${callback.host}${callback.pathname}` !== "axservice://auth/callback") {
+        throw new Error("허용하지 않는 로그인 복귀 주소입니다.");
+      }
+      const callbackResult = parseCallbackQuery(callback.searchParams);
+      if (callbackResult.kind === "error") {
+        if (callbackResult.error === "terms_outdated") forgetTermsAgreement();
+        setLocalError(callbackResult.error);
+        setPending(null);
+        return;
+      }
+      const outcome = await completeLogin(callbackResult.code);
+      if (outcome.ok) router.replace(lastPublicPath());
+      else {
+        setLocalError(outcome.error);
+        setPending(null);
+      }
+    } catch {
+      setLocalError("exchange_failed");
+      setPending(null);
+    }
   }
 
   const copy = error ? LOGIN_ERROR_COPY[error] : null;

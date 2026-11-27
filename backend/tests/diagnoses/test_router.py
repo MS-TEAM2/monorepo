@@ -1,4 +1,4 @@
-"""진단 API 명세(A09–A11)와 빈 라우트의 동작."""
+"""진단 API 명세(A09–A11, A13)와 빈 라우트의 동작."""
 
 import copy
 
@@ -50,7 +50,9 @@ MONEY_FIELDS = (
     "expected_monthly_sales",
 )
 MAX_AMOUNT = 10_000_000_000
-REQUESTS = [("POST", LIST), ("GET", LIST), ("GET", DETAIL)]
+SIMULATIONS_PATH = f"{DETAIL_PATH}/simulations"
+SIMULATIONS = f"{DETAIL}/simulations"
+REQUESTS = [("POST", LIST), ("GET", LIST), ("GET", DETAIL), ("POST", SIMULATIONS)]
 
 
 @pytest.fixture
@@ -90,6 +92,7 @@ def response_model(name: str):
         (LIST, "post", {"201", "400", "401", "422", "429", "503"}),
         (LIST, "get", {"200", "401", "422", "429", "503"}),
         (DETAIL_PATH, "get", {"200", "401", "404", "422", "429", "503"}),
+        (SIMULATIONS_PATH, "post", {"201", "401", "404", "422", "429", "503"}),
     ],
 )
 def test_spec_lists_status_codes_and_bearer_auth(url, method, statuses):
@@ -323,4 +326,111 @@ def test_validation_error_does_not_echo_input(client):
 
     assert_invalid(response)
     for secret in ("비밀 주소", "97.123456", "126.987654", "secret-token"):
+        assert secret not in response.text
+
+
+# A13 손익 다시 계산
+
+EXIT = {"month": 12, "obligation_months": 3, "restoration_cost": 5_000_000}
+
+
+def test_simulation_returns_simulation_response():
+    response = operation(SIMULATIONS_PATH, "post")["responses"]["201"]
+    schema = response["content"]["application/json"]["schema"]
+
+    assert schema == {"$ref": "#/components/schemas/SimulationResponse"}
+
+
+def test_simulation_request_schema():
+    request = component("SimulationCreateRequest")
+    overrides = component("CostOverrides")
+    exit_schema = component("SimulationExit")
+
+    assert set(request["properties"]) == {"overrides", "exit"}
+    assert "required" not in request
+    # 덮어쓸 수 있는 값은 A09 costs와 같고 모두 선택이다.
+    assert set(overrides["properties"]) == set(COSTS)
+    assert "required" not in overrides
+    assert set(exit_schema["properties"]) == {
+        "month",
+        "obligation_months",
+        "restoration_cost",
+        "penalty_amount",
+        "penalty_covers_remaining_rent",
+    }
+    assert set(exit_schema["required"]) == {"month", "obligation_months"}
+    month = exit_schema["properties"]["month"]
+    obligation = exit_schema["properties"]["obligation_months"]
+    assert (month["minimum"], month["maximum"]) == (1, 120)
+    assert (obligation["minimum"], obligation["maximum"]) == (0, 120)
+    for schema in (request, overrides, exit_schema):
+        assert schema["additionalProperties"] is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"overrides": {"monthly_rent": 2_200_000}},
+        {"overrides": {"monthly_rent": 1, "rent_vat_included": True}},
+        {"overrides": {"variable_cost_rate": 0.95, "expected_monthly_sales": 0}},
+        {"exit": {"month": 1, "obligation_months": 0}},
+        {"exit": {"month": 120, "obligation_months": 120}},
+        {"overrides": {"monthly_rent": 2_200_000}, "exit": EXIT},
+        {
+            "exit": {
+                **EXIT,
+                "penalty_amount": 10_000_000,
+                "penalty_covers_remaining_rent": None,
+            }
+        },
+        {"overrides": None, "exit": EXIT},
+        {"overrides": COSTS},
+    ],
+)
+def test_valid_simulation_is_not_implemented_yet(client, payload):
+    assert_stub(client.post(SIMULATIONS, json=payload, headers=AUTH))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"overrides": {}},
+        {"overrides": None, "exit": None},
+        {"overrides": {"monthly_rent": 0}},
+        {"overrides": {"monthly_rent": None}},
+        # 예상 월매출을 지우는 null은 받지 않는다. 진단 값을 쓰려면 필드를 뺀다.
+        {"overrides": {"expected_monthly_sales": None}},
+        {"overrides": {"variable_cost_rate": 0.9501}},
+        {"overrides": {"variable_cost_rate": 0.12345}},
+        {"overrides": {"deposit": MAX_AMOUNT + 1}},
+        {"overrides": {"rent": 2_200_000}},
+        {"exit": {"month": 0, "obligation_months": 0}},
+        {"exit": {"month": 121, "obligation_months": 0}},
+        {"exit": {"month": 12, "obligation_months": -1}},
+        {"exit": {"month": 12, "obligation_months": 121}},
+        {"exit": {"month": 12}},
+        {"exit": {"obligation_months": 3}},
+        {"exit": {**EXIT, "restoration_cost": -1}},
+        {"exit": {**EXIT, "unknown": 1}},
+        {"exit": EXIT, "survival": True},
+    ],
+)
+def test_invalid_simulation_is_rejected(client, payload):
+    assert_invalid(client.post(SIMULATIONS, json=payload, headers=AUTH))
+
+
+def test_simulation_rejects_invalid_diagnosis_id(client):
+    assert_invalid(client.post(f"{LIST}/not-a-uuid/simulations", json={"exit": EXIT}, headers=AUTH))
+
+
+def test_simulation_validation_error_does_not_echo_input(client):
+    payload = {"overrides": {"monthly_rent": 987_654_321_987}}
+
+    response = client.post(
+        SIMULATIONS, json=payload, headers={"Authorization": "Bearer secret-token"}
+    )
+
+    assert_invalid(response)
+    for secret in ("987654321987", "secret-token"):
         assert secret not in response.text
