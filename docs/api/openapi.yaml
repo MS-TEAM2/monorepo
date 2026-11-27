@@ -528,6 +528,153 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           description: Service Unavailable
+  /api/v1/areas/summary:
+    get:
+      tags:
+      - explore
+      summary: 상권 요약 (A07)
+      description: 인증 선택. 로그인하지 않으면 `dong_stats`는 null, `locked`는 `["dong_stats"]`이고
+        `missing`에는 넣지 않는다. 로그인하면 `locked`는 빈 배열이다. 형식이 잘못된 토큰은 401, 중심이 서울 밖이면 400
+        `out_of_service_area`다. 개업·폐업 수가 5건 미만이면 정확한 값을 주지 않는다.
+      operationId: get_area_summary_api_v1_areas_summary_get
+      security:
+      - HTTPBearer: []
+      - {}
+      parameters:
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 90
+          minimum: -90
+          description: 중심 위도 (WGS84)
+          title: Lat
+        description: 중심 위도 (WGS84)
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 180
+          minimum: -180
+          description: 중심 경도 (WGS84)
+          title: Lng
+        description: 중심 경도 (WGS84)
+      - name: category
+        in: query
+        required: true
+        schema:
+          type: string
+          description: 업종 ID 1개
+          title: Category
+        description: 업종 ID 1개
+      - name: radius
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Radius'
+          description: 반경(m)
+          default: 500
+        description: 반경(m)
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AreaSummaryResponse'
+              examples:
+                logged_in:
+                  summary: 로그인 후
+                  value:
+                    region:
+                      dong_code: '11110515'
+                      dong_name: 청운효자동
+                      gu_name: 종로구
+                    radius_stats:
+                      radius_m: 500
+                      same_category_count: 24
+                      opened_1y:
+                        status: exact
+                        count: 6
+                        display: '6'
+                      closed_1y:
+                        status: masked
+                        display: 5건 미만
+                      base_date: '2026-11-22'
+                    dong_stats:
+                      source_regions:
+                      - code: '11110515'
+                        name: 청운효자동
+                      relation: same
+                      quarter: '20262'
+                      population_quarter: '20262'
+                      population_reference_only: false
+                      floating_population: 100000
+                      population_by_time:
+                        '11_14': 18000
+                      population_by_age:
+                        '30': 20000
+                      population_per_store: 420
+                      sales_unit_verified: false
+                      open_rate: 0.04
+                      close_rate: 0.03
+                      franchise_ratio: 0.2
+                    missing:
+                    - avg_sales_per_store
+                    locked: []
+                logged_out:
+                  summary: '로그인 전: 반경 지표만 준다'
+                  value:
+                    region:
+                      dong_code: '11110515'
+                      dong_name: 청운효자동
+                      gu_name: 종로구
+                    radius_stats:
+                      radius_m: 500
+                      same_category_count: 24
+                      opened_1y:
+                        status: exact
+                        count: 6
+                        display: '6'
+                      closed_1y:
+                        status: masked
+                        display: 5건 미만
+                      base_date: '2026-11-22'
+                    missing: []
+                    locked:
+                    - dong_stats
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
   /api/v1/diagnoses:
     post:
       tags:
@@ -916,6 +1063,65 @@ paths:
           description: Service Unavailable
 components:
   schemas:
+    AreaRegion:
+      properties:
+        dong_code:
+          type: string
+          title: Dong Code
+          examples:
+          - '11110515'
+        dong_name:
+          type: string
+          title: Dong Name
+          examples:
+          - 청운효자동
+        gu_name:
+          type: string
+          title: Gu Name
+          examples:
+          - 종로구
+      type: object
+      required:
+      - dong_code
+      - dong_name
+      - gu_name
+      title: AreaRegion
+    AreaSummaryResponse:
+      properties:
+        region:
+          $ref: '#/components/schemas/AreaRegion'
+        radius_stats:
+          $ref: '#/components/schemas/RadiusStats'
+        dong_stats:
+          anyOf:
+          - $ref: '#/components/schemas/DongStats'
+          - type: 'null'
+          description: 로그인 전이면 null(`locked`에 들어감). 행정동 자료가 전혀 없어도 null(`missing`에
+            들어감)
+        missing:
+          items:
+            type: string
+          type: array
+          title: Missing
+          description: 값이 없어 null인 필드 이름. 로그인 전 잠긴 값은 넣지 않는다
+          examples:
+          - - avg_sales_per_store
+        locked:
+          items:
+            type: string
+            const: dong_stats
+          type: array
+          title: Locked
+          description: 로그인해야 볼 수 있어 비운 값. 로그인하면 빈 배열
+      type: object
+      required:
+      - region
+      - radius_stats
+      - dong_stats
+      - missing
+      - locked
+      title: AreaSummaryResponse
+      description: 반경 값과 행정동 값은 단위가 달라 한 점수로 섞지 않는다.
     CategoryCount:
       properties:
         category_id:
@@ -1454,6 +1660,38 @@ components:
       - terms
       - complete
       title: ContractTermsUpdateRequest
+    CountValue:
+      properties:
+        status:
+          type: string
+          enum:
+          - exact
+          - masked
+          - unavailable
+          title: Status
+          description: 'exact: 5건 이상 정확한 값, masked: 0–4건, unavailable: 최근 1년을 확인할
+            수 없어 숨김'
+        count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Count
+          description: exact일 때만 값이 있다
+          examples:
+          - 6
+        display:
+          type: string
+          title: Display
+          description: 화면 표시 문구. masked는 `5건 미만`, unavailable은 `자료 없음`
+          examples:
+          - '6'
+      type: object
+      required:
+      - status
+      - count
+      - display
+      title: CountValue
+      description: 최근 1년 개업·폐업 수. 5건 미만이면 정확한 값을 주지 않는다.
     DataBasis:
       properties:
         stores:
@@ -1821,6 +2059,124 @@ components:
       - items
       - next_cursor
       title: DiagnosisListResponse
+    DongStats:
+      properties:
+        source_regions:
+          items:
+            $ref: '#/components/schemas/SourceRegion'
+          type: array
+          title: Source Regions
+          description: merged면 여러 개
+        relation:
+          type: string
+          enum:
+          - same
+          - split
+          - merged
+          title: Relation
+          description: split이면 분동 전 통합 값임을 화면에 표시한다
+        quarter:
+          type: string
+          title: Quarter
+          description: 점포·추정매출·유동인구 수집이 모두 성공한 가장 최근 분기
+          examples:
+          - '20262'
+        population_quarter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Population Quarter
+          description: 유동인구 기준 분기. 중단되면 마지막 정상 분기
+          examples:
+          - '20262'
+        population_reference_only:
+          type: boolean
+          title: Population Reference Only
+          description: 유동인구가 중단돼 마지막 정상 분기를 참고로만 보여 줄 때 true
+        floating_population:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Floating Population
+          examples:
+          - 100000
+        population_by_time:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Population By Time
+          description: '키: 00_06, 06_11, 11_14, 14_17, 17_21, 21_24'
+          examples:
+          - '11_14': 18000
+        population_by_age:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Population By Age
+          description: '키: 10, 20, 30, 40, 50, 60_plus'
+          examples:
+          - '30': 20000
+        population_per_store:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Population Per Store
+          description: 두 분기(quarter, population_quarter)가 다르면 null
+          examples:
+          - 420
+        avg_sales_per_store:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Avg Sales Per Store
+          description: 분모는 프랜차이즈를 포함한 similar_store_count. 매출 단위 확인 전에는 null
+        sales_unit_verified:
+          type: boolean
+          title: Sales Unit Verified
+          description: 추정매출 금액 단위를 확인했는지
+        open_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Open Rate
+          examples:
+          - 0.04
+        close_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Close Rate
+          examples:
+          - 0.03
+        franchise_ratio:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Franchise Ratio
+          examples:
+          - 0.2
+      type: object
+      required:
+      - source_regions
+      - relation
+      - quarter
+      - population_quarter
+      - population_reference_only
+      - floating_population
+      - population_by_time
+      - population_by_age
+      - population_per_store
+      - avg_sales_per_store
+      - sales_unit_verified
+      - open_rate
+      - close_rate
+      - franchise_ratio
+      title: DongStats
+      description: 로그인한 사용자에게만 준다. 값이 없으면 null이고 `missing`에 필드 이름이 들어간다.
     EarlyTerminationValue:
       properties:
         allowed:
@@ -1977,6 +2333,40 @@ components:
       - 1000
       title: Radius
       description: A05 조회 반경(m). Literal은 쿼리 문자열을 숫자로 바꾸지 않아 IntEnum을 쓴다.
+    RadiusStats:
+      properties:
+        radius_m:
+          type: integer
+          title: Radius M
+          examples:
+          - 500
+        same_category_count:
+          type: integer
+          title: Same Category Count
+          description: 반경 안 같은 업종 영업 매장 수
+          examples:
+          - 24
+        opened_1y:
+          $ref: '#/components/schemas/CountValue'
+        closed_1y:
+          $ref: '#/components/schemas/CountValue'
+        base_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Base Date
+          description: 인허가 자료 기준일. 최근 1년은 이 날을 포함해 거슬러 센다. 성공한 수집이 없으면 null
+          examples:
+          - '2026-11-22'
+      type: object
+      required:
+      - radius_m
+      - same_category_count
+      - opened_1y
+      - closed_1y
+      - base_date
+      title: RadiusStats
     RegionResolveResponse:
       properties:
         dong_code:
@@ -2079,6 +2469,24 @@ components:
       - estimated_loss
       - assumptions
       title: SimulationResponse
+    SourceRegion:
+      properties:
+        code:
+          type: string
+          title: Code
+          description: 상권 자료의 행정동 코드
+          examples:
+          - '11110515'
+        name:
+          type: string
+          title: Name
+          examples:
+          - 청운효자동
+      type: object
+      required:
+      - code
+      - name
+      title: SourceRegion
     StoreItem:
       properties:
         id:

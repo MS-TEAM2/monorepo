@@ -2,9 +2,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from app.deps import OptionalBearerToken
 from app.errors import error_responses
 from app.explore import service
 from app.explore.schemas import (
+    AREA_SUMMARY_EXAMPLES,
+    AreaSummaryResponse,
     CategoryListResponse,
     Radius,
     RegionResolveResponse,
@@ -59,3 +62,31 @@ async def list_stores(
     limit: Annotated[int, Query(ge=1, le=1000, description="이 API만 기본·최대 1000")] = 1000,
 ) -> StoreListResponse:
     return await service.list_stores()
+
+
+@router.get(
+    "/areas/summary",
+    response_model=AreaSummaryResponse,
+    responses={
+        200: {"content": {"application/json": {"examples": AREA_SUMMARY_EXAMPLES}}},
+        **error_responses(400, 401, 422, 429, 503),
+    },
+    summary="상권 요약 (A07)",
+    # 인증 선택: 토큰 없이(`{}`)도 부를 수 있음을 명세에 드러낸다.
+    # FastAPI는 의존성에서 만든 HTTPBearer 항목 뒤에 이 목록을 이어 붙인다.
+    openapi_extra={"security": [{}]},
+    description=(
+        '인증 선택. 로그인하지 않으면 `dong_stats`는 null, `locked`는 `["dong_stats"]`이고 '
+        "`missing`에는 넣지 않는다. 로그인하면 `locked`는 빈 배열이다. "
+        "형식이 잘못된 토큰은 401, 중심이 서울 밖이면 400 `out_of_service_area`다. "
+        "개업·폐업 수가 5건 미만이면 정확한 값을 주지 않는다."
+    ),
+)
+async def get_area_summary(
+    token: OptionalBearerToken,
+    lat: Latitude,
+    lng: Longitude,
+    category: Annotated[str, Query(description="업종 ID 1개")],
+    radius: Annotated[Radius, Query(description="반경(m)")] = Radius.M500,
+) -> AreaSummaryResponse:
+    return await service.get_area_summary()
