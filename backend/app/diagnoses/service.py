@@ -40,12 +40,6 @@ async def get_diagnosis() -> NoReturn:
     _not_implemented()
 
 
-async def create_simulation() -> NoReturn:
-    # 로그인 사용자를 확인하는 의존성(SCRUM-181)이 머지되면 라우터가 create_user_simulation을
-    # 부르도록 바꾼다. 그 전에는 토큰의 주인을 알 수 없어 503으로 둔다.
-    _not_implemented()
-
-
 async def delete_diagnosis() -> NoReturn:
     # 구현은 SCRUM-157에서 채운다.
     _not_implemented()

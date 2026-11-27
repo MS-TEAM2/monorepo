@@ -1,11 +1,17 @@
 """진단 API 명세(A09–A13)와 빈 라우트의 동작."""
 
 import copy
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
 
 from ai_core.survival.examples import EXAMPLE_INSUFFICIENT_DATA, EXAMPLE_SURVIVAL_RESULT
+from app.auth import service as auth_service
+from app.deps import LoginUser, get_db, get_login_user
+from app.diagnoses import service
+from app.diagnoses.schemas import SimulationResponse
+from app.errors import AppError
 from app.main import app
 
 LIST = "/api/v1/diagnoses"
@@ -65,6 +71,53 @@ REQUESTS = [
 def client():
     with TestClient(app) as test_client:
         yield test_client
+
+
+USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000a1")
+DIAGNOSIS_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
+SIMULATION_RESULT = SimulationResponse(
+    id=uuid.UUID("00000000-0000-4000-8000-000000000003"),
+    source="user",
+    break_even_sales=11_166_667,
+    monthly_profit=1_100_000,
+    affordable_rent=3_300_000,
+    estimated_loss=12_500_000,
+    assumptions=["권리금과 시설비를 회수하지 못함", "보증금은 전액 반환"],
+)
+
+
+@pytest.fixture
+def signed_in():
+    """로그인한 사용자와 가짜 DB 세션을 주입한다. 끝나면 비운다."""
+
+    async def fake_db():
+        yield object()
+
+    app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_login_user] = lambda: LoginUser(USER_ID, uuid.uuid4())
+    yield
+    app.dependency_overrides.clear()
+
+
+class SimulateRecorder:
+    def __init__(self) -> None:
+        self.calls: list = []
+        self.error: AppError | None = None
+
+
+@pytest.fixture
+def simulate(monkeypatch):
+    """A13 서비스를 가짜로 바꿔 호출 인자와 오류 전달을 확인한다."""
+    recorder = SimulateRecorder()
+
+    async def fake(db, user_id, diagnosis_id, body):
+        recorder.calls.append((user_id, diagnosis_id, body))
+        if recorder.error is not None:
+            raise recorder.error
+        return SIMULATION_RESULT
+
+    monkeypatch.setattr(service, "create_user_simulation", fake)
+    return recorder
 
 
 def body(costs: dict | None = None, **changes) -> dict:
@@ -394,8 +447,43 @@ def test_simulation_request_schema():
         {"overrides": COSTS},
     ],
 )
-def test_valid_simulation_is_not_implemented_yet(client, payload):
-    assert_stub(client.post(SIMULATIONS, json=payload, headers=AUTH))
+def test_valid_simulation_is_created(client, signed_in, simulate, payload):
+    response = client.post(SIMULATIONS, json=payload, headers=AUTH)
+
+    assert response.status_code == 201
+    assert response.json() == SIMULATION_RESULT.model_dump(mode="json")
+    # 로그인 사용자와 경로의 진단 ID, 검증된 본문이 서비스로 넘어간다.
+    (user_id, diagnosis_id, body) = simulate.calls[0]
+    assert (user_id, diagnosis_id) == (USER_ID, DIAGNOSIS_ID)
+    assert body.model_dump(exclude_unset=True, mode="json") == payload
+
+
+@pytest.mark.parametrize(("status", "code"), [(404, "not_found"), (503, "service_unavailable")])
+def test_simulation_service_errors_reach_the_client(client, signed_in, simulate, status, code):
+    simulate.error = AppError(status, code, "오류")
+
+    response = client.post(SIMULATIONS, json={"exit": EXIT}, headers=AUTH)
+
+    assert response.status_code == status
+    assert response.json() == {"detail": "오류", "code": code}
+
+
+def test_simulation_with_unknown_token_is_401_before_the_service(client, simulate, monkeypatch):
+    async def fake_db():
+        yield object()
+
+    async def no_session(db, token, now):
+        return None
+
+    app.dependency_overrides[get_db] = fake_db
+    monkeypatch.setattr(auth_service, "find_login", no_session)
+
+    response = client.post(SIMULATIONS, json={"exit": EXIT}, headers=AUTH)
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthorized"
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+    assert simulate.calls == []
 
 
 @pytest.mark.parametrize(
@@ -423,15 +511,17 @@ def test_valid_simulation_is_not_implemented_yet(client, payload):
         {"exit": EXIT, "survival": True},
     ],
 )
-def test_invalid_simulation_is_rejected(client, payload):
+def test_invalid_simulation_is_rejected(client, signed_in, simulate, payload):
     assert_invalid(client.post(SIMULATIONS, json=payload, headers=AUTH))
+    assert simulate.calls == []
 
 
-def test_simulation_rejects_invalid_diagnosis_id(client):
+def test_simulation_rejects_invalid_diagnosis_id(client, signed_in, simulate):
     assert_invalid(client.post(f"{LIST}/not-a-uuid/simulations", json={"exit": EXIT}, headers=AUTH))
+    assert simulate.calls == []
 
 
-def test_simulation_validation_error_does_not_echo_input(client):
+def test_simulation_validation_error_does_not_echo_input(client, signed_in, simulate):
     payload = {"overrides": {"monthly_rent": 987_654_321_987}}
 
     response = client.post(
