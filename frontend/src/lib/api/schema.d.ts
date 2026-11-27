@@ -204,6 +204,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/areas/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상권 요약 (A07)
+         * @description 인증 선택. 로그인하지 않으면 `dong_stats`는 null, `locked`는 `["dong_stats"]`이고 `missing`에는 넣지 않는다. 로그인하면 `locked`는 빈 배열이다. 형식이 잘못된 토큰은 401, 중심이 서울 밖이면 400 `out_of_service_area`다. 개업·폐업 수가 5건 미만이면 정확한 값을 주지 않는다.
+         */
+        get: operations["get_area_summary_api_v1_areas_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnoses": {
         parameters: {
             query?: never;
@@ -242,6 +262,26 @@ export interface paths {
         get: operations["get_diagnosis_api_v1_diagnoses__diagnosis_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnoses/{diagnosis_id}/simulations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 손익 다시 계산 (A13)
+         * @description `overrides`는 보낸 비용만 진단 입력에 덮어쓰고, `exit`가 있으면 예상 손실도 계산한다. 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다. 결과의 `source`는 user다. 다른 사용자의 진단이나 삭제 요청했거나 만료된 진단은 404다.
+         */
+        post: operations["create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -312,6 +352,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AreaRegion */
+        AreaRegion: {
+            /**
+             * Dong Code
+             * @example 11110515
+             */
+            dong_code: string;
+            /**
+             * Dong Name
+             * @example 청운효자동
+             */
+            dong_name: string;
+            /**
+             * Gu Name
+             * @example 종로구
+             */
+            gu_name: string;
+        };
+        /**
+         * AreaSummaryResponse
+         * @description 반경 값과 행정동 값은 단위가 달라 한 점수로 섞지 않는다.
+         */
+        AreaSummaryResponse: {
+            region: components["schemas"]["AreaRegion"];
+            radius_stats: components["schemas"]["RadiusStats"];
+            /** @description 로그인 전이면 null(`locked`에 들어감). 행정동 자료가 전혀 없어도 null(`missing`에 들어감) */
+            dong_stats: components["schemas"]["DongStats"] | null;
+            /**
+             * Missing
+             * @description 값이 없어 null인 필드 이름. 로그인 전 잠긴 값은 넣지 않는다
+             * @example [
+             *       "avg_sales_per_store"
+             *     ]
+             */
+            missing: string[];
+            /**
+             * Locked
+             * @description 로그인해야 볼 수 있어 비운 값. 로그인하면 빈 배열
+             */
+            locked: "dong_stats"[];
+        };
         /** CategoryCount */
         CategoryCount: {
             /**
@@ -600,6 +681,64 @@ export interface components {
             complete: boolean;
         };
         /**
+         * CostOverrides
+         * @description A13. 보낸 값만 진단 입력에 덮어쓴다. 값은 A09 `costs`와 같은 규칙이고 null은 받지 않는다.
+         *
+         *     빠진 값은 진단 입력을 쓴다. 예: `monthly_rent`만 보내면 부가세 포함 여부는 진단 입력과 같다.
+         */
+        CostOverrides: {
+            /** Deposit */
+            deposit?: number;
+            /**
+             * Monthly Rent
+             * @example 2200000
+             */
+            monthly_rent?: number;
+            /** Rent Vat Included */
+            rent_vat_included?: boolean;
+            /** Management Fee */
+            management_fee?: number;
+            /** Labor Cost */
+            labor_cost?: number;
+            /** Other Fixed Cost */
+            other_fixed_cost?: number;
+            /**
+             * Variable Cost Rate
+             * @description 0–0.95, 소수 넷째 자리까지
+             */
+            variable_cost_rate?: number;
+            /** Expected Monthly Sales */
+            expected_monthly_sales?: number;
+            /** Key Money */
+            key_money?: number;
+            /** Facility Cost */
+            facility_cost?: number;
+        };
+        /**
+         * CountValue
+         * @description 최근 1년 개업·폐업 수. 5건 미만이면 정확한 값을 주지 않는다.
+         */
+        CountValue: {
+            /**
+             * Status
+             * @description exact: 5건 이상 정확한 값, masked: 0–4건, unavailable: 최근 1년을 확인할 수 없어 숨김
+             * @enum {string}
+             */
+            status: "exact" | "masked" | "unavailable";
+            /**
+             * Count
+             * @description exact일 때만 값이 있다
+             * @example 6
+             */
+            count: number | null;
+            /**
+             * Display
+             * @description 화면 표시 문구. masked는 `5건 미만`, unavailable은 `자료 없음`
+             * @example 6
+             */
+            display: string;
+        };
+        /**
          * DataBasis
          * @description 쓰지 않았거나 없는 자료는 null이다.
          */
@@ -827,6 +966,96 @@ export interface components {
             next_cursor: string | null;
         };
         /**
+         * DongStats
+         * @description 로그인한 사용자에게만 준다. 값이 없으면 null이고 `missing`에 필드 이름이 들어간다.
+         */
+        DongStats: {
+            /**
+             * Source Regions
+             * @description merged면 여러 개
+             */
+            source_regions: components["schemas"]["SourceRegion"][];
+            /**
+             * Relation
+             * @description split이면 분동 전 통합 값임을 화면에 표시한다
+             * @enum {string}
+             */
+            relation: "same" | "split" | "merged";
+            /**
+             * Quarter
+             * @description 점포·추정매출·유동인구 수집이 모두 성공한 가장 최근 분기
+             * @example 20262
+             */
+            quarter: string;
+            /**
+             * Population Quarter
+             * @description 유동인구 기준 분기. 중단되면 마지막 정상 분기
+             * @example 20262
+             */
+            population_quarter: string | null;
+            /**
+             * Population Reference Only
+             * @description 유동인구가 중단돼 마지막 정상 분기를 참고로만 보여 줄 때 true
+             */
+            population_reference_only: boolean;
+            /**
+             * Floating Population
+             * @example 100000
+             */
+            floating_population: number | null;
+            /**
+             * Population By Time
+             * @description 키: 00_06, 06_11, 11_14, 14_17, 17_21, 21_24
+             * @example {
+             *       "11_14": 18000
+             *     }
+             */
+            population_by_time: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Population By Age
+             * @description 키: 10, 20, 30, 40, 50, 60_plus
+             * @example {
+             *       "30": 20000
+             *     }
+             */
+            population_by_age: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Population Per Store
+             * @description 두 분기(quarter, population_quarter)가 다르면 null
+             * @example 420
+             */
+            population_per_store: number | null;
+            /**
+             * Avg Sales Per Store
+             * @description 분모는 프랜차이즈를 포함한 similar_store_count. 매출 단위 확인 전에는 null
+             */
+            avg_sales_per_store: number | null;
+            /**
+             * Sales Unit Verified
+             * @description 추정매출 금액 단위를 확인했는지
+             */
+            sales_unit_verified: boolean;
+            /**
+             * Open Rate
+             * @example 0.04
+             */
+            open_rate: number | null;
+            /**
+             * Close Rate
+             * @example 0.03
+             */
+            close_rate: number | null;
+            /**
+             * Franchise Ratio
+             * @example 0.2
+             */
+            franchise_ratio: number | null;
+        };
+        /**
          * EarlyTerminationValue
          * @description `early_termination`의 값. 모르는 항목은 null이다.
          */
@@ -928,6 +1157,28 @@ export interface components {
          * @enum {integer}
          */
         Radius: 150 | 300 | 500 | 1000;
+        /** RadiusStats */
+        RadiusStats: {
+            /**
+             * Radius M
+             * @example 500
+             */
+            radius_m: number;
+            /**
+             * Same Category Count
+             * @description 반경 안 같은 업종 영업 매장 수
+             * @example 24
+             */
+            same_category_count: number;
+            opened_1y: components["schemas"]["CountValue"];
+            closed_1y: components["schemas"]["CountValue"];
+            /**
+             * Base Date
+             * @description 인허가 자료 기준일. 최근 1년은 이 날을 포함해 거슬러 센다. 성공한 수집이 없으면 null
+             * @example 2026-11-22
+             */
+            base_date: string | null;
+        };
         /**
          * RegionResolveResponse
          * @description 서울 밖이면 supported는 false이고 나머지는 null이다.
@@ -964,6 +1215,45 @@ export interface components {
              */
             estimated_cost: number | null;
         };
+        /**
+         * SimulationCreateRequest
+         * @description `overrides`와 `exit`는 각각 선택이며 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다.
+         */
+        SimulationCreateRequest: {
+            overrides?: components["schemas"]["CostOverrides"] | null;
+            /** @description 없으면 `estimated_loss`는 null */
+            exit?: components["schemas"]["SimulationExit"] | null;
+        };
+        /**
+         * SimulationExit
+         * @description A13 종료 조건. 값이 없으면 A18에서만 확인한 계약값을 쓰고, 그것도 없으면 0과 가정 표시.
+         */
+        SimulationExit: {
+            /**
+             * Month
+             * @description 종료 시점(개업 후 개월)
+             * @example 12
+             */
+            month: number;
+            /**
+             * Obligation Months
+             * @description 종료 후 남은 의무 개월 수
+             * @example 3
+             */
+            obligation_months: number;
+            /**
+             * Restoration Cost
+             * @example 5000000
+             */
+            restoration_cost?: number | null;
+            /** Penalty Amount */
+            penalty_amount?: number | null;
+            /**
+             * Penalty Covers Remaining Rent
+             * @description true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을 표시
+             */
+            penalty_covers_remaining_rent?: boolean | null;
+        };
         /** SimulationResponse */
         SimulationResponse: {
             /**
@@ -993,6 +1283,20 @@ export interface components {
             estimated_loss: number | null;
             /** Assumptions */
             assumptions: string[];
+        };
+        /** SourceRegion */
+        SourceRegion: {
+            /**
+             * Code
+             * @description 상권 자료의 행정동 코드
+             * @example 11110515
+             */
+            code: string;
+            /**
+             * Name
+             * @example 청운효자동
+             */
+            name: string;
         };
         /** StoreItem */
         StoreItem: {
@@ -1738,6 +2042,80 @@ export interface operations {
             };
         };
     };
+    get_area_summary_api_v1_areas_summary_get: {
+        parameters: {
+            query: {
+                /** @description 중심 위도 (WGS84) */
+                lat: number;
+                /** @description 중심 경도 (WGS84) */
+                lng: number;
+                /** @description 업종 ID 1개 */
+                category: string;
+                /** @description 반경(m) */
+                radius?: components["schemas"]["Radius"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AreaSummaryResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_diagnoses_api_v1_diagnoses_get: {
         parameters: {
             query?: {
@@ -1885,6 +2263,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagnosisDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnosis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationResponse"];
                 };
             };
             /** @description Unauthorized */

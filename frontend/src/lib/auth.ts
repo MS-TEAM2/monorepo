@@ -74,9 +74,14 @@ export function takeVerifier({ storage = defaultStorage() }: { storage?: Session
 /** A26 GET /api/v1/auth/{provider}/start. 브라우저가 직접 연다 */
 export function loginStartUrl(
   provider: LoginProvider,
-  { baseUrl, codeChallenge, termsVersion }: { baseUrl: string; codeChallenge: string; termsVersion: string },
+  {
+    baseUrl,
+    codeChallenge,
+    termsVersion,
+    client = "web",
+  }: { baseUrl: string; codeChallenge: string; termsVersion: string; client?: "web" | "app" },
 ): string {
-  const params = new URLSearchParams({ client: "web", code_challenge: codeChallenge, terms_version: termsVersion });
+  const params = new URLSearchParams({ client, code_challenge: codeChallenge, terms_version: termsVersion });
   return `${baseUrl.replace(/\/+$/, "")}/api/v1/auth/${provider}/start?${params.toString()}`;
 }
 
@@ -91,6 +96,8 @@ export const LOGIN_ERRORS = [
   "terms_outdated",
   "invalid_request",
   "exchange_failed",
+  "browser_timeout",
+  "app_update_required",
 ] as const;
 export type LoginError = (typeof LOGIN_ERRORS)[number];
 
@@ -117,6 +124,11 @@ export const LOGIN_ERROR_COPY: Record<LoginError, { title: string; description: 
   exchange_failed: {
     title: "로그인을 마치지 못했어요",
     description: "네트워크 연결을 확인하고 다시 시도해 주세요.",
+  },
+  browser_timeout: { title: "로그인 시간이 초과됐어요", description: "연결을 확인하고 다시 로그인해 주세요." },
+  app_update_required: {
+    title: "앱 업데이트가 필요해요",
+    description: "시스템 브라우저 로그인을 지원하는 최신 앱으로 다시 시도해 주세요.",
   },
 };
 

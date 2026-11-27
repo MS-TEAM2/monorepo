@@ -71,6 +71,18 @@ describe("로그인 시작 주소 (A26)", () => {
     expect(url.origin + url.pathname).toBe("https://api.example.com/api/v1/auth/kakao/start");
     expect(Object.fromEntries(url.searchParams)).toEqual({ client: "web", code_challenge: "abc", terms_version: "v1" });
   });
+
+  it("앱 클라이언트는 client=app 을 붙인다", () => {
+    const url = new URL(
+      loginStartUrl("google", {
+        baseUrl: "https://api.example.com",
+        codeChallenge: "abc",
+        termsVersion: "v1",
+        client: "app",
+      }),
+    );
+    expect(url.searchParams.get("client")).toBe("app");
+  });
 });
 
 describe("콜백 주소 읽기 (A27)", () => {

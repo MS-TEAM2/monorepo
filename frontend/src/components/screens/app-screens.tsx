@@ -1,10 +1,11 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ContractView } from "@/components/screens/contract-view";
 import { DiagnosisInputView } from "@/components/screens/diagnosis-input-view";
+import { DiagnosisProgress, PROGRESS_STEP_MS } from "@/components/screens/diagnosis-progress";
 import { DiagnosisReportView } from "@/components/screens/diagnosis-report-view";
 import { EntryModal } from "@/components/screens/entry-modal";
 import { ExploreMapView } from "@/components/screens/explore-map-view";
@@ -12,6 +13,7 @@ import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
+import { calcLoss } from "@/lib/mock/startup/calc";
 import { loginRequiredHref } from "@/lib/return-to";
 import { useSessionStatus } from "@/lib/use-session";
 
@@ -67,12 +69,31 @@ export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boo
   );
 }
 
-/** S04 진단 입력 */
+/** S04 진단 입력. 진단하기를 누르면 진행 화면을 보여 준 뒤 결과로 이동한다. */
 export function DiagnosisInputScreen() {
   const go = useGoScreen();
   const s = useStartup();
+  const [isRunning, setIsRunning] = useState(false);
+  const runTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (runTimer.current !== null) window.clearTimeout(runTimer.current);
+    },
+    [],
+  );
+
+  // 지금은 예시 계산이라 바로 끝나므로 진행 단계를 다 보여 줄 만큼만 기다린다. 실제 API를 붙이면 응답을 기다린다.
+  const handleRun = () => {
+    if (isRunning) return;
+    setIsRunning(true);
+    s.runDiagnosis();
+    runTimer.current = window.setTimeout(() => go("report"), PROGRESS_STEP_MS * 4);
+  };
+
   return (
     <PageShell>
+      {isRunning && <DiagnosisProgress />}
       <DiagnosisInputView
         neighborhood={s.neighborhood}
         category={s.category}
@@ -86,11 +107,8 @@ export function DiagnosisInputScreen() {
         exampleConfirmed={s.exampleConfirmed}
         onToggleExampleConfirm={s.setExampleConfirmed}
         onBackToMap={() => go("map")}
-        onRunDiagnosis={() => {
-          s.runDiagnosis();
-          go("report");
-        }}
-        isRunning={false}
+        onRunDiagnosis={handleRun}
+        isRunning={isRunning}
       />
     </PageShell>
   );
@@ -100,11 +118,14 @@ export function DiagnosisInputScreen() {
 export function DiagnosisReportScreen() {
   const go = useGoScreen();
   const s = useStartup();
-  const { report, runDiagnosis } = s;
+  const { report, runDiagnosis, buildCostParams, sliderRentMan } = s;
 
   useEffect(() => {
     if (!report) runDiagnosis();
   }, [report, runDiagnosis]);
+
+  // 중도 종료 조건은 결과 화면에서 바꾸므로 손실만 지금 입력값으로 다시 계산한다. 생존확률은 그대로다.
+  const loss = useMemo(() => calcLoss(buildCostParams(sliderRentMan)), [buildCostParams, sliderRentMan]);
 
   return (
     <PageShell>
@@ -113,7 +134,10 @@ export function DiagnosisReportScreen() {
           neighborhood={s.neighborhood}
           category={s.category}
           radiusM={s.radiusM}
-          report={report}
+          report={{ ...report, loss }}
+          areaProvided={Number(s.formState.areaM2) > 0}
+          formState={s.formState}
+          onChangeForm={s.setFormState}
           sliderRentMan={s.sliderRentMan}
           initialRentMan={s.initialRentMan}
           onSliderRentChange={s.changeSliderRent}
