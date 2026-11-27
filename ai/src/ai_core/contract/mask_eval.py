@@ -11,6 +11,9 @@
     {"pages": [["줄", ...], ...], "pii": [{"kind": "name", "value": "...", ...}, ...], ...}
 kind 는 name·rrn·phone·address·account 가운데 하나다.
 
+Azure PII detection 을 더해 재려면 `--azure` 를 붙이고 AZURE_LANGUAGE_ENDPOINT 를 지정한다
+(az login 한 계정에 Cognitive Services User 역할 필요). 가상 계약서만 보낸다.
+
 실행: uv run python -m ai_core.contract.synth
       uv run python -m ai_core.contract.mask_eval ai/data/contracts/answers.jsonl \\
           [--out metrics.json]
@@ -18,7 +21,9 @@ kind 는 name·rrn·phone·address·account 가운데 하나다.
 """
 
 import argparse
+import asyncio
 import json
+import os
 import re
 import sys
 from collections.abc import Iterable, Sequence
@@ -26,7 +31,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ai_core.contract.masking import PII_KINDS, MaskingError, mask_pages
+from ai_core.contract.masking import (
+    PII_KINDS,
+    MaskedContract,
+    MaskingError,
+    mask_pages,
+    mask_pages_with_detector,
+)
+from ai_core.contract.pii_detect import ENDPOINT_ENV, PiiDetector
 
 
 @dataclass(frozen=True)
@@ -53,18 +65,44 @@ def _compact(value: str) -> str:
 
 
 def evaluate(cases: Iterable[EvalCase]) -> dict[str, Any]:
+    """규칙만으로 마스킹해 잰다."""
+    cases = list(cases)
+    return _score(cases, [_try(lambda case=case: mask_pages(case.pages)) for case in cases])
+
+
+async def evaluate_with_detector(
+    cases: Sequence[EvalCase], detector: PiiDetector
+) -> dict[str, Any]:
+    """규칙에 탐지기 결과를 더해 마스킹해 잰다. 계약서는 하나씩 차례로 보낸다 (무료 등급 한도)."""
+    results: list[MaskedContract | MaskingError] = []
+    for case in cases:
+        try:
+            results.append(await mask_pages_with_detector(case.pages, detector))
+        except MaskingError as error:
+            results.append(error)
+    return _score(cases, results)
+
+
+def _try(mask: Any) -> MaskedContract | MaskingError:
+    try:
+        return mask()
+    except MaskingError as error:
+        return error
+
+
+def _score(
+    cases: Sequence[EvalCase], results: Sequence[MaskedContract | MaskingError]
+) -> dict[str, Any]:
     totals = dict.fromkeys(PII_KINDS, 0)
     missed = dict.fromkeys(PII_KINDS, 0)
     documents = 0
     stopped: dict[str, int] = {}
-    for case in cases:
+    for case, masked in zip(cases, results, strict=True):
         documents += 1
         for item in case.pii:
             item.validate()
-        try:
-            masked = mask_pages(case.pages)
-        except MaskingError as error:
-            stopped[error.code] = stopped.get(error.code, 0) + 1
+        if isinstance(masked, MaskingError):
+            stopped[masked.code] = stopped.get(masked.code, 0) + 1
             continue
         text = _compact("".join(line for page in masked.pages for line in page.lines))
         for item in case.pii:
@@ -122,13 +160,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="개인정보 마스킹 누락률 평가")
     parser.add_argument("input", type=Path, help="JSON Lines 평가 데이터 (레포 밖 또는 ai/data/)")
     parser.add_argument("--out", type=Path, help="지표를 저장할 metrics.json 경로")
+    parser.add_argument(
+        "--azure",
+        action="store_true",
+        help=f"Azure PII detection 결과를 더한다. 엔드포인트는 {ENDPOINT_ENV} 환경 변수",
+    )
     args = parser.parse_args(argv)
 
     cases = load_cases(args.input)
     if not cases:
         print("평가할 계약서가 없습니다", file=sys.stderr)
         return 2
-    metrics = evaluate(cases)
+    if args.azure:
+        endpoint = os.environ.get(ENDPOINT_ENV)
+        if not endpoint:
+            print(f"{ENDPOINT_ENV} 환경 변수가 없습니다", file=sys.stderr)
+            return 2
+        metrics = asyncio.run(_evaluate_azure(cases, endpoint))
+    else:
+        metrics = evaluate(cases)
     report = json.dumps(metrics, ensure_ascii=False, indent=2)
     print(report)
     if args.out is not None:
@@ -137,6 +187,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"마스킹 누락 {metrics['missed']}건: 실패", file=sys.stderr)
         return 1
     return 0
+
+
+async def _evaluate_azure(cases: Sequence[EvalCase], endpoint: str) -> dict[str, Any]:
+    from azure.identity.aio import DefaultAzureCredential
+
+    from ai_core.contract.pii_detect import AzurePiiDetector
+
+    async with DefaultAzureCredential() as credential:
+        async with AzurePiiDetector(endpoint, credential) as detector:
+            return await evaluate_with_detector(cases, detector)
 
 
 if __name__ == "__main__":
