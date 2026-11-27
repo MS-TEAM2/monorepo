@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, FileText, RotateCcw, Sparkles } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { formatConditionValue } from "./formatters";
+import { buildContractApplyRequest, initialExitInputs, saveExitInputs } from "./calculations";
 import { sampleConditions, sampleContractText } from "./sample-data";
-import type { ContractCondition, ContractConditionId } from "./types";
+import type { ContractCondition, ContractConditionId, ExitInputs } from "./types";
 
 function ConditionCard({
   condition,
@@ -135,10 +137,47 @@ export function ContractTermsStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const [exitInputs, setExitInputs] = useState<ExitInputs>(initialExitInputs);
+  const [exitError, setExitError] = useState("");
   const confirmedCount = sampleConditions.filter(
     (condition) => confirmed[condition.id] && values[condition.id].trim(),
   ).length;
   const lowConfidenceCount = sampleConditions.filter((condition) => condition.confidence < 0.7).length;
+
+  const resetAll = () => {
+    setExitInputs(initialExitInputs);
+    setExitError("");
+    saveExitInputs(initialExitInputs);
+    onReset();
+  };
+
+  const updateOverlap = (value: string) => {
+    if (value === "true" || value === "false" || value === "unknown") {
+      setExitInputs((current) => ({ ...current, penaltyCoversRemainingRent: value }));
+    }
+  };
+
+  const continueToResult = () => {
+    const month = Number(exitInputs.month);
+    const obligation = Number(exitInputs.obligationMonths);
+    if (!Number.isInteger(month) || month < 1 || month > 120) {
+      setExitError("종료 시점은 1~120개월로 입력해 주세요.");
+      return;
+    }
+    if (!Number.isInteger(obligation) || obligation < 0 || obligation > 120) {
+      setExitError("남은 의무 개월은 0~120개월로 입력해 주세요.");
+      return;
+    }
+    try {
+      buildContractApplyRequest(exitInputs, {});
+    } catch (error) {
+      setExitError(error instanceof Error ? error.message : "종료 조건을 확인해 주세요.");
+      return;
+    }
+    setExitError("");
+    saveExitInputs(exitInputs);
+    onContinue();
+  };
 
   return (
     <div className="space-y-5 pb-40">
@@ -153,7 +192,7 @@ export function ContractTermsStep({
                 확인 완료 {confirmedCount} / {sampleConditions.length}
               </p>
             </div>
-            <Button type="button" variant="ghost" className="min-h-11" onClick={onReset}>
+            <Button type="button" variant="ghost" className="min-h-11" onClick={resetAll}>
               <RotateCcw className="size-4" aria-hidden="true" /> 예시 초기화
             </Button>
           </div>
@@ -178,6 +217,88 @@ export function ContractTermsStep({
               onToggleConfirmation={() => onToggleConfirmation(condition.id)}
             />
           ))}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">종료 조건 입력</CardTitle>
+              <CardDescription>직접 입력한 종료 값이 확인한 계약 조건보다 우선합니다.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-semibold" htmlFor="exit-month">
+                종료 시점 (개업 후 개월)
+                <Input
+                  id="exit-month"
+                  type="number"
+                  min={1}
+                  max={120}
+                  inputMode="numeric"
+                  className="h-11 text-base"
+                  value={exitInputs.month}
+                  onChange={(event) => setExitInputs((current) => ({ ...current, month: event.target.value }))}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-semibold" htmlFor="exit-obligation-months">
+                종료 후 남은 의무 개월
+                <Input
+                  id="exit-obligation-months"
+                  type="number"
+                  min={0}
+                  max={120}
+                  inputMode="numeric"
+                  className="h-11 text-base"
+                  value={exitInputs.obligationMonths}
+                  onChange={(event) =>
+                    setExitInputs((current) => ({ ...current, obligationMonths: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-semibold" htmlFor="exit-restoration-cost">
+                원상복구비 직접 입력 (원, 선택)
+                <Input
+                  id="exit-restoration-cost"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  className="h-11 text-base"
+                  value={exitInputs.restorationCost}
+                  onChange={(event) =>
+                    setExitInputs((current) => ({ ...current, restorationCost: event.target.value }))
+                  }
+                  placeholder="비우면 확인한 계약값 사용"
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-semibold" htmlFor="exit-penalty-amount">
+                위약금 직접 입력 (원, 선택)
+                <Input
+                  id="exit-penalty-amount"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  className="h-11 text-base"
+                  value={exitInputs.penaltyAmount}
+                  onChange={(event) => setExitInputs((current) => ({ ...current, penaltyAmount: event.target.value }))}
+                  placeholder="비우면 확인한 계약값 사용"
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-semibold sm:col-span-2" htmlFor="exit-penalty-overlap">
+                위약금에 남은 월세·관리비 포함 여부
+                <Select value={exitInputs.penaltyCoversRemainingRent} onValueChange={updateOverlap}>
+                  <SelectTrigger id="exit-penalty-overlap" className="h-11 bg-card text-base">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unknown">모름 · 큰 값만 반영하고 확인 필요 표시</SelectItem>
+                    <SelectItem value="true">포함 · 둘 중 큰 값만 반영</SelectItem>
+                    <SelectItem value="false">미포함 · 각각 반영</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+              {exitError ? (
+                <p role="alert" className="text-sm font-semibold text-destructive sm:col-span-2">
+                  {exitError}
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-6">
@@ -252,7 +373,12 @@ export function ContractTermsStep({
             <p className="text-center text-xs text-muted-foreground sm:text-right">
               확인한 항목 {confirmedCount}개만 요약에 표시됩니다.
             </p>
-            <Button type="button" className="min-h-11 sm:min-w-48" onClick={onContinue} disabled={confirmedCount === 0}>
+            <Button
+              type="button"
+              className="min-h-11 sm:min-w-48"
+              onClick={continueToResult}
+              disabled={confirmedCount === 0}
+            >
               확인 요약 보기 <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </div>

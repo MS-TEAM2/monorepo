@@ -21,3 +21,11 @@ export type ContractRisk = {
   reviewPoint: string;
   question: string;
 };
+
+export type ExitInputs = {
+  month: string;
+  obligationMonths: string;
+  restorationCost: string;
+  penaltyAmount: string;
+  penaltyCoversRemainingRent: "true" | "false" | "unknown";
+};
