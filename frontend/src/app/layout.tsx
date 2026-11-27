@@ -9,7 +9,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { SiteHeader } from "@/components/ui/site-header";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/navigation";
+import { HEADER_NAV_ITEMS } from "@/lib/navigation";
 import "./globals.css";
 
 const pretendard = localFont({
@@ -42,7 +42,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <TooltipProvider delayDuration={200}>
           <StartupProvider>
             <LoginRequiredProvider>
-              <SiteHeader navigation={NAV_ITEMS} />
+              <SiteHeader navigation={HEADER_NAV_ITEMS} />
               <div className={cn("flex flex-1 flex-col", BOTTOM_TAB_BAR_SPACE)}>
                 <AuthGuard>{children}</AuthGuard>
               </div>

@@ -35,7 +35,7 @@ export function SiteHeader({ navigation = [] }: SiteHeaderProps) {
               <NavLinks items={navigation} />
             </nav>
           )}
-          {/* 데이터·한계 옆(모바일은 오른쪽 끝)에 로그인·계정 메뉴 (SCRUM-193) */}
+          {/* 메뉴 오른쪽 끝(모바일은 헤더 오른쪽 끝)에 로그인·계정 메뉴 (SCRUM-193) */}
           <HeaderAccount />
         </div>
       </div>
