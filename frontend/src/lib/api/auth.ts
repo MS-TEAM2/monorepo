@@ -26,7 +26,7 @@ export const issueToken = (body: TokenRequest) =>
  * 로그인을 시작할 주소를 만든다. verifier 를 이 탭에 보관하고 challenge 를 보낸다.
  * 예시 모드에서는 공급자로 갈 수 없으므로 콜백 화면으로 바로 간다. 저장소를 못 쓰면 null.
  */
-export async function prepareLogin(provider: LoginProvider): Promise<string | null> {
+export async function prepareLogin(provider: LoginProvider, client: "web" | "app" = "web"): Promise<string | null> {
   const verifier = createCodeVerifier();
   if (!storeVerifier(verifier)) return null;
   if (isMockMode()) return `/auth/callback?${new URLSearchParams({ code: MOCK_LOGIN_CODE }).toString()}`;
@@ -34,6 +34,7 @@ export async function prepareLogin(provider: LoginProvider): Promise<string | nu
     baseUrl: apiBaseUrl(),
     codeChallenge: await codeChallengeFor(verifier),
     termsVersion: TERMS_VERSION,
+    client,
   });
 }
 

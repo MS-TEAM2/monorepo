@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CircleAlert } from "lucide-react";
 import { useId, useState, useSyncExternalStore } from "react";
 
@@ -9,9 +10,18 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { prepareLogin } from "@/lib/api/auth";
+import { completeLogin } from "@/lib/api/auth";
 import { isMockMode } from "@/lib/api/mock";
-import { LOGIN_ERROR_COPY, parseLoginError, type LoginError, type LoginProvider } from "@/lib/auth";
-import { hasAgreedTerms, PRIVACY_HREF, rememberTermsAgreement, TERMS_HREF, TERMS_VERSION } from "@/lib/terms";
+import { getAppInfo, isInApp, callApp } from "@/lib/bridge";
+import { LOGIN_ERROR_COPY, parseCallbackQuery, parseLoginError, type LoginError, type LoginProvider } from "@/lib/auth";
+import {
+  forgetTermsAgreement,
+  hasAgreedTerms,
+  PRIVACY_HREF,
+  rememberTermsAgreement,
+  TERMS_HREF,
+  TERMS_VERSION,
+} from "@/lib/terms";
 
 const noSubscribe = () => () => {};
 
@@ -19,6 +29,7 @@ const PROVIDER_LABEL: Record<LoginProvider, string> = { google: "구글로 계�
 
 /** S13 로그인. 약관 동의와 만 14세 이상 확인 뒤 구글·카카오 로그인을 시작한다 (스펙 R1·R4·R8) */
 export function LoginView() {
+  const router = useRouter();
   const termsId = useId();
   const ageId = useId();
   const [agreed, setAgreed] = useState(false);
@@ -49,13 +60,56 @@ export function LoginView() {
     setPending(provider);
     setLocalError(null);
     setDismissed(true);
-    const url = await prepareLogin(provider);
+    const inApp = isInApp();
+    if (inApp && (getAppInfo()?.bridgeVersion ?? 0) < 2) {
+      setPending(null);
+      setLocalError("app_update_required");
+      return;
+    }
+    const url = await prepareLogin(provider, inApp ? "app" : "web");
     if (!url) {
       setPending(null);
       setLocalError("invalid_request");
       return;
     }
-    window.location.assign(url);
+    if (!inApp || isMockMode()) {
+      window.location.assign(url);
+      return;
+    }
+
+    try {
+      const result = await callApp(
+        "openAuthSession",
+        { url, returnUrl: "axservice://auth/callback", timeoutMs: 180_000 },
+        { timeoutMs: 180_000 },
+      );
+      if (result.type !== "success") {
+        setLocalError(result.type === "timeout" ? "browser_timeout" : "cancelled");
+        setPending(null);
+        return;
+      }
+
+      const callback = new URL(result.url);
+      if (`${callback.protocol}//${callback.host}${callback.pathname}` !== "axservice://auth/callback") {
+        throw new Error("허용하지 않는 로그인 복귀 주소입니다.");
+      }
+      const callbackResult = parseCallbackQuery(callback.searchParams);
+      if (callbackResult.kind === "error") {
+        if (callbackResult.error === "terms_outdated") forgetTermsAgreement();
+        setLocalError(callbackResult.error);
+        setPending(null);
+        return;
+      }
+      const outcome = await completeLogin(callbackResult.code);
+      if (outcome.ok) router.replace("/");
+      else {
+        setLocalError(outcome.error);
+        setPending(null);
+      }
+    } catch {
+      setLocalError("exchange_failed");
+      setPending(null);
+    }
   }
 
   const copy = error ? LOGIN_ERROR_COPY[error] : null;
