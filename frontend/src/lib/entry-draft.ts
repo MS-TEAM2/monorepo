@@ -46,3 +46,14 @@ export function mapLayers(input: { applied: boolean; analyzed: boolean }): MapLa
     summary: input.applied && input.analyzed,
   };
 }
+
+export type PanelAction = "auto-apply" | "apply" | "analyze";
+
+/**
+ * 조건을 반영한 뒤 시작 선택 패널을 접을지 (SCRUM-207).
+ * 처음 세 항목을 다 골라 자동 적용하거나 `분석하기`를 누르면 접어 지도·분석 결과를 가리지 않게 한다.
+ * `적용`은 조건을 이어서 바꾸는 중일 수 있어 펼친 채로 둔다.
+ */
+export function collapsesPanel(action: PanelAction): boolean {
+  return action !== "apply";
+}
