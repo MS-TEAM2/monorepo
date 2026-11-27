@@ -1,4 +1,4 @@
-import { CATEGORY_IDS, type CategoryId } from "@/lib/routes";
+import { CATEGORY_IDS, isCategoryId, type CategoryId, type QueryInput } from "@/lib/routes";
 
 /** 반경 4종과 기본값 (Notion 기획서 1장, specs/area-map R3) */
 export const RADIUS_OPTIONS = [150, 300, 500, 1000] as const;
@@ -13,6 +13,60 @@ export type ExploreCenter = { lat: number; lng: number; address: string };
 
 /** 처음 여는 위치. 실제 기본 위치는 정해지지 않아 광화문 근처 예시 주소를 쓴다 */
 export const DEFAULT_CENTER: ExploreCenter = { lat: 37.5717, lng: 126.9768, address: "서울 종로구 세종대로 172" };
+
+export function isRadius(value: number): value is RadiusM {
+  return (RADIUS_OPTIONS as readonly number[]).includes(value);
+}
+
+/**
+ * 탐색 선택값(위치·반경·업종). 로그인하러 갔다 돌아올 때 주소 쿼리로 되살린다 (specs/social-login R4).
+ * 정적 내보내기라 쿼리 문자열로 넘긴다(routes.ts 와 같은 방식).
+ */
+export type ExploreSelection = {
+  center: ExploreCenter;
+  radius: RadiusM;
+  categories: CategoryId[];
+  /** 상권 요약(A07)에서 고른 업종 1개. 없으면 화면이 다시 고르게 한다 */
+  summaryCategory?: CategoryId | null;
+};
+
+const ADDRESS_MAX_LENGTH = 200;
+
+export function exploreHref(selection?: ExploreSelection): string {
+  if (!selection) return "/explore";
+  const params = new URLSearchParams({
+    lat: String(selection.center.lat),
+    lng: String(selection.center.lng),
+    address: selection.center.address.trim(),
+    radius: String(selection.radius),
+  });
+  if (selection.categories.length > 0) params.set("categories", selection.categories.join(","));
+  if (selection.summaryCategory) params.set("summary", selection.summaryCategory);
+  return `/explore?${params.toString()}`;
+}
+
+/** 값이 없거나 하나라도 틀리면 null. 화면은 기본값으로 시작한다 */
+export function parseExploreQuery(query: QueryInput): ExploreSelection | null {
+  const num = (key: string) => {
+    const raw = query.get(key)?.trim() ?? "";
+    return raw === "" ? NaN : Number(raw);
+  };
+  const lat = num("lat");
+  const lng = num("lng");
+  const radius = num("radius");
+  const address = query.get("address")?.trim() ?? "";
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  if (!isRadius(radius) || address === "" || address.length > ADDRESS_MAX_LENGTH) return null;
+  const rawCategories = query.get("categories")?.split(",").filter(Boolean) ?? [];
+  if (!rawCategories.every((id) => isCategoryId(id))) return null;
+  const selected = new Set<string>(rawCategories);
+  const categories = CATEGORY_IDS.filter((id) => selected.has(id));
+  // 요약 업종은 고른 업종 안에 있어야 한다(고르지 않았으면 9종 중 아무거나). 틀리면 버리고 다시 고르게 한다
+  const summary = query.get("summary");
+  const summaryCategory =
+    isCategoryId(summary) && (categories.length === 0 || categories.includes(summary)) ? summary : null;
+  return { center: { lat, lng, address }, radius, categories, summaryCategory };
+}
 
 /** 업종 칩을 누르면 넣고 빼기. 순서는 9종 순서로 맞춘다 */
 export function toggleCategory(selected: readonly CategoryId[], id: CategoryId): CategoryId[] {

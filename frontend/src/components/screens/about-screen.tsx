@@ -1,16 +1,46 @@
 "use client";
 
-import { Trash } from "lucide-react";
-import { useState } from "react";
+import type { ReactNode } from "react";
 
+import { DataStatusList, ModelStatus, useDataStatus } from "@/components/about-data/about-data-view";
+import { AccountSection } from "@/components/about-data/account-section";
+import { DeleteMyData } from "@/components/about-data/delete-my-data";
+import { ErrorNotice } from "@/components/feedback/error-notice";
+import { SampleDataBadge } from "@/components/feedback/sample-data";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
+import { Skeleton } from "@/components/ui/skeleton";
+import { isMockMode } from "@/lib/api/mock";
+import { FORMULAS, LIMITATIONS, PRIVACY_NOTES } from "@/lib/data-status";
 
-/** S11 데이터·한계 화면 시안 */
+function Card({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-3">
+      <h3 id={id} className="text-base font-extrabold text-foreground">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function BulletList({ items }: { items: readonly string[] }) {
+  return (
+    <ul className="list-disc pl-4 space-y-1 text-xs text-foreground">
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * S11 데이터·한계 (Notion 기획서 S11, specs/data-ingest R5). 화면 시안(SCRUM-191)의 카드에 기능을 붙였다.
+ * 로그인 전에도 읽을 수 있고, 로그인하면 로그아웃·내 데이터 모두 삭제·회원 탈퇴가 함께 보인다.
+ */
 export function AboutScreen() {
   const { resetAll } = useStartup();
-  const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState("");
+  const { state, reload } = useDataStatus();
 
   return (
     <PageShell>
@@ -20,75 +50,55 @@ export function AboutScreen() {
             S11 · 데이터 출처 및 한계
           </span>
           <h2 className="text-lg font-extrabold text-foreground">사용 데이터 · 계산식 · 주의사항</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-line text-left text-muted-foreground">
-                  <th className="py-2 pr-3">데이터</th>
-                  <th className="py-2 px-3">활용 화면</th>
-                  <th className="py-2 pl-3">기준 / 한계</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-muted text-foreground">
-                <tr>
-                  <td className="py-2.5 pr-3 font-bold">서울시 음식점 인허가</td>
-                  <td className="py-2.5 px-3">지도 매장, 반경 집계, 생존 라벨</td>
-                  <td className="py-2.5 pl-3 text-ink-500">인허가 폐업 기준 (명의변경·이전과 실제 폐업 차이 존재)</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-3 font-bold">서울시 상권분석 (2026Q2)</td>
-                  <td className="py-2.5 px-3">행정동 추정매출·유동인구·개폐업률</td>
-                  <td className="py-2.5 pl-3 text-ink-500">행정동 단위 집계 — 반경 인허가와 단일 점수로 합산 불가</td>
-                </tr>
-                <tr>
-                  <td className="py-2.5 pr-3 font-bold">임대차 계약서 OCR + AI</td>
-                  <td className="py-2.5 px-3">S06~S08 조건 추출 및 특약 점검</td>
-                  <td className="py-2.5 pl-3 text-ink-500">법률 자문 아님, 원본은 처리 종료 즉시 삭제</td>
-                </tr>
-              </tbody>
-            </table>
+          {isMockMode() && <SampleDataBadge />}
+          <div aria-live="polite" aria-busy={state.kind === "loading"}>
+            {state.kind === "error" ? (
+              <ErrorNotice kind={state.error} context="수집 상태를 불러오지 못했어요." onRetry={reload} />
+            ) : state.kind === "ready" ? (
+              <DataStatusList status={state.status} />
+            ) : (
+              <div className="space-y-2">
+                {[0, 1, 2].map((key) => (
+                  <Skeleton key={key} className="h-10 rounded-xl" />
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <div className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-3">
-          <h3 className="text-base font-extrabold text-foreground">세션 데이터 초기화</h3>
-          <p className="text-xs text-ink-500">
-            로그인 없이 현재 브라우저 세션에서만 동작합니다. 입력한 진단 값과 계약서 검토 내역을 즉시 비울 수 있습니다.
-          </p>
-          {confirming ? (
-            <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-destructive-soft border border-destructive-line">
-              <span className="text-xs font-bold text-destructive-700">
-                모든 입력과 계약서 검토 내역을 초기화할까요?
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  resetAll();
-                  setConfirming(false);
-                  setMessage("현재 세션의 모든 데이터를 초기화했습니다.");
-                }}
-                className="px-3 py-1.5 rounded-lg bg-destructive text-white text-xs font-bold"
-              >
-                예, 초기화
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                className="px-3 py-1.5 rounded-lg bg-white border border-line-strong text-xs font-bold text-ink-600"
-              >
-                취소
-              </button>
-            </div>
+
+        <Card id="model-status" title="생존모델 검증 결과">
+          {state.kind === "ready" ? (
+            <ModelStatus model={state.status.model} />
           ) : (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-destructive-line bg-destructive-soft text-xs font-extrabold text-destructive"
-            >
-              <Trash className="w-3.5 h-3.5" aria-hidden="true" />내 입력·계약서 데이터 모두 지우기
-            </button>
+            <Skeleton className="h-10 rounded-xl" />
           )}
-          {message && <p className="text-xs font-bold text-success-500">{message}</p>}
-        </div>
+        </Card>
+
+        <Card id="formulas" title="계산 방법">
+          <div className="space-y-2">
+            {FORMULAS.map((formula) => (
+              <div key={formula.title} className="p-3 rounded-xl bg-secondary border border-border space-y-1">
+                <p className="text-xs font-bold text-foreground">{formula.title}</p>
+                {formula.lines.map((line) => (
+                  <p key={line} className="text-xs text-ink-500 break-keep">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card id="limitations" title="한계">
+          <BulletList items={LIMITATIONS} />
+        </Card>
+
+        <Card id="privacy" title="개인정보 처리">
+          <BulletList items={PRIVACY_NOTES} />
+        </Card>
+
+        <AccountSection onCleared={resetAll} />
+        <DeleteMyData onCleared={resetAll} />
       </div>
     </PageShell>
   );

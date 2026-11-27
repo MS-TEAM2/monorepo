@@ -137,6 +137,19 @@ describe("오류 구분", () => {
     off();
   });
 
+  it("redirectOnUnauthorized: false 면 토큰만 지우고 로그인으로 보내지 않는다", async () => {
+    session.token = "tok";
+    const handler = vi.fn();
+    const off = onUnauthorized(handler);
+    respond(401);
+    expect(await kindOf(apiRequest("/api/v1/auth/logout", { method: "POST", redirectOnUnauthorized: false }))).toBe(
+      "unauthorized",
+    );
+    expect(session.cleared).toBe(1);
+    expect(handler).not.toHaveBeenCalled();
+    off();
+  });
+
   it("다른 오류에서는 토큰을 지우지 않는다", async () => {
     session.token = "tok";
     respond(500);

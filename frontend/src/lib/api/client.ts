@@ -40,6 +40,11 @@ export type RequestOptions = {
   query?: Record<string, string | number | boolean | readonly (string | number)[] | null | undefined>;
   body?: unknown;
   signal?: AbortSignal;
+  /**
+   * 401 이면 토큰은 항상 지운다. false 면 로그인 화면으로 보내지 않는다(onUnauthorized 를 부르지 않는다).
+   * 공개 화면의 계정 영역(A28)과 로그아웃·탈퇴(A29·A30)처럼 401 이 "이미 로그아웃됨"인 경우에 쓴다.
+   */
+  redirectOnUnauthorized?: boolean;
 };
 
 function toSearchParams(query: RequestOptions["query"]): URLSearchParams {
@@ -64,9 +69,9 @@ async function readErrorCode(response: Response): Promise<string | null> {
   }
 }
 
-function handleUnauthorized(): void {
+function handleUnauthorized(redirect = true): void {
   clearSession();
-  unauthorizedHandler?.();
+  if (redirect) unauthorizedHandler?.();
 }
 
 async function fromMock<T>(
@@ -75,6 +80,7 @@ async function fromMock<T>(
   query: URLSearchParams,
   body: unknown,
   token: string | null,
+  redirect: boolean,
 ): Promise<T | undefined> {
   const handler = isMockMode() ? findMock(method, path) : null;
   if (!handler) return undefined;
@@ -82,7 +88,7 @@ async function fromMock<T>(
   try {
     return handler({ method, path, query, body, authenticated: token !== null }) as T;
   } catch (error) {
-    if (error instanceof ApiError && error.kind === "unauthorized") handleUnauthorized();
+    if (error instanceof ApiError && error.kind === "unauthorized") handleUnauthorized(redirect);
     throw error;
   }
 }
@@ -99,7 +105,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const query = toSearchParams(options.query);
   const token = getSessionToken();
 
-  const mocked = await fromMock<T>(method, path, query, options.body, token);
+  const redirect = options.redirectOnUnauthorized ?? true;
+  const mocked = await fromMock<T>(method, path, query, options.body, token, redirect);
   if (mocked !== undefined) return mocked;
 
   const search = query.toString();
@@ -125,7 +132,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!response.ok) {
     const kind = errorKindFromStatus(response.status);
-    if (kind === "unauthorized") handleUnauthorized();
+    if (kind === "unauthorized") handleUnauthorized(redirect);
     throw new ApiError(kind, response.status, await readErrorCode(response));
   }
   if (response.status === 204) return undefined as T;

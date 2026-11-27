@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { ContractView } from "@/components/screens/contract-view";
@@ -11,12 +12,17 @@ import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
+import { loginRequiredHref } from "@/lib/return-to";
+import { useSessionStatus } from "@/lib/use-session";
 
 /** S02·S03 상권 지도. 홈(/)에서는 시작 선택 창을 열어 둔 채로 보여 준다. */
 export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boolean }) {
   const go = useGoScreen();
+  const router = useRouter();
+  const pathname = usePathname();
   const s = useStartup();
   const { setEntryModalOpen } = s;
+  const session = useSessionStatus();
 
   useEffect(() => {
     setEntryModalOpen(withEntryModal);
@@ -38,6 +44,9 @@ export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boo
         onOpenModal={() => s.setEntryModalOpen(true)}
         onGoDiagnose={() => go("diagnose")}
         onGoContract={() => go("contract")}
+        dongLocked={session !== "logged_in"}
+        // 선택값은 StartupProvider 가 탭 저장소에 두므로 지금 화면 주소만 기억하면 된다
+        onLogin={() => router.push(loginRequiredHref(pathname))}
       />
       <EntryModal
         open={s.entryModalOpen}

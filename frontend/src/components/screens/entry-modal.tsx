@@ -109,7 +109,7 @@ export function EntryModal({
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-[13px] font-bold mb-1.5">
               <span>서울 외식 9종</span>
               <span>·</span>
-              <span>로그인 없음</span>
+              <span>탐색은 로그인 없이</span>
             </div>
             <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
               계약서 도장 찍기 전, 어디서 시작할까요?

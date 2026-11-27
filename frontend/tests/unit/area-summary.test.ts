@@ -9,9 +9,9 @@ import { parseDiagnoseQuery } from "@/lib/routes";
 
 const CENTER = { lat: 37.5571, lng: 126.9245, address: "서울 마포구 양화로 160" };
 
-function render(authenticated: boolean): string {
+function render(authenticated: boolean, onLogin?: () => void): string {
   const summary = sampleAreaSummary(CENTER.lat, CENTER.lng, 500, "cafe", authenticated);
-  return renderToStaticMarkup(createElement(AreaSummaryCards, { summary, category: "cafe", center: CENTER }));
+  return renderToStaticMarkup(createElement(AreaSummaryCards, { summary, category: "cafe", center: CENTER, onLogin }));
 }
 
 describe("표시 형식", () => {
@@ -69,6 +69,20 @@ describe("요약 카드", () => {
     const markup = render(false);
     expect(markup).toContain("로그인하면 볼 수 있어요");
     expect(markup).not.toContain("일평균 유동인구");
+  });
+
+  it("로그인 전에는 반경 지표와 로그인 버튼만 보이고 행정동 수치는 없다 (SCRUM-176)", () => {
+    const markup = render(false, () => {});
+    expect(markup).toContain("같은 업종 매장");
+    expect(markup).toContain("로그인하고 보기");
+    expect(markup).not.toContain("점포당 평균 추정매출");
+    expect(markup).not.toContain("시간대별 유동인구");
+  });
+
+  it("로그인 후에는 로그인 버튼이 없다", () => {
+    const markup = render(true, () => {});
+    expect(markup).not.toContain("로그인하고 보기");
+    expect(markup).toContain("일평균 유동인구");
   });
 
   it("로그인 후에는 행정동 지표와 기준 분기, 매출 단위 확인 중을 보여 준다", () => {
