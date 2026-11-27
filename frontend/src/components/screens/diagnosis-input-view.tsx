@@ -141,29 +141,28 @@ export function DiagnosisInputView({
                   optional
                   unit="㎡"
                   increments={INC.area}
+                  presets={[areaMin, Math.round((areaMin + areaMax) / 2), areaMax].map((value) => ({
+                    value,
+                    label: `${value}㎡ · ${Math.round(value / 3.3058)}평`,
+                  }))}
                   max={1000}
                   value={formState.areaM2}
                   onChange={(value) => updateField("areaM2", value)}
                   placeholder={`예: ${Math.round((areaMin + areaMax) / 2)}`}
-                  hint={
+                  note={
+                    areaPyeong && (
+                      <>
+                        <strong className="font-bold text-brand">약 {areaPyeong}평</strong>. 면적을 넣으면 1년
+                        생존확률에 위치 조건을 반영해요.
+                      </>
+                    )
+                  }
+                  description={
                     areaPyeong
-                      ? `약 ${areaPyeong}평. 면적을 넣으면 1년 생존확률에 위치 조건을 반영해요.`
+                      ? undefined
                       : `${category.label} 추천 ${areaMin}~${areaMax}㎡. 비워 두면 1년도 서울 같은 업종 기준으로 계산해요. ${areaNote}`
                   }
-                >
-                  <div className="mt-2 flex flex-wrap justify-end gap-2">
-                    {[areaMin, Math.round((areaMin + areaMax) / 2), areaMax].map((value) => (
-                      <button
-                        type="button"
-                        key={value}
-                        onClick={() => updateField("areaM2", String(value))}
-                        className="min-h-11 rounded-xl border border-input bg-card px-3 text-sm font-bold text-ink-600 hover:border-brand-light"
-                      >
-                        {value}㎡ ({Math.round(value / 3.3058)}평)
-                      </button>
-                    ))}
-                  </div>
-                </NumberField>
+                />
               </div>
             )}
 
@@ -188,17 +187,18 @@ export function DiagnosisInputView({
                     value={formState.rentMan}
                     onChange={(value) => updateField("rentMan", value)}
                     error={formState.rentMan !== "" && rentInvalid ? "월세는 1만원 이상으로 적어 주세요." : undefined}
-                  >
-                    <label className="mt-2 inline-flex min-h-11 cursor-pointer items-center gap-2 select-none">
-                      <input
-                        type="checkbox"
-                        checked={formState.rentVatSeparate}
-                        onChange={(e) => updateField("rentVatSeparate", e.target.checked)}
-                        className="size-5 accent-brand"
-                      />
-                      <span className="text-sm text-ink-600">부가세(10%) 별도</span>
-                    </label>
-                  </NumberField>
+                    labelAside={
+                      <label className="-my-2 inline-flex min-h-11 cursor-pointer items-center gap-1.5 select-none">
+                        <input
+                          type="checkbox"
+                          checked={formState.rentVatSeparate}
+                          onChange={(e) => updateField("rentVatSeparate", e.target.checked)}
+                          className="size-4 accent-brand"
+                        />
+                        <span className="text-xs text-ink-600">부가세(10%) 별도</span>
+                      </label>
+                    }
+                  />
                   <NumberField
                     label="월 관리비"
                     optional
@@ -216,7 +216,7 @@ export function DiagnosisInputView({
                     increments={INC.largeMan}
                     value={formState.depositMan}
                     onChange={(value) => updateField("depositMan", value)}
-                    hint="손익 계산에는 쓰지 않고, 돌려받는다고 가정해요."
+                    description="손익 계산에는 쓰지 않고, 돌려받는다고 가정해요."
                   />
                 </>
               )}
@@ -238,7 +238,7 @@ export function DiagnosisInputView({
                     increments={INC.monthlyMan}
                     value={formState.otherFixedMan}
                     onChange={(value) => updateField("otherFixedMan", value)}
-                    hint="통신비, 보험료, 소모품처럼 매달 나가는 돈이에요."
+                    description="통신비, 보험료, 소모품처럼 매달 나가는 돈이에요."
                   />
                   <NumberField
                     label="변동비율"
@@ -249,7 +249,7 @@ export function DiagnosisInputView({
                     max={95}
                     value={formState.variableCostRate}
                     onChange={(value) => updateField("variableCostRate", value)}
-                    hint="매출에서 재료비 등으로 나가는 비율이에요. 0~95%"
+                    description="매출에서 재료비 등으로 나가는 비율이에요. 0~95%"
                     error={
                       formState.variableCostRate !== "" && variableInvalid ? "0에서 95 사이로 적어 주세요." : undefined
                     }
@@ -262,7 +262,7 @@ export function DiagnosisInputView({
                     increments={SALES_INC}
                     value={formState.expectedSalesMan}
                     onChange={(value) => updateField("expectedSalesMan", value)}
-                    hint="비워 두면 손익분기 매출만 계산하고, 월손익·감당 가능한 월세·예상 손실은 보여 주지 않아요."
+                    description="비워 두면 손익분기 매출만 계산하고, 월손익·감당 가능한 월세·예상 손실은 보여 주지 않아요."
                   >
                     <button
                       type="button"
