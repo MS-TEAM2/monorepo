@@ -1123,6 +1123,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           description: Service Unavailable
+  /api/v1/data-status:
+    get:
+      tags:
+      - data_status
+      summary: 데이터 수집 상태와 기준일 (A24)
+      description: 로그인 없이 부른다. `items`는 매장 3종과 분기 자료 3종을 수집 전에도 모두 준다. `base_date`·`base_quarter`는
+        마지막 성공 기준이며 성공한 적이 없으면 null이고 `stale`은 true다. `model`은 사용 중인 생존모델이 없으면 null이다.
+      operationId: get_data_status_api_v1_data_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataStatusResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     AreaRegion:
@@ -1839,6 +1866,139 @@ components:
       - population_quarter
       title: DataBasis
       description: 쓰지 않았거나 없는 자료는 null이다.
+    DataStatusItem:
+      properties:
+        dataset:
+          type: string
+          enum:
+          - stores_general
+          - stores_rest
+          - stores_bakery
+          - region_population
+          - region_store_stats
+          - region_sales
+          title: Dataset
+        base_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Base Date
+          description: 마지막 성공 수집의 기준일. 성공한 적이 없으면 null
+          examples:
+          - '2026-11-22'
+        base_quarter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Base Quarter
+          description: '분기 자료의 기준 분기(예: 20262). 성공한 적이 없으면 null'
+          examples:
+          - null
+        last_run_status:
+          anyOf:
+          - type: string
+            enum:
+            - running
+            - succeeded
+            - failed
+          - type: 'null'
+          title: Last Run Status
+          description: 마지막 수집 상태. 수집한 적이 없으면 null
+        last_run_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Run At
+        last_success_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Success At
+        stale:
+          type: boolean
+          title: Stale
+          description: 인허가는 원천 기준일로 7일, 분기 자료는 기준 분기 종료 후 6개월을 넘으면 true. 성공한 적이 없어도
+            true
+        missing_location_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Missing Location Count
+          description: 영업 중이고 업종이 매핑된 매장 중 좌표가 없는 수. 매장 자료에만 있다
+          examples:
+          - 100
+        source_url:
+          type: string
+          title: Source Url
+          examples:
+          - https://data.seoul.go.kr/dataList/OA-16094/S/1/datasetView.do
+      type: object
+      required:
+      - dataset
+      - base_date
+      - base_quarter
+      - last_run_status
+      - last_run_at
+      - last_success_at
+      - stale
+      - missing_location_count
+      - source_url
+      title: DataStatusItem
+    DataStatusModel:
+      properties:
+        version:
+          type: string
+          title: Version
+          examples:
+          - example-v1
+        method:
+          type: string
+          enum:
+          - km_baseline
+          - logistic
+          - lightgbm
+          title: Method
+        data_until:
+          type: string
+          format: date
+          title: Data Until
+          description: 학습 데이터 기준일
+          examples:
+          - '2026-11-22'
+        metrics:
+          additionalProperties:
+            type: number
+          type: object
+          title: Metrics
+          description: 실측 검증 지표. 수치는 지어내지 않는다
+      type: object
+      required:
+      - version
+      - method
+      - data_until
+      - metrics
+      title: DataStatusModel
+      description: 사용 중인 생존모델과 실측 검증 지표.
+    DataStatusResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DataStatusItem'
+          type: array
+          title: Items
+        model:
+          anyOf:
+          - $ref: '#/components/schemas/DataStatusModel'
+          - type: 'null'
+          description: 사용 중인 모델이 없으면 null
+      type: object
+      required:
+      - items
+      - model
+      title: DataStatusResponse
     DbHealthResponse:
       properties:
         status:
