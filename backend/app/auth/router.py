@@ -4,8 +4,9 @@ from fastapi import APIRouter, Path, Query
 from fastapi.responses import RedirectResponse
 
 from app.auth import service
+from app.auth.dependencies import OidcHttp
 from app.auth.schemas import TokenRequest, TokenResponse
-from app.deps import BearerToken
+from app.deps import BearerToken, DbSession
 from app.errors import error_responses
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -39,13 +40,15 @@ async def issue_token(body: TokenRequest) -> TokenResponse:
     ),
 )
 async def start_login(
+    db: DbSession,
     provider: ProviderPath,
     client: Annotated[Literal["web", "app"], Query()],
     # 아래 두 값의 오류는 302로 돌려보내야 해서 FastAPI 검증을 걸지 않는다.
     code_challenge: Annotated[str | None, Query(description="필수. S256, base64url 43자")] = None,
     terms_version: Annotated[str | None, Query(description="필수. 동의한 약관 버전")] = None,
-) -> None:
-    await service.start_login()
+) -> RedirectResponse:
+    url = await service.start_login(db, provider, client, code_challenge, terms_version)
+    return RedirectResponse(url, status_code=302)
 
 
 @router.get(
@@ -61,13 +64,16 @@ async def start_login(
     ),
 )
 async def finish_login(
+    db: DbSession,
+    http: OidcHttp,
     provider: ProviderPath,
     # state가 없거나 틀려도 302(error=expired)로 답해야 해서 모두 선택값으로 받는다.
     state: Annotated[str | None, Query()] = None,
     code: Annotated[str | None, Query(description="공급자가 준 인가 코드")] = None,
     error: Annotated[str | None, Query(description="공급자가 알려 준 오류")] = None,
-) -> None:
-    await service.finish_login()
+) -> RedirectResponse:
+    url = await service.finish_login(db, http, provider, state, code, error)
+    return RedirectResponse(url, status_code=302)
 
 
 @router.post(
