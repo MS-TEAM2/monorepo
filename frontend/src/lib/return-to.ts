@@ -4,10 +4,21 @@
  * 복귀 주소는 우리 사이트 안의 상대 경로만 받는다. 외부 주소로 보내는 열린 리다이렉트를 막는다.
  */
 
-import type { SessionStorageLike } from "@/lib/session";
+import type { SessionStatus, SessionStorageLike } from "@/lib/session";
 
-/** S04 진단 입력, S05 결과, S06–S08 계약서, S09 저장함, S10 비교 (Notion 기획서 3장) */
-export const PROTECTED_PATHS = ["/diagnose", "/report", "/contract", "/saved", "/compare"] as const;
+/**
+ * S04 진단 입력, S05 결과, S06–S08 계약서, S09 저장함, S10 비교 (Notion 기획서 3장).
+ * 창업 가이드(S12)와 지원정책은 SCRUM-193 에서 로그인 필요로 바꿨다(기획서 2·14장 수정 필요).
+ */
+export const PROTECTED_PATHS = [
+  "/diagnose",
+  "/report",
+  "/contract",
+  "/saved",
+  "/compare",
+  "/guide",
+  "/policy",
+] as const;
 
 /** 로그인 화면으로 다시 돌아가면 안 되는 경로 */
 const NO_RETURN_PATHS = ["/login", "/auth"] as const;
@@ -122,4 +133,35 @@ export function isLoginRequired(query: { get(name: string): string | null }): bo
 export function loginRequiredHref(returnPath: string, options: StorageOption = {}): string {
   saveLoginReturn(returnPath, options);
   return LOGIN_REQUIRED_HREF;
+}
+
+/** 로그아웃 상태로 이 주소를 누르면 로그인 필요 안내 창을 먼저 띄운다 (Notion 기획서 2장) */
+export function needsLoginPrompt(href: string, status: SessionStatus): boolean {
+  if (status === "logged_in") return false;
+  const safe = safeReturnPath(href);
+  return safe !== null && isProtectedPath(new URL(safe, BASE).pathname);
+}
+
+/** 헤더의 로그인·계정 버튼을 보이는 화면. 로그인·콜백 화면에서는 숨긴다 */
+export function showsHeaderAccount(pathname: string): boolean {
+  return !matches(pathname, NO_RETURN_PATHS);
+}
+
+/** 직접 로그아웃했을 때 보호 화면에서 보낼 곳. 로그인 화면 대신 상권 지도로 간다 (SCRUM-193) */
+export const AFTER_LOGOUT_HREF = "/explore";
+
+let pendingLogoutRedirect = false;
+
+/** 로그아웃 직전에 부른다. 이어서 AuthGuard 가 로그인 화면 대신 AFTER_LOGOUT_HREF 로 보낸다 */
+export function markLogoutRedirect(): void {
+  pendingLogoutRedirect = true;
+}
+
+/** 로그아웃 상태로 보호 화면에 있을 때 보낼 주소. 직접 로그아웃했으면 상권 지도, 아니면 로그인 필요 화면 */
+export function guardRedirectHref(returnPath: string, options: StorageOption = {}): string {
+  if (pendingLogoutRedirect) {
+    pendingLogoutRedirect = false;
+    return AFTER_LOGOUT_HREF;
+  }
+  return loginRequiredHref(returnPath, options);
 }

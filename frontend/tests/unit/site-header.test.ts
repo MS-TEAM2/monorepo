@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/policy" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/policy", useRouter: () => ({ push: vi.fn() }) }));
 
 import { SiteHeader } from "@/components/ui/site-header";
 import { NAV_ITEMS } from "@/lib/navigation";
@@ -28,5 +28,14 @@ describe("SiteHeader", () => {
       .filter((tag) => tag.includes('aria-current="page"'));
     expect(current).toHaveLength(1);
     expect(current[0]).toContain('href="/policy"');
+  });
+});
+
+describe("SiteHeader 로그인 버튼 (SCRUM-193)", () => {
+  it("로그아웃 상태면 메뉴 옆에 로그인 버튼을 둔다", () => {
+    const markup = renderToStaticMarkup(createElement(SiteHeader, { navigation: NAV_ITEMS }));
+    const menuEnd = markup.indexOf("</nav>");
+    const login = markup.indexOf(">로그인<");
+    expect(login).toBeGreaterThan(menuEnd);
   });
 });
