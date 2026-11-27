@@ -16,8 +16,17 @@ import {
   type NMap,
   type NMarker,
 } from "@/lib/naver-map";
+import {
+  closedDotHtml,
+  clusterBubbleHtml,
+  planStoreMarkers,
+  storeDotHtml,
+  storeLabelHtml,
+  zoomAfterClusterClick,
+} from "@/lib/store-markers";
 
 export type MapLayerStore = Store & { inside: boolean };
+type ActiveLayerStore = Extract<Store, { status: "active" }> & { inside: boolean };
 
 /** 이만큼 누르고 있으면 길게 누르기로 본다 */
 const LONG_PRESS_MS = 550;
@@ -25,19 +34,6 @@ const LONG_PRESS_MS = 550;
 const DRAFT_PIN = `<div aria-hidden="true" style="transform:translate(-50%,-100%);opacity:.6"><svg width="30" height="38" viewBox="-15 -38 30 38"><path d="M0 -1 C -2.5 -9 -13 -15 -13 -25 A 13 13 0 1 1 13 -25 C 13 -15 2.5 -9 0 -1 Z" class="fill-brand-light stroke-card" stroke-width="2"/><circle cy="-25" r="5" class="fill-card"/></svg></div>`;
 
 const CENTER_PIN = `<div aria-hidden="true" style="transform:translate(-50%,-100%)"><svg width="30" height="38" viewBox="-15 -38 30 38"><path d="M0 -1 C -2.5 -9 -13 -15 -13 -25 A 13 13 0 1 1 13 -25 C 13 -15 2.5 -9 0 -1 Z" class="fill-brand stroke-card" stroke-width="2"/><circle cy="-25" r="5" class="fill-card"/></svg></div>`;
-
-function storeDot(store: MapLayerStore, selected: boolean): string {
-  if (store.status === "closed_1y") {
-    const tone = store.inside ? "size-2.5 bg-map-closed opacity-85" : "size-2 bg-map-closed-light opacity-45";
-    return `<div aria-hidden="true" class="${tone} -translate-x-1/2 -translate-y-1/2 rounded-full"></div>`;
-  }
-  const tone = selected
-    ? "size-4 bg-primary ring-4 ring-brand-light/25"
-    : store.inside
-      ? "size-3.5 bg-brand-light"
-      : "size-2.5 bg-map-store-out opacity-50";
-  return `<div aria-hidden="true" class="${tone} -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card shadow-sm"></div>`;
-}
 
 type Props = {
   clientId: string;
@@ -135,6 +131,10 @@ export function NaverMapLayer({
     [fail],
   );
 
+  /**
+   * 확대 수준에 따라 매장을 다시 그린다 (SCRUM-106). 묶음·상호명·점 배치는 planStoreMarkers 가 정한다.
+   * 폐업 매장은 회색 점으로만 둔다.
+   */
   const drawStores = useCallback(
     () =>
       guard(() => {
@@ -142,20 +142,82 @@ export function NaverMapLayer({
         if (!ctx) return;
         storeMarkers.current.forEach((marker) => marker.setMap(null));
         const { origin: o, stores: list, selectedStoreId: selectedId } = latest.current;
-        storeMarkers.current = list.map((store) => {
-          const position = mapPointToLatLng(store, o);
-          const clickable = store.status === "active" && store.inside;
-          const marker = new ctx.maps.Marker({
-            map: ctx.map,
-            position: new ctx.maps.LatLng(position.lat, position.lng),
-            icon: { content: storeDot(store, store.id === selectedId), anchor: new ctx.maps.Point(0, 0) },
-            title: store.status === "active" ? store.name : undefined,
-            zIndex: store.status === "active" ? (store.inside ? 20 : 10) : 5,
-            clickable,
+        const { maps, map } = ctx;
+        const zoom = map.getZoom();
+        const projection = map.getProjection();
+        const markers: NMarker[] = [];
+
+        for (const store of list) {
+          if (store.status !== "closed_1y") continue;
+          const at = mapPointToLatLng(store, o);
+          markers.push(
+            new maps.Marker({
+              map,
+              position: new maps.LatLng(at.lat, at.lng),
+              icon: { content: closedDotHtml(store.inside), anchor: new maps.Point(0, 0) },
+              zIndex: 5,
+              clickable: false,
+            }),
+          );
+        }
+
+        type Placed = { store: ActiveLayerStore; lat: number; lng: number };
+        const points = list
+          .filter((store): store is ActiveLayerStore => store.status === "active")
+          .map((store) => {
+            const at = mapPointToLatLng(store, o);
+            const offset = projection.fromCoordToOffset(new maps.LatLng(at.lat, at.lng));
+            const item: Placed = { store, lat: at.lat, lng: at.lng };
+            return { x: offset.x, y: offset.y, item, group: store.inside ? ("inside" as const) : ("outside" as const) };
           });
-          if (clickable) ctx.maps.Event.addListener(marker, "click", () => latest.current.onSelectStore(store.id));
-          return marker;
-        });
+        const plans = planStoreMarkers(
+          points,
+          zoom,
+          (p) => p.store.name,
+          (p) => p.store.id === selectedId,
+        );
+
+        for (const plan of plans) {
+          const inside = plan.group === "inside";
+          if (plan.kind === "cluster") {
+            const { items } = plan;
+            const lat = items.reduce((sum, p) => sum + p.lat, 0) / items.length;
+            const lng = items.reduce((sum, p) => sum + p.lng, 0) / items.length;
+            const position = new maps.LatLng(lat, lng);
+            const marker = new maps.Marker({
+              map,
+              position,
+              icon: { content: clusterBubbleHtml(items.length, inside), anchor: new maps.Point(0, 0) },
+              title: `매장 ${items.length}곳. 눌러서 확대`,
+              zIndex: inside ? 40 : 20,
+              clickable: true,
+            });
+            // 묶음 원을 누르면 그 자리로 확대해 묶음을 풀어 본다
+            maps.Event.addListener(marker, "click", () =>
+              guard(() => map.morph(position, zoomAfterClusterClick(map.getZoom()))),
+            );
+            markers.push(marker);
+            continue;
+          }
+
+          const { store, lat, lng } = plan.item;
+          const selected = store.id === selectedId;
+          const label = plan.kind === "label";
+          const marker = new maps.Marker({
+            map,
+            position: new maps.LatLng(lat, lng),
+            icon: {
+              content: label ? storeLabelHtml(store, { inside, selected }) : storeDotHtml({ inside, selected }),
+              anchor: new maps.Point(0, 0),
+            },
+            title: label ? undefined : store.name,
+            zIndex: selected ? 60 : label ? 50 : inside ? 30 : 15,
+            clickable: inside,
+          });
+          if (inside) maps.Event.addListener(marker, "click", () => latest.current.onSelectStore(store.id));
+          markers.push(marker);
+        }
+        storeMarkers.current = markers;
       }),
     [guard],
   );
@@ -239,6 +301,8 @@ export function NaverMapLayer({
               }
             }),
           );
+          // 확대·이동이 끝날 때마다 묶음을 다시 계산한다
+          listeners.push(maps.Event.addListener(map, "idle", drawStores));
           drawStores();
         }),
       )
