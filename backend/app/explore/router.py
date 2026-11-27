@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.deps import OptionalBearerToken
+from app.deps import DbSession, OptionalBearerToken
 from app.errors import error_responses
 from app.explore import service
 from app.explore.schemas import (
@@ -27,8 +27,8 @@ Longitude = Annotated[float, Query(ge=-180, le=180, description="중심 경도 (
     responses=error_responses(429, 503),
     summary="업종 목록 (A03)",
 )
-async def list_categories() -> CategoryListResponse:
-    return await service.list_categories()
+async def list_categories(db: DbSession) -> CategoryListResponse:
+    return await service.list_categories(db)
 
 
 @router.get(
@@ -38,8 +38,8 @@ async def list_categories() -> CategoryListResponse:
     summary="좌표의 행정동 판정 (A04)",
     description="서울 밖이면 200과 `supported: false`이고 나머지 값은 null이다.",
 )
-async def resolve_region(lat: Latitude, lng: Longitude) -> RegionResolveResponse:
-    return await service.resolve_region()
+async def resolve_region(lat: Latitude, lng: Longitude, db: DbSession) -> RegionResolveResponse:
+    return await service.resolve_region(db, lat, lng)
 
 
 @router.get(
@@ -53,6 +53,7 @@ async def resolve_region(lat: Latitude, lng: Longitude) -> RegionResolveResponse
     ),
 )
 async def list_stores(
+    db: DbSession,
     lat: Latitude,
     lng: Longitude,
     radius: Annotated[Radius, Query(description="반경(m)")] = Radius.M500,
@@ -61,7 +62,7 @@ async def list_stores(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=1000, description="이 API만 기본·최대 1000")] = 1000,
 ) -> StoreListResponse:
-    return await service.list_stores()
+    return await service.list_stores(db, lat, lng, int(radius), category, limit)
 
 
 @router.get(

@@ -8,6 +8,7 @@ from app.access_log import AccessLogMiddleware, configure_access_log
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.contracts.router import router as contracts_router
+from app.data_status.router import router as data_status_router
 from app.db import create_engine, create_session_factory
 from app.diagnoses.router import router as diagnoses_router
 from app.errors import register_error_handlers
@@ -55,3 +56,4 @@ app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(explore_router, prefix=API_PREFIX)
 app.include_router(diagnoses_router, prefix=API_PREFIX)
 app.include_router(contracts_router, prefix=API_PREFIX)
+app.include_router(data_status_router, prefix=API_PREFIX)
