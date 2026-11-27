@@ -7,3 +7,4 @@ import "./diagnoses";
 import "./stores";
 import "./areas";
 import "./auth";
+import "./data-status";
