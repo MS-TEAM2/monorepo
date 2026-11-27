@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.errors import AppError
 from app.explore import service
 from app.explore.schemas import (
     AREA_SUMMARY_EXAMPLES,
@@ -11,6 +12,7 @@ from app.explore.schemas import (
     CategoryItem,
     CategoryListResponse,
     RegionResolveResponse,
+    StoreListResponse,
 )
 from app.main import app
 
@@ -156,15 +158,15 @@ def test_invalid_location_is_rejected(db_client, base, query):
 
 
 @pytest.mark.parametrize("query", ["radius=200", "radius=abc", "limit=0", "limit=1001"])
-def test_invalid_store_filter_is_rejected(client, query):
-    response = client.get(f"{STORES}?{HERE}&{query}")
+def test_invalid_store_filter_is_rejected(db_client, query):
+    response = db_client.get(f"{STORES}?{HERE}&{query}")
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
 
 
-def test_validation_error_does_not_echo_coordinates(client):
-    response = client.get(f"{STORES}?lat=97.123456&lng=126.987654")
+def test_validation_error_does_not_echo_coordinates(db_client):
+    response = db_client.get(f"{STORES}?lat=97.123456&lng=126.987654")
 
     assert response.status_code == 422
     assert "97.123456" not in response.text
@@ -377,3 +379,55 @@ def test_resolve_rejects_invalid_location_without_querying(db_client):
     response = db_client.get(f"{RESOLVE}?lat=91&lng=126.978")
 
     assert response.status_code == 422
+
+
+# A05: service를 바꿔 끼워 쿼리 값이 그대로 넘어가고 오류가 명세대로 나오는지 본다.
+
+EMPTY_STORES = StoreListResponse(
+    total=0, returned=0, truncated=False, category_counts=[], base_date=None, items=[]
+)
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (HERE, (37.5665, 126.978, 500, None, 1000)),
+        (
+            f"{HERE}&radius=150&category=cafe&category=korean&limit=10",
+            (37.5665, 126.978, 150, ["cafe", "korean"], 10),
+        ),
+    ],
+)
+def test_stores_passes_query_to_service(db_client, monkeypatch, query, expected):
+    calls = []
+
+    async def fake(db, lat, lng, radius, categories, limit):
+        calls.append((lat, lng, radius, categories, limit))
+        return EMPTY_STORES
+
+    monkeypatch.setattr(service, "list_stores", fake)
+
+    response = db_client.get(f"{STORES}?{query}")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert calls == [expected]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        AppError(400, "out_of_service_area", "서비스 지역(서울) 밖입니다"),
+        AppError(422, "validation_error", "지원하지 않는 업종이 있습니다"),
+    ],
+)
+def test_stores_errors_follow_spec(db_client, monkeypatch, error):
+    async def fake(*args):
+        raise error
+
+    monkeypatch.setattr(service, "list_stores", fake)
+
+    response = db_client.get(f"{STORES}?{HERE}")
+
+    assert response.status_code == error.status
+    assert response.json() == {"detail": error.detail, "code": error.code}

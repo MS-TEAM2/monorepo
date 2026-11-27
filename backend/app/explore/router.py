@@ -53,6 +53,7 @@ async def resolve_region(lat: Latitude, lng: Longitude, db: DbSession) -> Region
     ),
 )
 async def list_stores(
+    db: DbSession,
     lat: Latitude,
     lng: Longitude,
     radius: Annotated[Radius, Query(description="반경(m)")] = Radius.M500,
@@ -61,7 +62,7 @@ async def list_stores(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=1000, description="이 API만 기본·최대 1000")] = 1000,
 ) -> StoreListResponse:
-    return await service.list_stores()
+    return await service.list_stores(db, lat, lng, int(radius), category, limit)
 
 
 @router.get(
