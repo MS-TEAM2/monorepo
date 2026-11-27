@@ -65,5 +65,6 @@ class FakeOcrClient:
         if self.delete_failures > 0:
             self.delete_failures -= 1
             raise OcrError(ERROR_SERVICE_UNAVAILABLE)
-        # 가정: 없거나 이미 지운 ID 를 지워도 성공한다. 실제 서비스의 동작은 확인하지 않았다
+        # 없거나 이미 지운 ID 를 지워도 성공한다. 실제 서비스는 다시 지우면 204 를 돌려준다.
+        # 분석 중 삭제(실제 서비스는 409)는 흉내 내지 않는다. AzureOcrClient.delete 가 처리한다
         self.stored.discard(result_id)
