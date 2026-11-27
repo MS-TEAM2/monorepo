@@ -37,3 +37,24 @@ async def get_bearer_token(
 
 
 BearerToken = Annotated[str, Depends(get_bearer_token)]
+
+
+async def get_optional_bearer_token(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> str | None:
+    """인증 `선택` API용. 헤더가 없으면 None, 있는데 Bearer 형식이 아니면 401.
+
+    토큰이 유효한지(만료·폐기)는 확인하지 않는다(SCRUM-183). 그 전에는 이 값으로
+    로그인 사용자에게만 주는 값을 내주지 않는다.
+    """
+    if credentials is not None:
+        return credentials.credentials
+    if "authorization" in request.headers:
+        raise AppError(
+            401, "unauthorized", "로그인 정보가 올바르지 않습니다", {"WWW-Authenticate": "Bearer"}
+        )
+    return None
+
+
+OptionalBearerToken = Annotated[str | None, Depends(get_optional_bearer_token)]
