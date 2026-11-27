@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ai_core.predict import load_model
 from app.auth.router import router as auth_router
 from app.config import settings
+from app.contracts.router import router as contracts_router
 from app.db import create_engine, create_session_factory
 from app.diagnoses.router import router as diagnoses_router
 from app.errors import register_error_handlers
@@ -48,3 +49,4 @@ app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(explore_router, prefix=API_PREFIX)
 app.include_router(diagnoses_router, prefix=API_PREFIX)
+app.include_router(contracts_router, prefix=API_PREFIX)

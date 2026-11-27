@@ -268,6 +268,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 계약서 업로드 (A15)
+         * @description 파일 확장자가 아니라 실제 형식을 검사하고 이미지 1장은 1쪽으로 센다. 크기 초과는 413 `file_too_large`, 형식 오류는 415 `unsupported_file`이다. 10쪽 초과는 422 `too_many_pages`, 암호 PDF는 422 `encrypted_file`, 동의가 없거나 허용하지 않는 동의 버전은 422 `consent_required`다. `diagnosis_id`를 보내면 만든 계약을 그 진단에 연결한다. 다른 사용자의 진단, 만료·삭제 요청한 진단이면 404다. 사용자당 처리 중인 계약은 1개이며, 이미 있으면 409 `contract_processing`이다. 실패·확인한 계약이 있어도 새로 올릴 수 있다.
+         */
+        post: operations["create_contract_api_v1_contracts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contracts/{contract_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 계약서 분석 상태와 결과 (A16)
+         * @description 처리 중에는 2초 간격으로 조회하고 오래 걸리면 간격을 늘린다. 다른 사용자의 계약과 취소 중인 계약은 404다.
+         */
+        get: operations["get_contract_api_v1_contracts__contract_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contracts/{contract_id}/terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 계약 조건 확인·수정 (A17)
+         * @description 조건 키에 맞지 않는 값은 422 `invalid_term`이다. `start_date`는 `end_date`보다 빨라야 하고 월세는 1 이상이다. `complete`가 true면 `monthly_rent`, `start_date`, `end_date` 확인이 필수이며 빠지면 422 `terms_incomplete`다. 오류가 있으면 아무것도 저장하지 않는다. true면 confirmed, false면 needs_review가 된다. confirmed 상태에서 부르면 그 계약으로 만든 계산을 지우고 `application`은 null이 된다. 처리 중이면 409 `contract_processing`, 실패한 계약이면 409 `contract_failed`다.
+         */
+        patch: operations["update_terms_api_v1_contracts__contract_id__terms_patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -343,6 +403,262 @@ export interface components {
         CategoryListResponse: {
             /** Items */
             items: components["schemas"]["CategoryItem"][];
+        };
+        /** ContractAcceptedResponse */
+        ContractAcceptedResponse: {
+            /**
+             * Id
+             * Format: uuid
+             * @example 00000000-0000-4000-8000-000000000004
+             */
+            id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "processing";
+            /**
+             * Step
+             * @example ocr
+             * @enum {string}
+             */
+            step: "ocr" | "masking" | "analysis" | "deletion";
+        };
+        /** ContractApplication */
+        ContractApplication: {
+            before: components["schemas"]["ContractProfitSnapshot"];
+            after: components["schemas"]["ContractProfitSnapshot"];
+            /** Term Changes */
+            term_changes: components["schemas"]["ContractTermChange"][];
+            /** Assumptions */
+            assumptions: string[];
+            /**
+             * Simulation Id
+             * Format: uuid
+             */
+            simulation_id: string;
+            exit: components["schemas"]["ContractExit"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ContractDetailResponse
+         * @description 처리 중과 실패에는 terms, findings가 빈 배열이다. 처리가 끝나면 terms는 9개다.
+         */
+        ContractDetailResponse: {
+            /**
+             * Id
+             * Format: uuid
+             * @example 00000000-0000-4000-8000-000000000004
+             */
+            id: string;
+            /**
+             * Diagnosis Id
+             * @description 연결 전이거나 진단 만료·삭제로 연결이 풀리면 null
+             * @example 00000000-0000-4000-8000-000000000001
+             */
+            diagnosis_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "needs_review" | "confirmed" | "failed";
+            /**
+             * Step
+             * @description processing일 때만 값이 있다
+             */
+            step: ("ocr" | "masking" | "analysis" | "deletion") | null;
+            /** Original Deleted */
+            original_deleted: boolean;
+            /** Terms */
+            terms: components["schemas"]["ContractTerm"][];
+            /** Findings */
+            findings: components["schemas"]["ContractFinding"][];
+            /** @description 가장 최근 계약 반영 결과 */
+            application: components["schemas"]["ContractApplication"] | null;
+            /** Error Code */
+            error_code: ("unreadable" | "not_contract" | "masking_failed" | "analysis_failed" | "service_unavailable" | "timeout") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             * @description 계약 생성 후 30일. 진단 만료와 따로 계산한다
+             */
+            expires_at: string;
+            /**
+             * Notice
+             * @example 법률 자문이 아닌 검토 보조입니다
+             */
+            notice: string;
+        };
+        /** ContractExit */
+        ContractExit: {
+            /** Month */
+            month: number;
+            /** Obligation Months */
+            obligation_months: number;
+            /** Restoration Cost */
+            restoration_cost: number | null;
+            /** Penalty Amount */
+            penalty_amount: number | null;
+            /** Penalty Covers Remaining Rent */
+            penalty_covers_remaining_rent: boolean | null;
+        };
+        /** ContractFinding */
+        ContractFinding: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Rule Id
+             * @enum {string}
+             */
+            rule_id: "R01" | "R02" | "R03" | "R04" | "R05" | "R06" | "R07" | "R08";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "high" | "medium" | "low";
+            /**
+             * Evidence Text
+             * @description 마스킹한 원문
+             */
+            evidence_text: string;
+            /** Page No */
+            page_no: number | null;
+            /** Reason */
+            reason: string;
+            /** Check Points */
+            check_points: string[];
+            /**
+             * Suggestion
+             * @description 법률 확인 전에는 null
+             */
+            suggestion: string | null;
+            /**
+             * Question
+             * @description 중개사에게 물을 질문
+             */
+            question: string;
+            /** @description 원문을 대조하지 않았으면 null */
+            law: components["schemas"]["ContractLaw"] | null;
+            /** Confidence */
+            confidence: number;
+        };
+        /** ContractLaw */
+        ContractLaw: {
+            /** Law Name */
+            law_name: string;
+            /** Article No */
+            article_no: string;
+            /** Source Url */
+            source_url: string;
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+        };
+        /** ContractProfitSnapshot */
+        ContractProfitSnapshot: {
+            /**
+             * Monthly Rent
+             * @description 부가세를 뺀 공급가
+             */
+            monthly_rent: number;
+            /** Break Even Sales */
+            break_even_sales: number;
+            /** Monthly Profit */
+            monthly_profit: number | null;
+            /** Estimated Loss */
+            estimated_loss: number | null;
+        };
+        /** ContractTerm */
+        ContractTerm: {
+            /**
+             * Term Key
+             * @enum {string}
+             */
+            term_key: "deposit" | "monthly_rent" | "management_fee" | "rent_vat_included" | "start_date" | "end_date" | "annual_increase_rate" | "early_termination" | "restoration";
+            /**
+             * Extracted Value
+             * @description 신뢰도가 낮으면 null. 조건 키별 형식: `deposit`·`monthly_rent`·`management_fee`는 원 단위 정수, `rent_vat_included`는 boolean, `start_date`·`end_date`는 날짜, `annual_increase_rate`는 0–1, `early_termination`과 `restoration`은 객체
+             */
+            extracted_value: boolean | number | string | components["schemas"]["EarlyTerminationValue"] | components["schemas"]["RestorationValue"] | null;
+            /**
+             * Confirmed Value
+             * @description 사용자가 확인하기 전에는 null. 조건 키별 형식: `deposit`·`monthly_rent`·`management_fee`는 원 단위 정수, `rent_vat_included`는 boolean, `start_date`·`end_date`는 날짜, `annual_increase_rate`는 0–1, `early_termination`과 `restoration`은 객체
+             */
+            confirmed_value: boolean | number | string | components["schemas"]["EarlyTerminationValue"] | components["schemas"]["RestorationValue"] | null;
+            /**
+             * Evidence Text
+             * @description 마스킹한 근거 문장
+             */
+            evidence_text: string | null;
+            /** Page No */
+            page_no: number | null;
+            /** Confidence */
+            confidence: number | null;
+        };
+        /**
+         * ContractTermChange
+         * @description 확인한 조건 중 진단 입력과 다른 것. 값은 입력·확인한 원래 값이다.
+         */
+        ContractTermChange: {
+            /**
+             * Term Key
+             * @enum {string}
+             */
+            term_key: "deposit" | "monthly_rent" | "management_fee" | "rent_vat_included" | "start_date" | "end_date" | "annual_increase_rate" | "early_termination" | "restoration";
+            /**
+             * Before
+             * @description 진단에 없던 조건은 null
+             */
+            before: boolean | number | string | components["schemas"]["EarlyTerminationValue"] | components["schemas"]["RestorationValue"] | null;
+            /** After */
+            after: boolean | number | string | components["schemas"]["EarlyTerminationValue"] | components["schemas"]["RestorationValue"];
+            /** Affects Profit */
+            affects_profit: boolean;
+        };
+        /** ContractTermUpdate */
+        ContractTermUpdate: {
+            /**
+             * Term Key
+             * @enum {string}
+             */
+            term_key: "deposit" | "monthly_rent" | "management_fee" | "rent_vat_included" | "start_date" | "end_date" | "annual_increase_rate" | "early_termination" | "restoration";
+            /**
+             * Confirmed Value
+             * @description null은 확인 취소. 조건 키별 형식: `deposit`·`monthly_rent`·`management_fee`는 원 단위 정수, `rent_vat_included`는 boolean, `start_date`·`end_date`는 날짜, `annual_increase_rate`는 0–1, `early_termination`과 `restoration`은 객체
+             */
+            confirmed_value: boolean | number | string | components["schemas"]["EarlyTerminationValue"] | components["schemas"]["RestorationValue"] | null;
+        };
+        /** ContractTermsUpdateRequest */
+        ContractTermsUpdateRequest: {
+            /**
+             * Terms
+             * @description 보낸 조건만 바꾼다. 빈 배열도 된다
+             */
+            terms: components["schemas"]["ContractTermUpdate"][];
+            /**
+             * Complete
+             * @description true면 확인을 마치고, false면 확인 중으로 둔다
+             */
+            complete: boolean;
         };
         /**
          * CountValue
@@ -685,6 +1001,23 @@ export interface components {
              */
             franchise_ratio: number | null;
         };
+        /**
+         * EarlyTerminationValue
+         * @description `early_termination`의 값. 모르는 항목은 null이다.
+         */
+        EarlyTerminationValue: {
+            /** Allowed */
+            allowed: boolean | null;
+            /**
+             * Penalty Amount
+             * @description 원
+             */
+            penalty_amount: number | null;
+            /** Notice Months */
+            notice_months: number | null;
+            /** Penalty Covers Remaining Rent */
+            penalty_covers_remaining_rent: boolean | null;
+        };
         /** ErrorResponse */
         ErrorResponse: {
             /** Detail */
@@ -814,6 +1147,19 @@ export interface components {
             gu_name: string | null;
             /** Supported */
             supported: boolean;
+        };
+        /**
+         * RestorationValue
+         * @description `restoration`의 값. 모르는 항목은 null이다.
+         */
+        RestorationValue: {
+            /** Scope */
+            scope: string | null;
+            /**
+             * Estimated Cost
+             * @description 원
+             */
+            estimated_cost: number | null;
         };
         /** SimulationResponse */
         SimulationResponse: {
@@ -1837,6 +2183,261 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_contract_api_v1_contracts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description JPG·PNG·PDF, 파일당 10MB, 합계 20MB, 최대 10쪽. 여러 번 보내며 보낸 순서가 쪽 순서다 */
+                    files: string[];
+                    /** @description 동의한 문구 버전 */
+                    consent_version: string;
+                    /** @description true여야 한다 */
+                    consented: boolean;
+                    /**
+                     * Format: uuid
+                     * @description 선택. 진단 결과에서 올리면 그 진단 ID. 없으면 진단 연결 없이 만든다
+                     */
+                    diagnosis_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractAcceptedResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unsupported Media Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_contract_api_v1_contracts__contract_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_terms_api_v1_contracts__contract_id__terms_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractTermsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
