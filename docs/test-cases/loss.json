@@ -1,0 +1,579 @@
+{
+  "description": "중도 종료 시 예상 손실 공통 시험 사례. 백엔드(app/diagnoses/calculations.py의 estimate_loss)만 계산한다. 입력 costs는 A09 costs(진단 입력에 확인한 계약 조건을 덮어쓴 값), exit는 A13·A18 exit, contract는 확인한 계약값(before는 null)이다. 금액은 원 단위 정수, 비율은 0–1이다. 규칙은 기획서 7번과 API 명세서 A09 '손익 계산 공통 규칙'·A13·A18을 따른다.",
+  "cases": [
+    {
+      "name": "A13 예시: (월세 220만 + 관리비 30만) × 3개월 + 원상복구 500만 = 1,250만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2200000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 3,
+          "restoration_cost": 5000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 12500000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "A18 before 예시: (250만 + 30만) × 6 + 500만 = 2,180만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 5000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 21800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "A18 after 예시: 확인한 월세 270만 → (270만 + 30만) × 6 + 500만 = 2,300만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2700000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 5000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": null,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": null
+        }
+      },
+      "expected": {
+        "estimated_loss": 23000000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "부가세 포함 월세 275만은 공급가 250만으로 계산",
+      "input": {
+        "costs": {
+          "monthly_rent": 2750000,
+          "rent_vat_included": true,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 5000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 21800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "인상률 5%는 2년차부터: 13–18개월 월세 262.5만 → (262.5만 + 30만) × 6 = 1,755만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": null,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": 0.05
+        }
+      },
+      "expected": {
+        "estimated_loss": 17550000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "인상률 5%라도 1년차 안(7–12개월)의 남은 월세는 그대로: 280만 × 6 = 1,680만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 6,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": null,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": 0.05
+        }
+      },
+      "expected": {
+        "estimated_loss": 16800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "누적 영업손실이 연도를 넘김: 권리금 1,000만 + 시설비 2,000만 + 40만 × 12 + 52.5만 × 6 = 3,795만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 11000000
+        },
+        "key_money": 10000000,
+        "facility_cost": 20000000,
+        "exit": {
+          "month": 18,
+          "obligation_months": 0,
+          "restoration_cost": 0,
+          "penalty_amount": 0,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": null,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": 0.05
+        }
+      },
+      "expected": {
+        "estimated_loss": 37950000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "반올림: 연도별 월세는 원 단위로 반올림, 누적 영업손실은 마지막에 한 번만 반올림",
+      "input": {
+        "costs": {
+          "monthly_rent": 2345678,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.333,
+          "expected_monthly_sales": 10000001
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 20,
+          "obligation_months": 10,
+          "restoration_cost": 0,
+          "penalty_amount": 0,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": null,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": 0.03
+        }
+      },
+      "expected": {
+        "estimated_loss": 31671879,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "위약금이 남은 월세를 포함: 남은 월세·관리비 1,680만과 위약금 1,000만 중 큰 값",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": 10000000,
+          "penalty_covers_remaining_rent": true
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 16800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "위약금이 별도: 1,680만 + 위약금 1,000만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": 10000000,
+          "penalty_covers_remaining_rent": false
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 26800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "포함 여부 모름: 큰 값(남은 월세 1,680만)만 쓰고 확인 필요 표시",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": 10000000,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 16800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금이 남은 월세를 포함하는지 확인 필요(큰 값만 반영)"
+        ]
+      }
+    },
+    {
+      "name": "포함 여부 모름: 큰 값(위약금 2,000만)만 쓰고 확인 필요 표시",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": 20000000,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 20000000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "위약금이 남은 월세를 포함하는지 확인 필요(큰 값만 반영)"
+        ]
+      }
+    },
+    {
+      "name": "위약금은 직접 입력 300만, 포함 여부는 확인한 계약값(별도): 1,680만 + 300만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 0,
+          "penalty_amount": 3000000,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": null,
+          "penalty_amount": 5000000,
+          "penalty_covers_remaining_rent": false,
+          "rent_increase_rate": null
+        }
+      },
+      "expected": {
+        "estimated_loss": 19800000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "종료 값 우선순위: 직접 입력한 원상복구비 500만이 계약값 800만보다 우선",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 0,
+          "restoration_cost": 5000000,
+          "penalty_amount": 0,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": 8000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": null
+        }
+      },
+      "expected": {
+        "estimated_loss": 5000000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "종료 값 우선순위: 직접 입력이 없으면 확인한 계약값 800만",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 0,
+          "restoration_cost": null,
+          "penalty_amount": 0,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": {
+          "restoration_cost": 8000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null,
+          "rent_increase_rate": null
+        }
+      },
+      "expected": {
+        "estimated_loss": 8000000,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환"
+        ]
+      }
+    },
+    {
+      "name": "종료 값 우선순위: before는 계약값을 쓰지 않아 원상복구비·위약금 0과 가정 표시",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": 13000000
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 0,
+          "restoration_cost": null,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": 0,
+        "assumptions": [
+          "권리금과 시설비를 회수하지 못함",
+          "보증금은 전액 반환",
+          "원상복구비 0으로 가정",
+          "위약금 0으로 가정"
+        ]
+      }
+    },
+    {
+      "name": "예상 월매출이 없으면 계산하지 않음",
+      "input": {
+        "costs": {
+          "monthly_rent": 2500000,
+          "rent_vat_included": false,
+          "management_fee": 300000,
+          "labor_cost": 3000000,
+          "other_fixed_cost": 1200000,
+          "variable_cost_rate": 0.4,
+          "expected_monthly_sales": null
+        },
+        "key_money": 0,
+        "facility_cost": 0,
+        "exit": {
+          "month": 12,
+          "obligation_months": 6,
+          "restoration_cost": 5000000,
+          "penalty_amount": null,
+          "penalty_covers_remaining_rent": null
+        },
+        "contract": null
+      },
+      "expected": {
+        "estimated_loss": null,
+        "assumptions": []
+      }
+    }
+  ]
+}
