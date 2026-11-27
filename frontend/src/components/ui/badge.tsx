@@ -5,17 +5,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-xs font-extrabold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {
         default: "border-transparent bg-primary text-primary-foreground",
-        soft: "border-transparent bg-primary-soft text-primary-hover",
+        soft: "border-transparent bg-primary-soft text-primary",
         secondary: "border-transparent bg-secondary text-secondary-foreground",
         coral: "border-transparent bg-coral text-white",
-        "coral-soft": "border-transparent bg-coral-soft text-coral",
+        "coral-soft": "border-transparent bg-primary-soft text-primary-hover",
         outline: "border-border text-foreground",
-        success: "border-transparent bg-green-50 text-green-700",
+        success: "border-transparent bg-success-soft text-success",
+        warning: "border-transparent bg-warning-soft text-warning",
+        destructive: "border-transparent bg-destructive-soft text-destructive-700",
+        dark: "border-transparent bg-foreground text-white",
       },
     },
     defaultVariants: { variant: "default" },

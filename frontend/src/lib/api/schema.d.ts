@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health/db": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Db */
+        get: operations["health_db_health_db_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/predict": {
         parameters: {
             query?: never;
@@ -38,14 +55,487 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 1회용 코드를 세션 토큰으로 교환 (A01) */
+        post: operations["issue_token_api_v1_auth_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/{provider}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 소셜 로그인 시작 (A26)
+         * @description 브라우저가 직접 여는 주소다. 성공하면 공급자 로그인 화면으로 이동한다. `client`가 올바르면 입력 오류도 JSON 대신 돌아갈 주소의 `error=terms_outdated` 또는 `error=invalid_request`로 302 이동한다. `client`가 잘못되면 422, 지원하지 않는 공급자는 404다.
+         */
+        get: operations["start_login_api_v1_auth__provider__start_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/{provider}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 소셜 로그인 콜백 (A27)
+         * @description 공급자가 부른다. 성공하면 1회용 `code`를, 실패하면 `error`(`cancelled`, `provider_error`, `expired`, `account_deleting`)를 쿼리에 붙여 돌아갈 주소로 302 이동한다.
+         */
+        get: operations["finish_login_api_v1_auth__provider__callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 로그아웃 (A29) */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 정보 (A28) */
+        get: operations["get_me_api_v1_users_me_get"];
+        put?: never;
+        post?: never;
+        /** 회원 탈퇴 (A30) */
+        delete: operations["delete_me_api_v1_users_me_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 업종 목록 (A03) */
+        get: operations["list_categories_api_v1_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/regions/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 좌표의 행정동 판정 (A04)
+         * @description 서울 밖이면 200과 `supported: false`이고 나머지 값은 null이다.
+         */
+        get: operations["resolve_region_api_v1_regions_resolve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 주변 매장 조회 (A05)
+         * @description 영업 중이고 업종이 매핑됐으며 좌표가 있는 매장만 가까운 순(같으면 ID 순)으로 준다. 중심이 서울 밖이면 400 `out_of_service_area`, 결과가 없으면 200과 빈 배열이다.
+         */
+        get: operations["list_stores_api_v1_stores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnoses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 진단 목록 (A10)
+         * @description `created_at` 내림차순, 같으면 `id` 내림차순. 잘못된 커서는 422다.
+         */
+        get: operations["list_diagnoses_api_v1_diagnoses_get"];
+        put?: never;
+        /**
+         * 진단 생성 (A09)
+         * @description 행정동은 서버가 좌표로 판정한다. 서울 밖이면 400 `out_of_service_area`다.
+         */
+        post: operations["create_diagnosis_api_v1_diagnoses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnoses/{diagnosis_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 진단 상세 (A11)
+         * @description 다른 사용자의 진단이나 삭제 요청했거나 만료된 진단은 404다.
+         */
+        get: operations["get_diagnosis_api_v1_diagnoses__diagnosis_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** HTTPValidationError */
-        HTTPValidationError: {
+        /** CategoryCount */
+        CategoryCount: {
+            /**
+             * Category Id
+             * @example cafe
+             */
+            category_id: string;
+            /**
+             * Count
+             * @example 320
+             */
+            count: number;
+        };
+        /** CategoryItem */
+        CategoryItem: {
+            /**
+             * Id
+             * @example cafe
+             */
+            id: string;
+            /**
+             * Name
+             * @example 카페
+             */
+            name: string;
+        };
+        /** CategoryListResponse */
+        CategoryListResponse: {
+            /** Items */
+            items: components["schemas"]["CategoryItem"][];
+        };
+        /**
+         * DataBasis
+         * @description 쓰지 않았거나 없는 자료는 null이다.
+         */
+        DataBasis: {
+            /** Stores */
+            stores: string | null;
+            /** Commercial Quarter */
+            commercial_quarter: string | null;
+            /** Population Quarter */
+            population_quarter: string | null;
+        };
+        /** DbHealthResponse */
+        DbHealthResponse: {
+            /**
+             * Status
+             * @example ok
+             */
+            status: string;
+        };
+        /** DeletingResponse */
+        DeletingResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "deleting";
+        };
+        /** DiagnosisContractSummary */
+        DiagnosisContractSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "needs_review" | "confirmed" | "failed";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * DiagnosisCosts
+         * @description 저장한 원래 입력. 월세 슬라이더를 다시 계산할 때 쓴다.
+         */
+        DiagnosisCosts: {
+            /** Deposit */
+            deposit: number;
+            /** Monthly Rent */
+            monthly_rent: number;
+            /** Rent Vat Included */
+            rent_vat_included: boolean;
+            /** Management Fee */
+            management_fee: number;
+            /** Labor Cost */
+            labor_cost: number;
+            /** Other Fixed Cost */
+            other_fixed_cost: number;
+            /** Variable Cost Rate */
+            variable_cost_rate: number;
+            /** Expected Monthly Sales */
+            expected_monthly_sales: number | null;
+            /** Key Money */
+            key_money: number;
+            /** Facility Cost */
+            facility_cost: number;
+        };
+        /** DiagnosisCostsInput */
+        DiagnosisCostsInput: {
+            /**
+             * Deposit
+             * @default 0
+             */
+            deposit: number;
+            /**
+             * Monthly Rent
+             * @example 2500000
+             */
+            monthly_rent: number;
+            /** Rent Vat Included */
+            rent_vat_included: boolean;
+            /**
+             * Management Fee
+             * @default 0
+             */
+            management_fee: number;
+            /** Labor Cost */
+            labor_cost: number;
+            /** Other Fixed Cost */
+            other_fixed_cost: number;
+            /**
+             * Variable Cost Rate
+             * @description 0–0.95, 소수 넷째 자리까지
+             * @example 0.4
+             */
+            variable_cost_rate: number;
+            /**
+             * Expected Monthly Sales
+             * @description 사용자 입력만 쓴다. 없으면 월손익·감당 가능한 월세·예상 손실은 null
+             */
+            expected_monthly_sales?: number | null;
+            /**
+             * Key Money
+             * @default 0
+             */
+            key_money: number;
+            /**
+             * Facility Cost
+             * @default 0
+             */
+            facility_cost: number;
+        };
+        /** DiagnosisCreateRequest */
+        DiagnosisCreateRequest: {
+            /**
+             * Address
+             * @example 예시 주소
+             */
+            address: string;
+            /**
+             * Lat
+             * @example 37.5665
+             */
+            lat: number;
+            /**
+             * Lng
+             * @example 126.978
+             */
+            lng: number;
+            /**
+             * Category Id
+             * @example cafe
+             */
+            category_id: string;
+            /**
+             * Area Sqm
+             * @description 1년 모델의 입력. 없으면 1년은 km_baseline
+             * @example 33
+             */
+            area_sqm?: number | null;
+            costs: components["schemas"]["DiagnosisCostsInput"];
+        };
+        /** DiagnosisDetailResponse */
+        DiagnosisDetailResponse: {
+            /**
+             * Id
+             * Format: uuid
+             * @example 00000000-0000-4000-8000-000000000001
+             */
+            id: string;
+            /** Address */
+            address: string;
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Category Id */
+            category_id: string;
+            /** Dong Code */
+            dong_code: string;
+            /** Dong Name */
+            dong_name: string;
+            /** Gu Name */
+            gu_name: string;
+            /** Area Sqm */
+            area_sqm: number | null;
+            costs: components["schemas"]["DiagnosisCosts"];
+            survival: components["schemas"]["SurvivalResponse"];
+            /** Factors */
+            factors: components["schemas"]["FactorResponse"][];
+            simulation: components["schemas"]["SimulationResponse"];
+            /**
+             * Contracts
+             * @description 최신순. 없으면 빈 배열
+             */
+            contracts: components["schemas"]["DiagnosisContractSummary"][];
+            data_basis: components["schemas"]["DataBasis"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** DiagnosisListItem */
+        DiagnosisListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Address */
+            address: string;
+            /** Category Id */
+            category_id: string;
+            /** Dong Name */
+            dong_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** DiagnosisListResponse */
+        DiagnosisListResponse: {
+            /** Items */
+            items: components["schemas"]["DiagnosisListItem"][];
+            /**
+             * Next Cursor
+             * @description 마지막 쪽은 null
+             */
+            next_cursor: string | null;
+        };
+        /** ErrorResponse */
+        ErrorResponse: {
             /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
+            detail: string | {
+                [key: string]: unknown;
+            }[];
+            /** Code */
+            code: string;
+        };
+        /**
+         * FactorResponse
+         * @description 인과관계가 아니다. risk, positive 각각 최대 3개다.
+         */
+        FactorResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "risk" | "positive";
+            /**
+             * Contribution
+             * @description 확률이 아닌 로그 오즈 단위의 크기
+             */
+            contribution: number;
         };
         /** HealthResponse */
         HealthResponse: {
@@ -56,6 +546,27 @@ export interface components {
             status: string;
             /** Model Loaded */
             model_loaded: boolean;
+        };
+        /** MeResponse */
+        MeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             * @example 00000000-0000-4000-8000-000000000010
+             */
+            id: string;
+            /**
+             * Provider
+             * @example kakao
+             * @enum {string}
+             */
+            provider: "google" | "kakao";
+            /**
+             * Created At
+             * Format: date-time
+             * @example 2026-11-25T00:00:00Z
+             */
+            created_at: string;
         };
         /** PredictRequest */
         PredictRequest: {
@@ -78,18 +589,212 @@ export interface components {
             /** Predictions */
             predictions: number[];
         };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
+        /**
+         * Radius
+         * @description A05 조회 반경(m). Literal은 쿼리 문자열을 숫자로 바꾸지 않아 IntEnum을 쓴다.
+         * @enum {integer}
+         */
+        Radius: 150 | 300 | 500 | 1000;
+        /**
+         * RegionResolveResponse
+         * @description 서울 밖이면 supported는 false이고 나머지는 null이다.
+         */
+        RegionResolveResponse: {
+            /**
+             * Dong Code
+             * @example 11110515
+             */
+            dong_code: string | null;
+            /**
+             * Dong Name
+             * @example 청운효자동
+             */
+            dong_name: string | null;
+            /**
+             * Gu Name
+             * @example 종로구
+             */
+            gu_name: string | null;
+            /** Supported */
+            supported: boolean;
+        };
+        /** SimulationResponse */
+        SimulationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Source
+             * @description 진단 상세에는 항상 initial 계산을 준다
+             * @enum {string}
+             */
+            source: "initial" | "user";
+            /** Break Even Sales */
+            break_even_sales: number;
+            /** Monthly Profit */
+            monthly_profit: number | null;
+            /**
+             * Affordable Rent
+             * @description 부가세를 뺀 공급가. 음수도 그대로 준다
+             */
+            affordable_rent: number | null;
+            /**
+             * Estimated Loss
+             * @description 종료 조건이 없으면 null
+             */
+            estimated_loss: number | null;
+            /** Assumptions */
+            assumptions: string[];
+        };
+        /** StoreItem */
+        StoreItem: {
+            /**
+             * Id
+             * @description `source:관리번호`
+             * @example general:example-001
+             */
+            id: string;
+            /**
+             * Name
+             * @example 예시 매장
+             */
+            name: string | null;
+            /**
+             * Category Id
+             * @example cafe
+             */
+            category_id: string;
+            /**
+             * Licensed Year
+             * @example 2023
+             */
+            licensed_year: number | null;
+            /**
+             * Lat
+             * @example 37.5665
+             */
+            lat: number;
+            /**
+             * Lng
+             * @example 126.978
+             */
+            lng: number;
+            /**
+             * Distance M
+             * @example 120
+             */
+            distance_m: number;
+        };
+        /** StoreListResponse */
+        StoreListResponse: {
+            /**
+             * Total
+             * @description 잘리기 전 전체 건수
+             * @example 1280
+             */
+            total: number;
+            /**
+             * Returned
+             * @example 1000
+             */
+            returned: number;
+            /** Truncated */
+            truncated: boolean;
+            /**
+             * Category Counts
+             * @description 잘리기 전 전체 건수. 조회한 업종은 0건도 넣는다
+             */
+            category_counts: components["schemas"]["CategoryCount"][];
+            /**
+             * Base Date
+             * @description 조회 업종의 인허가 자료 기준일 중 가장 이른 날. 성공한 수집이 없으면 null
+             * @example 2026-11-22
+             */
+            base_date: string | null;
+            /**
+             * Items
+             * @description 가까운 순, 같으면 ID 순
+             */
+            items: components["schemas"]["StoreItem"][];
+        };
+        /** SurvivalPointResponse */
+        SurvivalPointResponse: {
+            /**
+             * Month
+             * @enum {integer}
+             */
+            month: 12 | 24 | 36;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "km_baseline" | "logistic" | "lightgbm";
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "location_category" | "dong_category" | "seoul_category";
+            /** Probability */
+            probability: number;
+            /** Lower */
+            lower: number | null;
+            /** Upper */
+            upper: number | null;
+            /**
+             * Baseline
+             * @description 서울 같은 업종 기준선
+             */
+            baseline: number | null;
+        };
+        /**
+         * SurvivalResponse
+         * @description 자료가 부족하면 available은 false이고 points는 빈 배열이며 reason에 사유를 넣는다.
+         */
+        SurvivalResponse: {
+            /** Available */
+            available: boolean;
+            /** Model Version */
+            model_version: string | null;
+            /** Points */
+            points: components["schemas"]["SurvivalPointResponse"][];
+            /** Interval Level */
+            interval_level: number | null;
+            /** Sample Size */
+            sample_size: number | null;
+            /** Reason */
+            reason: string | null;
+        };
+        /** TokenRequest */
+        TokenRequest: {
+            /**
+             * Code
+             * @description 1회용 로그인 코드. 60초 뒤 만료된다
+             * @example one-time-code
+             */
+            code: string;
+            /**
+             * Code Verifier
+             * @description 로그인 시작 때 보낸 code_challenge의 원본 값
+             * @example example-verifier
+             */
+            code_verifier: string;
+        };
+        /** TokenResponse */
+        TokenResponse: {
+            /**
+             * Token
+             * @description 세션 토큰. 이 응답에서만 준다
+             * @example example-token
+             */
+            token: string;
+            /**
+             * Expires At
+             * Format: date-time
+             * @example 2026-12-25T00:00:00Z
+             */
+            expires_at: string;
         };
     };
     responses: never;
@@ -120,6 +825,35 @@ export interface operations {
             };
         };
     };
+    health_db_health_db_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DbHealthResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     run_predict_api_v1_predict_post: {
         parameters: {
             query?: never;
@@ -142,13 +876,714 @@ export interface operations {
                     "application/json": components["schemas"]["PredictResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    issue_token_api_v1_auth_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    start_login_api_v1_auth__provider__start_get: {
+        parameters: {
+            query: {
+                client: "web" | "app";
+                /** @description 필수. S256, base64url 43자 */
+                code_challenge?: string | null;
+                /** @description 필수. 동의한 약관 버전 */
+                terms_version?: string | null;
+            };
+            header?: never;
+            path: {
+                provider: "google" | "kakao";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finish_login_api_v1_auth__provider__callback_get: {
+        parameters: {
+            query?: {
+                state?: string | null;
+                /** @description 공급자가 준 인가 코드 */
+                code?: string | null;
+                /** @description 공급자가 알려 준 오류 */
+                error?: string | null;
+            };
+            header?: never;
+            path: {
+                provider: "google" | "kakao";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_me_api_v1_users_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_me_api_v1_users_me_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_categories_api_v1_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryListResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_region_api_v1_regions_resolve_get: {
+        parameters: {
+            query: {
+                /** @description 중심 위도 (WGS84) */
+                lat: number;
+                /** @description 중심 경도 (WGS84) */
+                lng: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionResolveResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_stores_api_v1_stores_get: {
+        parameters: {
+            query: {
+                /** @description 중심 위도 (WGS84) */
+                lat: number;
+                /** @description 중심 경도 (WGS84) */
+                lng: number;
+                /** @description 반경(m) */
+                radius?: components["schemas"]["Radius"];
+                /** @description 업종 ID. 여러 번 보낸다. 없으면 외식 9종 전체 */
+                category?: string[] | null;
+                /** @description 이 API만 기본·최대 1000 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_diagnoses_api_v1_diagnoses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description 이전 응답의 `next_cursor` */
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosisListResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_diagnosis_api_v1_diagnoses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosisCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosisDetailResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_diagnosis_api_v1_diagnoses__diagnosis_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnosis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosisDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
