@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 import { onUnauthorized } from "@/lib/api/client";
-import { isProtectedPath, loginRequiredHref, rememberPublicPath } from "@/lib/return-to";
+import { guardRedirectHref, isProtectedPath, loginRequiredHref, rememberPublicPath } from "@/lib/return-to";
 import { getSessionStatus } from "@/lib/session";
 import { useSessionStatus } from "@/lib/use-session";
 
@@ -32,7 +32,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     }
     // 정적 HTML 은 로그아웃 상태로 그려지므로, 화면 값 대신 저장소를 직접 읽어 판단한다
     if (getSessionStatus() === "logged_in") return;
-    router.replace(loginRequiredHref(currentPath()));
+    router.replace(guardRedirectHref(currentPath()));
   }, [pathname, protectedPath, router, status]);
 
   useEffect(() => onUnauthorized(() => router.replace(loginRequiredHref(currentPath()))), [router]);
