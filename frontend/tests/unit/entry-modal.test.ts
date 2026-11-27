@@ -8,7 +8,7 @@ import { CATEGORIES, INITIAL_PIN, NEIGHBORHOODS } from "@/lib/mock/startup/data"
 
 const COMPLETE: EntryDraft = {
   neighborhood: NEIGHBORHOODS[0]!,
-  category: CATEGORIES[0]!,
+  categories: [CATEGORIES[0]!],
   radiusM: 500,
   pin: INITIAL_PIN,
 };
@@ -46,15 +46,24 @@ describe("EntryModal", () => {
     expect(markup).not.toContain("계약서 검토하기");
   });
 
-  it("leaves every item empty and cannot be closed before the first choice", () => {
+  it("starts with no area, all 9 categories and the default 500m radius (specs/area-map R3)", () => {
     const markup = render(EMPTY_DRAFT);
 
-    expect(markup.match(/선택해 주세요/g)).toHaveLength(3);
+    expect(markup.match(/선택해 주세요/g)).toHaveLength(1);
     expect(markup).not.toContain(NEIGHBORHOODS[0].shortName);
-    expect(markup).not.toContain("500m");
+    expect(markup).toContain("전체 9종");
+    expect(markup).toContain("500m");
     expect(markup).not.toContain("닫기");
-    expect(markup).toContain("세 항목을 모두 골라 주세요");
+    expect(markup).toContain("관심 상권을 골라 주세요");
     expect(markup.match(/disabled=""/g)).toHaveLength(2);
+  });
+
+  it("allows applying with several categories but analyzing only with one (A07 takes one category)", () => {
+    const markup = render({ ...COMPLETE, categories: [CATEGORIES[0]!, CATEGORIES[1]!] });
+
+    expect(markup).toContain(`${CATEGORIES[0]!.label} 외 1`);
+    expect(markup.match(/disabled=""/g)).toHaveLength(1);
+    expect(markup).toContain("상권 요약은 업종을 1개 골라야 볼 수 있어요");
   });
 
   it("offers apply and analyze actions once every item is chosen", () => {

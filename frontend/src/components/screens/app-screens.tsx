@@ -13,7 +13,7 @@ import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
-import { EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
+import { canAnalyzeDraft, EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
 import { calcLoss } from "@/lib/mock/startup/calc";
 import type { Point } from "@/lib/mock/startup/types";
 import { loginRequiredHref } from "@/lib/return-to";
@@ -32,7 +32,7 @@ export function ExploreScreen() {
   const session = useSessionStatus();
 
   const applied: EntryDraft | null = s.hasSelection
-    ? { neighborhood: s.neighborhood, category: s.category, radiusM: s.radiusM, pin: s.pinCenter }
+    ? { neighborhood: s.neighborhood, categories: s.categories, radiusM: s.radiusM, pin: s.pinCenter }
     : null;
   // null 이면 적용한 조건 그대로다. 패널에서 무언가 바꾸면 적용 전까지 여기에 둔다
   const [edited, setEdited] = useState<EntryDraft | null>(null);
@@ -48,7 +48,7 @@ export function ExploreScreen() {
     if (!isCompleteDraft(draft)) return false;
     s.applySelection({
       neighborhood: draft.neighborhood,
-      category: draft.category,
+      categories: draft.categories,
       radiusM: draft.radiusM,
       pinCenter: draft.pin,
     });
@@ -56,12 +56,16 @@ export function ExploreScreen() {
     return true;
   }
 
+  /** 지금 지도에 보이는 동에서 누른 위치를 관심 상권으로 삼는다. 실제 지도가 붙으면 좌표로 행정동을 찾는다(A04) */
+  function pickOnMap(point: Point) {
+    setEdited({ ...draft, neighborhood: draft.neighborhood ?? s.neighborhood, pin: point });
+    setPicking(false);
+    setMapPickCount((n) => n + 1);
+  }
+
   function onMapClick(point: Point) {
     if (picking) {
-      // 지금 지도에 보이는 동에서 누른 위치를 관심 상권으로 삼는다. 카카오 지도가 붙으면 좌표로 행정동을 찾는다
-      setEdited({ ...draft, neighborhood: draft.neighborhood ?? s.neighborhood, pin: point });
-      setPicking(false);
-      setMapPickCount((n) => n + 1);
+      pickOnMap(point);
       return;
     }
     // 적용한 조건을 보고 있을 때는 지금처럼 누른 곳으로 중심을 바로 옮긴다
@@ -72,11 +76,13 @@ export function ExploreScreen() {
     <main className="relative flex-1">
       <ExploreMapView
         neighborhood={draft.neighborhood ?? s.neighborhood}
-        category={draft.category ?? s.category}
-        radiusM={draft.radiusM ?? s.radiusM}
+        category={draft.categories.length === 1 ? (draft.categories[0] ?? s.category) : s.category}
+        radiusM={draft.radiusM}
         stores={s.stores}
         pinCenter={draft.pin ?? s.pinCenter}
         onMovePin={onMapClick}
+        // 지도를 길게 누르면 언제든 그 자리를 관심 상권으로 고른다 (specs/area-map R2)
+        onLongPress={pickOnMap}
         onReset={() => {
           s.clearSelection();
           setEdited(null);
@@ -102,7 +108,7 @@ export function ExploreScreen() {
           if (commit()) setAnalyzed(false);
         }}
         onAnalyze={() => {
-          if (commit()) setAnalyzed(true);
+          if (canAnalyzeDraft(draft) && commit()) setAnalyzed(true);
         }}
         picking={picking}
         onPickingChange={setPicking}

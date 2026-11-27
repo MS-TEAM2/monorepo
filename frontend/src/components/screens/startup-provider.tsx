@@ -35,11 +35,15 @@ export type StartupState = {
   /** 시작 선택 패널에서 세 값을 모두 고르면 한 번에 반영한다 */
   applySelection: (next: {
     neighborhood: Neighborhood;
-    category: Category;
+    /** 지도에서 거를 업종들. 빈 배열이면 9종 전체 */
+    categories: Category[];
     radiusM: RadiusM;
     pinCenter?: Point;
   }) => void;
+  /** 상권 요약·진단에 쓰는 업종 1개. 지도에서 업종을 1개만 고르면 그 업종이 된다 */
   category: Category;
+  /** 지도에서 거르는 업종들 (외식 9종 복수 선택, specs/area-map R3). 빈 배열이면 9종 전체 */
+  categories: Category[];
   radiusM: RadiusM;
   pinCenter: Point;
   setPinCenter: (point: Point) => void;
@@ -74,11 +78,18 @@ const StartupContext = createContext<StartupState | null>(null);
 const FIRST_NEIGHBORHOOD = NEIGHBORHOODS[0] as Neighborhood;
 const FIRST_CATEGORY = CATEGORIES[0] as Category;
 
-type Selection = { neighborhood: Neighborhood; category: Category; radiusM: RadiusM; pinCenter: Point };
+type Selection = {
+  neighborhood: Neighborhood;
+  category: Category;
+  categories: Category[];
+  radiusM: RadiusM;
+  pinCenter: Point;
+};
 
 const DEFAULT_SELECTION: Selection = {
   neighborhood: FIRST_NEIGHBORHOOD,
   category: FIRST_CATEGORY,
+  categories: [],
   radiusM: 500,
   pinCenter: INITIAL_PIN,
 };
@@ -92,7 +103,10 @@ function restoreSelection(raw: string | null): Selection | null {
   const neighborhood = NEIGHBORHOODS.find((n) => n.dongCode === parsed.dongCode);
   const category = CATEGORIES.find((c) => c.id === parsed.categoryId);
   if (!neighborhood || !category) return null;
-  return { neighborhood, category, radiusM: parsed.radiusM, pinCenter: parsed.pin };
+  const categories = (parsed.categoryIds ?? [])
+    .map((id) => CATEGORIES.find((c) => c.id === id))
+    .filter((c): c is Category => c !== undefined);
+  return { neighborhood, category, categories, radiusM: parsed.radiusM, pinCenter: parsed.pin };
 }
 
 /**
@@ -110,7 +124,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   const saved = useMemo(() => restoreSelection(savedRaw), [savedRaw]);
   const [chosen, setChosen] = useState<Selection | null>(null);
   const selection = chosen ?? saved ?? DEFAULT_SELECTION;
-  const { neighborhood, category, radiusM, pinCenter } = selection;
+  const { neighborhood, category, categories, radiusM, pinCenter } = selection;
   const choose = useCallback(
     (patch: Partial<Selection>) => {
       const next = { ...selection, ...patch };
@@ -118,6 +132,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       saveSelection({
         dongCode: next.neighborhood.dongCode,
         categoryId: next.category.id,
+        categoryIds: next.categories.map((c) => c.id),
         radiusM: next.radiusM,
         pin: next.pinCenter,
       });
@@ -135,7 +150,11 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   const [contractFields, setContractFields] = useState<ContractField[]>([]);
   const [appliedContract, setAppliedContract] = useState<AppliedContract | null>(null);
 
-  const stores = useMemo(() => generateStores(neighborhood, category), [neighborhood, category]);
+  // 고른 업종마다 예시 매장을 만들어 합친다. 고르지 않았으면 9종 전체
+  const stores = useMemo(
+    () => (categories.length > 0 ? categories : CATEGORIES).flatMap((c) => generateStores(neighborhood, c)),
+    [neighborhood, categories],
+  );
   const radiusStats = useMemo<RadiusStats>(() => {
     let activeCount = 0;
     let open1yCount = 0;
@@ -184,8 +203,16 @@ export function StartupProvider({ children }: { children: ReactNode }) {
     () => ({
       neighborhood,
       hasSelection: chosen !== null || saved !== null,
-      applySelection: (next) => choose({ pinCenter: INITIAL_PIN, ...next }),
+      applySelection: ({ categories: nextCategories, ...next }) =>
+        choose({
+          pinCenter: INITIAL_PIN,
+          ...next,
+          categories: nextCategories,
+          // 업종을 1개만 고르면 상권 요약·진단도 그 업종으로 본다. 여러 개거나 전체면 이전 업종을 그대로 둔다
+          category: nextCategories.length === 1 ? (nextCategories[0] as Category) : category,
+        }),
       category,
+      categories,
       radiusM,
       pinCenter,
       setPinCenter,
@@ -250,6 +277,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       setPinCenter,
       neighborhood,
       category,
+      categories,
       radiusM,
       pinCenter,
       stores,
