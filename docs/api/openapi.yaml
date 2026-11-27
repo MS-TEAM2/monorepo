@@ -16,6 +16,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /health/db:
+    get:
+      tags:
+      - system
+      summary: Health Db
+      operationId: health_db_health_db_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DbHealthResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/predict:
     post:
       tags:
@@ -36,22 +55,565 @@ paths:
               schema:
                 $ref: '#/components/schemas/PredictResponse'
         '422':
-          description: Validation Error
+          description: Unprocessable Content
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/token:
+    post:
+      tags:
+      - auth
+      summary: 1회용 코드를 세션 토큰으로 교환 (A01)
+      operationId: issue_token_api_v1_auth_token_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/{provider}/start:
+    get:
+      tags:
+      - auth
+      summary: 소셜 로그인 시작 (A26)
+      description: 브라우저가 직접 여는 주소다. 성공하면 공급자 로그인 화면으로 이동한다. `client`가 올바르면 입력 오류도
+        JSON 대신 돌아갈 주소의 `error=terms_outdated` 또는 `error=invalid_request`로 302 이동한다.
+        `client`가 잘못되면 422, 지원하지 않는 공급자는 404다.
+      operationId: start_login_api_v1_auth__provider__start_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - google
+          - kakao
+          title: Provider
+      - name: client
+        in: query
+        required: true
+        schema:
+          enum:
+          - web
+          - app
+          type: string
+          title: Client
+      - name: code_challenge
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 필수. S256, base64url 43자
+          title: Code Challenge
+        description: 필수. S256, base64url 43자
+      - name: terms_version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 필수. 동의한 약관 버전
+          title: Terms Version
+        description: 필수. 동의한 약관 버전
+      responses:
+        '302':
+          description: Successful Response
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/auth/{provider}/callback:
+    get:
+      tags:
+      - auth
+      summary: 소셜 로그인 콜백 (A27)
+      description: 공급자가 부른다. 성공하면 1회용 `code`를, 실패하면 `error`(`cancelled`, `provider_error`,
+        `expired`, `account_deleting`)를 쿼리에 붙여 돌아갈 주소로 302 이동한다.
+      operationId: finish_login_api_v1_auth__provider__callback_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - google
+          - kakao
+          title: Provider
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State
+      - name: code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 공급자가 준 인가 코드
+          title: Code
+        description: 공급자가 준 인가 코드
+      - name: error
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 공급자가 알려 준 오류
+          title: Error
+        description: 공급자가 알려 준 오류
+      responses:
+        '302':
+          description: Successful Response
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - auth
+      summary: 로그아웃 (A29)
+      operationId: logout_api_v1_auth_logout_post
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/users/me:
+    get:
+      tags:
+      - users
+      summary: 내 정보 (A28)
+      operationId: get_me_api_v1_users_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+    delete:
+      tags:
+      - users
+      summary: 회원 탈퇴 (A30)
+      operationId: delete_me_api_v1_users_me_delete
+      responses:
+        '204':
+          description: Successful Response
+        '202':
+          description: 삭제가 남아 정리 작업이 이어서 한다
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletingResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/categories:
+    get:
+      tags:
+      - explore
+      summary: 업종 목록 (A03)
+      operationId: list_categories_api_v1_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/regions/resolve:
+    get:
+      tags:
+      - explore
+      summary: 좌표의 행정동 판정 (A04)
+      description: '서울 밖이면 200과 `supported: false`이고 나머지 값은 null이다.'
+      operationId: resolve_region_api_v1_regions_resolve_get
+      parameters:
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 90
+          minimum: -90
+          description: 중심 위도 (WGS84)
+          title: Lat
+        description: 중심 위도 (WGS84)
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 180
+          minimum: -180
+          description: 중심 경도 (WGS84)
+          title: Lng
+        description: 중심 경도 (WGS84)
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionResolveResponse'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/stores:
+    get:
+      tags:
+      - explore
+      summary: 주변 매장 조회 (A05)
+      description: 영업 중이고 업종이 매핑됐으며 좌표가 있는 매장만 가까운 순(같으면 ID 순)으로 준다. 중심이 서울 밖이면 400
+        `out_of_service_area`, 결과가 없으면 200과 빈 배열이다.
+      operationId: list_stores_api_v1_stores_get
+      parameters:
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 90
+          minimum: -90
+          description: 중심 위도 (WGS84)
+          title: Lat
+        description: 중심 위도 (WGS84)
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 180
+          minimum: -180
+          description: 중심 경도 (WGS84)
+          title: Lng
+        description: 중심 경도 (WGS84)
+      - name: radius
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Radius'
+          description: 반경(m)
+          default: 500
+        description: 반경(m)
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          description: 업종 ID. 여러 번 보낸다. 없으면 외식 9종 전체
+          title: Category
+        description: 업종 ID. 여러 번 보낸다. 없으면 외식 9종 전체
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          description: 이 API만 기본·최대 1000
+          default: 1000
+          title: Limit
+        description: 이 API만 기본·최대 1000
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreListResponse'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
 components:
   schemas:
-    HTTPValidationError:
+    CategoryCount:
+      properties:
+        category_id:
+          type: string
+          title: Category Id
+          examples:
+          - cafe
+        count:
+          type: integer
+          title: Count
+          examples:
+          - 320
+      type: object
+      required:
+      - category_id
+      - count
+      title: CategoryCount
+    CategoryItem:
+      properties:
+        id:
+          type: string
+          title: Id
+          examples:
+          - cafe
+        name:
+          type: string
+          title: Name
+          examples:
+          - 카페
+      type: object
+      required:
+      - id
+      - name
+      title: CategoryItem
+    CategoryListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CategoryItem'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: CategoryListResponse
+    DbHealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          examples:
+          - ok
+      type: object
+      required:
+      - status
+      title: DbHealthResponse
+    DeletingResponse:
+      properties:
+        status:
+          type: string
+          const: deleting
+          title: Status
+      type: object
+      required:
+      - status
+      title: DeletingResponse
+    ErrorResponse:
       properties:
         detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
+          anyOf:
+          - type: string
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
           title: Detail
+        code:
+          type: string
+          title: Code
       type: object
-      title: HTTPValidationError
+      required:
+      - detail
+      - code
+      title: ErrorResponse
     HealthResponse:
       properties:
         status:
@@ -67,6 +629,34 @@ components:
       - status
       - model_loaded
       title: HealthResponse
+    MeResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          examples:
+          - 00000000-0000-4000-8000-000000000010
+        provider:
+          type: string
+          enum:
+          - google
+          - kakao
+          title: Provider
+          examples:
+          - kakao
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          examples:
+          - '2026-11-25T00:00:00Z'
+      type: object
+      required:
+      - id
+      - provider
+      - created_at
+      title: MeResponse
     PredictRequest:
       properties:
         features:
@@ -98,29 +688,187 @@ components:
       required:
       - predictions
       title: PredictResponse
-    ValidationError:
+    Radius:
+      type: integer
+      enum:
+      - 150
+      - 300
+      - 500
+      - 1000
+      title: Radius
+      description: A05 조회 반경(m). Literal은 쿼리 문자열을 숫자로 바꾸지 않아 IntEnum을 쓴다.
+    RegionResolveResponse:
       properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
-          type: string
-          title: Message
-        type:
-          type: string
-          title: Error Type
-        input:
-          title: Input
-        ctx:
-          type: object
-          title: Context
+        dong_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dong Code
+          examples:
+          - '11110515'
+        dong_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dong Name
+          examples:
+          - 청운효자동
+        gu_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gu Name
+          examples:
+          - 종로구
+        supported:
+          type: boolean
+          title: Supported
       type: object
       required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
+      - dong_code
+      - dong_name
+      - gu_name
+      - supported
+      title: RegionResolveResponse
+      description: 서울 밖이면 supported는 false이고 나머지는 null이다.
+    StoreItem:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: '`source:관리번호`'
+          examples:
+          - general:example-001
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+          examples:
+          - 예시 매장
+        category_id:
+          type: string
+          title: Category Id
+          examples:
+          - cafe
+        licensed_year:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Licensed Year
+          examples:
+          - 2023
+        lat:
+          type: number
+          title: Lat
+          examples:
+          - 37.5665
+        lng:
+          type: number
+          title: Lng
+          examples:
+          - 126.978
+        distance_m:
+          type: integer
+          title: Distance M
+          examples:
+          - 120
+      type: object
+      required:
+      - id
+      - name
+      - category_id
+      - licensed_year
+      - lat
+      - lng
+      - distance_m
+      title: StoreItem
+    StoreListResponse:
+      properties:
+        total:
+          type: integer
+          title: Total
+          description: 잘리기 전 전체 건수
+          examples:
+          - 1280
+        returned:
+          type: integer
+          title: Returned
+          examples:
+          - 1000
+        truncated:
+          type: boolean
+          title: Truncated
+        category_counts:
+          items:
+            $ref: '#/components/schemas/CategoryCount'
+          type: array
+          title: Category Counts
+          description: 잘리기 전 전체 건수. 조회한 업종은 0건도 넣는다
+        base_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Base Date
+          description: 조회 업종의 인허가 자료 기준일 중 가장 이른 날. 성공한 수집이 없으면 null
+          examples:
+          - '2026-11-22'
+        items:
+          items:
+            $ref: '#/components/schemas/StoreItem'
+          type: array
+          title: Items
+          description: 가까운 순, 같으면 ID 순
+      type: object
+      required:
+      - total
+      - returned
+      - truncated
+      - category_counts
+      - base_date
+      - items
+      title: StoreListResponse
+    TokenRequest:
+      properties:
+        code:
+          type: string
+          title: Code
+          description: 1회용 로그인 코드. 60초 뒤 만료된다
+          examples:
+          - one-time-code
+        code_verifier:
+          type: string
+          title: Code Verifier
+          description: 로그인 시작 때 보낸 code_challenge의 원본 값
+          examples:
+          - example-verifier
+      type: object
+      required:
+      - code
+      - code_verifier
+      title: TokenRequest
+    TokenResponse:
+      properties:
+        token:
+          type: string
+          title: Token
+          description: 세션 토큰. 이 응답에서만 준다
+          examples:
+          - example-token
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+          examples:
+          - '2026-12-25T00:00:00Z'
+      type: object
+      required:
+      - token
+      - expires_at
+      title: TokenResponse
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: A01에서 받은 세션 토큰
+      scheme: bearer

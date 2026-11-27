@@ -3,36 +3,91 @@
 
 /*
  * 디자인 토큰. 색·모서리·그림자는 여기에서만 정한다 (다크 모드는 범위 밖).
- * 프로젝트 브랜드가 정해지면 :root 의 값만 바꾼다. 컴포넌트에 색을 직접 쓰지 않는다.
+ * 값은 SCRUM-191 화면 시안을 따른다. 컴포넌트에 색을 직접 쓰지 않는다.
+ * primary(#c2410c)는 흰 글자와 대비 4.5:1 이상이라 버튼·링크 배경에 쓴다.
+ * brand(#ea580c)는 아이콘·강조 선·지도 핀처럼 글자를 올리지 않는 곳에 쓴다.
  */
 :root {
   --radius: 1rem;
 
-  --background: #f8f7fc;
-  --foreground: #1f1b3a;
+  --background: #fff7ed;
+  --foreground: #291f1b;
   --card: #ffffff;
-  --card-foreground: #1f1b3a;
+  --card-foreground: #291f1b;
   --popover: #ffffff;
-  --popover-foreground: #1f1b3a;
+  --popover-foreground: #291f1b;
 
-  --primary: #7c3aed;
-  --primary-hover: #5b21b6;
+  --primary: #c2410c;
+  --primary-hover: #9a3412;
   --primary-foreground: #ffffff;
-  --primary-soft: #ede9fe;
+  --primary-soft: #ffedd5;
 
-  --secondary: #f1eff8;
-  --secondary-foreground: #1f1b3a;
-  --muted: #f1eff8;
-  --muted-foreground: #6b6880;
-  --accent: #ede9fe;
-  --accent-foreground: #5b21b6;
-  --accent-coral: #ff6b4a;
-  --accent-coral-soft: #fff0ec;
+  --brand: #ea580c;
+  --brand-light: #f97316;
+  --brand-50: #fff4ea;
+  --brand-100: #ffe8d6;
+  --brand-200: #fed7aa;
+  --brand-300: #fdba74;
+  --brand-400: #fb923c;
 
+  --secondary: #fffbf7;
+  --secondary-foreground: #291f1b;
+  --muted: #f7efe8;
+  --muted-foreground: #7c6a5e;
+  --accent: #ffedd5;
+  --accent-foreground: #9a3412;
+  --accent-coral: #ea580c;
+  --accent-coral-soft: #fff7ed;
+
+  /* 글자 단계. 숫자가 작을수록 연하다 */
+  --ink-hover: #3e2f29;
+  --ink-700: #4a3b32;
+  --ink-600: #5c4b41;
+  --ink-500: #6b5a4e;
+  --ink-400: #8a7669;
+  --ink-300: #9a877b;
+  --ink-200: #b8a89d;
+
+  /* 상태 색. 색만으로 구분하지 않고 글자·아이콘을 함께 쓴다 */
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --success-500: #059669;
+  --success-700: #065f46;
+  --success-line: #a7f3d0;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --warning-500: #d97706;
+  --warning-700: #92400e;
+  --warning-line: #fcd34d;
   --destructive: #dc2626;
-  --border: #e7e4f2;
-  --input: #e7e4f2;
-  --ring: #7c3aed;
+  --destructive-soft: #fef2f2;
+  --destructive-700: #991b1b;
+  --destructive-line: #fecaca;
+
+  --border: #f3e5d8;
+  --input: #ebdcd0;
+  --ring: #c2410c;
+  --line: #efe3d8;
+  --line-strong: #e5d5c6;
+  --line-warm: #f3d9c4;
+
+  /* 지도(배경 그림) 전용 */
+  --map-bg: #f4efe6;
+  --map-block: #eae2d6;
+  --map-block-line: #e2d9ca;
+  --map-park: #d5ecd7;
+  --map-park-line: #bbe0be;
+  --map-water: #c5e2f6;
+  --map-water-line: #e4f2fc;
+  --map-road-dash: #fde4ce;
+  --map-store-out: #cbbfb4;
+  --map-closed: #9ca3af;
+  --map-closed-light: #d1d5db;
+  --map-closed-stroke: #6b7280;
+
+  /* 스크롤바 */
+  --scrollbar-thumb: #e5d5c6;
+  --scrollbar-thumb-hover: #fdba74;
 }
 
 @theme inline {
@@ -45,6 +100,8 @@
   --radius-lg: calc(var(--radius) - 4px);
   --radius-xl: var(--radius);
   --radius-2xl: calc(var(--radius) + 4px);
+  --radius-3xl: calc(var(--radius) + 8px);
+  --radius-4xl: calc(var(--radius) + 12px);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -56,6 +113,13 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -64,18 +128,56 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-coral: var(--accent-coral);
   --color-coral-soft: var(--accent-coral-soft);
+  --color-ink-hover: var(--ink-hover);
+  --color-ink-700: var(--ink-700);
+  --color-ink-600: var(--ink-600);
+  --color-ink-500: var(--ink-500);
+  --color-ink-400: var(--ink-400);
+  --color-ink-300: var(--ink-300);
+  --color-ink-200: var(--ink-200);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-500: var(--success-500);
+  --color-success-700: var(--success-700);
+  --color-success-line: var(--success-line);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-500: var(--warning-500);
+  --color-warning-700: var(--warning-700);
+  --color-warning-line: var(--warning-line);
   --color-destructive: var(--destructive);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-700: var(--destructive-700);
+  --color-destructive-line: var(--destructive-line);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-line-warm: var(--line-warm);
+  --color-map-bg: var(--map-bg);
+  --color-map-block: var(--map-block);
+  --color-map-block-line: var(--map-block-line);
+  --color-map-park: var(--map-park);
+  --color-map-park-line: var(--map-park-line);
+  --color-map-water: var(--map-water);
+  --color-map-water-line: var(--map-water-line);
+  --color-map-road-dash: var(--map-road-dash);
+  --color-map-store-out: var(--map-store-out);
+  --color-map-closed: var(--map-closed);
+  --color-map-closed-light: var(--map-closed-light);
+  --color-map-closed-stroke: var(--map-closed-stroke);
 
-  --shadow-soft: 0 1px 2px rgb(31 27 58 / 0.04), 0 4px 16px rgb(31 27 58 / 0.06);
-  --shadow-lifted: 0 2px 4px rgb(31 27 58 / 0.05), 0 12px 32px rgb(31 27 58 / 0.1);
+  --shadow-soft: 0 1px 2px rgb(41 31 27 / 0.04), 0 4px 16px rgb(41 31 27 / 0.06);
+  --shadow-lifted: 0 2px 4px rgb(41 31 27 / 0.05), 0 12px 32px rgb(41 31 27 / 0.1);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* 얇은 스크롤바 (Firefox, 최신 Chrome). scrollbar-width는 상속되지 않아 모든 요소에 둔다 */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
   html {
     -webkit-text-size-adjust: 100%;
@@ -85,17 +187,37 @@
     font-size: 16px;
     line-height: 1.6;
     word-break: keep-all;
+    letter-spacing: -0.01em;
     overflow-wrap: anywhere;
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }
+
+  /* 얇고 둥근 스크롤바 (Safari, 구형 Chrome). 페이지와 안쪽 스크롤 영역 모두에 적용한다 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: var(--scrollbar-thumb);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 @layer utilities {
+  /* 예전 이름 호환. 기본 스크롤바가 이미 얇다 */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
   }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
