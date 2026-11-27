@@ -11,8 +11,12 @@ vi.mock("@/lib/use-session", () => ({ useSessionStatus: () => "logged_in" }));
 
 import { MyReportScreen } from "@/components/screens/my-report-screen";
 import { StartupProvider } from "@/components/screens/startup-provider";
+import { createContractFields, INITIAL_FORM, INITIAL_PIN, NEIGHBORHOODS } from "@/lib/mock/startup/data";
 import {
+  appliedFromFields,
   clearMyReports,
+  contractSnapshotFor,
+  diagnosisSnapshotFor,
   MY_REPORT_STORAGE_KEY,
   parseMyReports,
   readMyReportsRaw,
@@ -93,5 +97,74 @@ describe("분석기록 화면", () => {
     expect(html).not.toContain("MY 리포트");
     expect(html).toContain("예시 데이터");
     expect(html).not.toContain("데이터 출처");
+  });
+});
+
+describe("분석기록 다시 보기 (SCRUM-208)", () => {
+  const gongdeok = NEIGHBORHOODS.find((n) => n.shortName === "공덕동") ?? NEIGHBORHOODS[0];
+  const SNAPSHOT = {
+    selection: {
+      dongCode: gongdeok?.dongCode ?? "",
+      categoryId: "korean",
+      categoryIds: ["korean"],
+      radiusM: 300 as const,
+      pin: { x: 120, y: 80 },
+    },
+    form: { ...INITIAL_FORM, rentMan: "320", areaM2: "40" },
+    rentMan: 320,
+  };
+
+  it("진단 기록에 그때의 선택값·입력값을 남기고 그대로 읽는다", () => {
+    const storage = memoryStorage();
+    recordDiagnosis({ ...DIAGNOSIS, snapshot: SNAPSHOT }, { storage, now: NOW });
+    const [saved] = parseMyReports(readMyReportsRaw({ storage }), NOW).diagnoses;
+    expect(saved?.snapshot).toEqual(SNAPSHOT);
+    expect(saved && diagnosisSnapshotFor(saved)).toEqual(SNAPSHOT);
+  });
+
+  it("계약서 기록에 항목·반영값·진단 입력을 남긴다", () => {
+    const storage = memoryStorage();
+    const fields = createContractFields().map((f) => ({ ...f, ok: true, input: f.input || String(f.value ?? "") }));
+    const snapshot = { fields, applied: appliedFromFields(fields), diagnosis: SNAPSHOT };
+    recordContract("confirmed", { storage, now: NOW, snapshot });
+    const reports = parseMyReports(readMyReportsRaw({ storage }), NOW);
+    const [saved] = reports.contracts;
+    expect(saved && contractSnapshotFor(saved, reports)).toEqual(snapshot);
+  });
+
+  it("입력 스냅샷 모양이 틀리면 스냅샷만 버리고 기록은 남긴다", () => {
+    const storage = memoryStorage();
+    recordDiagnosis(DIAGNOSIS, { storage, now: NOW });
+    const raw = JSON.parse(readMyReportsRaw({ storage }) ?? "{}");
+    raw.diagnoses[0].snapshot = { selection: { dongCode: 1 }, form: {}, rentMan: "x" };
+    storage.setItem(MY_REPORT_STORAGE_KEY, JSON.stringify(raw));
+    const [saved] = parseMyReports(readMyReportsRaw({ storage }), NOW).diagnoses;
+    expect(saved).toBeDefined();
+    expect(saved?.snapshot).toBeUndefined();
+  });
+
+  it("입력값 없는 예전·예시 진단은 기록의 동·업종과 예시 입력값으로 연다", () => {
+    const [sample] = sampleReports(NOW).diagnoses;
+    const snapshot = sample && diagnosisSnapshotFor(sample);
+    expect(snapshot?.selection).toMatchObject({ dongCode: gongdeok?.dongCode, categoryId: "korean", pin: INITIAL_PIN });
+    expect(snapshot?.rentMan).toBe(Number(snapshot?.form.rentMan));
+  });
+
+  it("입력값 없는 계약서는 예시 계약서를 모두 확인한 것으로 열고 연결된 진단 입력을 함께 쓴다", () => {
+    const reports = sampleReports(NOW);
+    const [contract] = reports.contracts;
+    const snapshot = contract && contractSnapshotFor(contract, reports);
+    expect(Object.keys(snapshot?.applied ?? {}).length).toBeGreaterThan(0);
+    expect(snapshot?.diagnosis?.selection.categoryId).toBe("korean");
+  });
+
+  it("손익 반영값은 확인한 항목 중 값이 있는 것만 넣는다", () => {
+    const [first, second] = createContractFields();
+    if (!first || !second) throw new Error("예시 계약서 항목이 없다");
+    const applied = appliedFromFields([
+      { ...first, ok: true, input: "12" },
+      { ...second, ok: false, input: "99" },
+    ]);
+    expect(Object.keys(applied)).toEqual([first.key]);
   });
 });

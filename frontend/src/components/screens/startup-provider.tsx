@@ -4,13 +4,14 @@ import { createContext, useCallback, useContext, useMemo, useState, useSyncExter
 
 import { buildDongSummary, buildSurvival, calcLoss, calcProfit, generateStores } from "@/lib/mock/startup/calc";
 import { CATEGORIES, EXAMPLE_FORM, INITIAL_FORM, INITIAL_PIN, MAP_SCALE, NEIGHBORHOODS } from "@/lib/mock/startup/data";
-import { recordContract, recordDiagnosis } from "@/lib/my-report";
+import { recordContract, recordDiagnosis, type ContractSnapshot, type DiagnosisSnapshot } from "@/lib/my-report";
 import { getSessionStatus } from "@/lib/session";
 import {
   clearSelection as clearSavedSelection,
   parseSelection,
   readSelectionRaw,
   saveSelection,
+  type StartupSelection,
 } from "@/lib/startup-selection";
 import type {
   AppliedContract,
@@ -74,6 +75,14 @@ export type StartupState = {
   appliedContract: AppliedContract | null;
   setAppliedContract: (contract: AppliedContract | null) => void;
   resetAll: () => void;
+  /** 분석기록의 진단을 그때의 선택값·입력값으로 다시 계산해 연다. 기록을 새로 남기지 않는다 (SCRUM-208) */
+  openDiagnosis: (snapshot: DiagnosisSnapshot) => void;
+  /** 분석기록의 계약서 검토를 그때의 항목·반영값으로 결과 단계에서 연다. 기록을 새로 남기지 않는다 */
+  openContract: (snapshot: ContractSnapshot) => void;
+  /** 새로 진단하기: 진단 입력값과 결과를 처음 상태로 돌린다. 지도에서 고른 동·업종·반경은 그대로 둔다 */
+  startNewDiagnosis: () => void;
+  /** 새 계약서 검토하기: 계약서 단계·항목·반영값을 처음 상태로 돌린다 */
+  startNewContract: () => void;
 };
 
 const StartupContext = createContext<StartupState | null>(null);
@@ -102,7 +111,78 @@ const noSubscribe = () => () => {};
 /** 저장값을 예시 데이터의 동네·업종으로 되살린다. 없는 동네·업종이면 null */
 function restoreSelection(raw: string | null): Selection | null {
   const parsed = parseSelection(raw);
-  if (!parsed) return null;
+  return parsed ? selectionFrom(parsed) : null;
+}
+
+function toSaved(selection: Selection): StartupSelection {
+  return {
+    dongCode: selection.neighborhood.dongCode,
+    categoryId: selection.category.id,
+    categoryIds: selection.categories.map((c) => c.id),
+    radiusM: selection.radiusM,
+    pin: selection.pinCenter,
+  };
+}
+
+/** 고른 업종마다 예시 매장을 만들어 합친다. 고르지 않았으면 9종 전체 */
+function storesFor(neighborhood: Neighborhood, categories: Category[]): Store[] {
+  return (categories.length > 0 ? categories : CATEGORIES).flatMap((c) => generateStores(neighborhood, c));
+}
+
+function radiusStatsFor(stores: Store[], pinCenter: Point, radiusM: RadiusM): RadiusStats {
+  let activeCount = 0;
+  let open1yCount = 0;
+  let close1yCount = 0;
+  for (const store of stores) {
+    const distanceM = Math.sqrt((store.x - pinCenter.x) ** 2 + (store.y - pinCenter.y) ** 2) / MAP_SCALE;
+    if (distanceM > radiusM) continue;
+    if (store.status === "active") {
+      activeCount += 1;
+      if (store.openedWithin1y) open1yCount += 1;
+    } else {
+      close1yCount += 1;
+    }
+  }
+  return { activeCount, open1yCount, close1yCount };
+}
+
+function costParamsFrom(formState: FormState, rentMan: number | null = null): CostParams {
+  const toKrw = (value: string) => Math.max(0, Math.round(1e4 * (Number(value) || 0)));
+  const rent = rentMan !== null ? rentMan : Number(formState.rentMan) || 0;
+  const sales = formState.expectedSalesMan.trim();
+  return {
+    rentKrw: Math.round(1e4 * rent),
+    maintenanceKrw: toKrw(formState.maintenanceMan),
+    rentVatSeparate: formState.rentVatSeparate,
+    laborKrw: toKrw(formState.laborMan),
+    otherFixedKrw: toKrw(formState.otherFixedMan),
+    variableCostRatePct: Number(formState.variableCostRate) || 0,
+    expectedSalesKrw: sales === "" || Number(sales) <= 0 ? null : toKrw(sales),
+    keyMoneyKrw: toKrw(formState.keyMoneyMan),
+    facilityCostKrw: toKrw(formState.facilityCostMan),
+    annualEscalationPct: Number(formState.annualEscalationPct) || 0,
+    exitMonth: Math.max(1, Number(formState.exitMonth) || 12),
+    remainingObligationMonths: Math.max(0, Number(formState.remainingObligationMonths) || 0),
+    penaltyKrw: toKrw(formState.penaltyMan),
+    restorationKrw: toKrw(formState.restorationMan),
+    penaltyOverlapsRent: formState.penaltyOverlapsRent,
+  };
+}
+
+/** 선택값과 진단 입력으로 진단 결과를 계산한다. 진단하기와 분석기록 다시 열기가 같이 쓴다 */
+function buildReport(selection: Selection, formState: FormState, rentMan: number): Report {
+  const { neighborhood, category, categories, radiusM, pinCenter } = selection;
+  const radiusStats = radiusStatsFor(storesFor(neighborhood, categories), pinCenter, radiusM);
+  const dongSummary = buildDongSummary(neighborhood, category);
+  const params = costParamsFrom(formState, rentMan);
+  return {
+    survival: buildSurvival({ neighborhood, category, radiusM, radiusStats, dongSummary }),
+    profit: calcProfit(params),
+    loss: calcLoss(params),
+  };
+}
+
+function selectionFrom(parsed: StartupSelection): Selection | null {
   const neighborhood = NEIGHBORHOODS.find((n) => n.dongCode === parsed.dongCode);
   const category = CATEGORIES.find((c) => c.id === parsed.categoryId);
   if (!neighborhood || !category) return null;
@@ -132,13 +212,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
     (patch: Partial<Selection>) => {
       const next = { ...selection, ...patch };
       setChosen(next);
-      saveSelection({
-        dongCode: next.neighborhood.dongCode,
-        categoryId: next.category.id,
-        categoryIds: next.categories.map((c) => c.id),
-        radiusM: next.radiusM,
-        pin: next.pinCenter,
-      });
+      saveSelection(toSaved(next));
     },
     [selection],
   );
@@ -153,53 +227,29 @@ export function StartupProvider({ children }: { children: ReactNode }) {
   const [contractFields, setContractFields] = useState<ContractField[]>([]);
   const [appliedContract, setAppliedContract] = useState<AppliedContract | null>(null);
 
-  // 고른 업종마다 예시 매장을 만들어 합친다. 고르지 않았으면 9종 전체
-  const stores = useMemo(
-    () => (categories.length > 0 ? categories : CATEGORIES).flatMap((c) => generateStores(neighborhood, c)),
-    [neighborhood, categories],
-  );
-  const radiusStats = useMemo<RadiusStats>(() => {
-    let activeCount = 0;
-    let open1yCount = 0;
-    let close1yCount = 0;
-    for (const store of stores) {
-      const distanceM = Math.sqrt((store.x - pinCenter.x) ** 2 + (store.y - pinCenter.y) ** 2) / MAP_SCALE;
-      if (distanceM > radiusM) continue;
-      if (store.status === "active") {
-        activeCount += 1;
-        if (store.openedWithin1y) open1yCount += 1;
-      } else {
-        close1yCount += 1;
-      }
-    }
-    return { activeCount, open1yCount, close1yCount };
-  }, [stores, pinCenter, radiusM]);
+  const stores = useMemo(() => storesFor(neighborhood, categories), [neighborhood, categories]);
+  const radiusStats = useMemo(() => radiusStatsFor(stores, pinCenter, radiusM), [stores, pinCenter, radiusM]);
   const dongSummary = useMemo(() => buildDongSummary(neighborhood, category), [neighborhood, category]);
 
   const buildCostParams = useCallback(
-    (rentMan: number | null = null): CostParams => {
-      const toKrw = (value: string) => Math.max(0, Math.round(1e4 * (Number(value) || 0)));
-      const rent = rentMan !== null ? rentMan : Number(formState.rentMan) || 0;
-      const sales = formState.expectedSalesMan.trim();
-      return {
-        rentKrw: Math.round(1e4 * rent),
-        maintenanceKrw: toKrw(formState.maintenanceMan),
-        rentVatSeparate: formState.rentVatSeparate,
-        laborKrw: toKrw(formState.laborMan),
-        otherFixedKrw: toKrw(formState.otherFixedMan),
-        variableCostRatePct: Number(formState.variableCostRate) || 0,
-        expectedSalesKrw: sales === "" || Number(sales) <= 0 ? null : toKrw(sales),
-        keyMoneyKrw: toKrw(formState.keyMoneyMan),
-        facilityCostKrw: toKrw(formState.facilityCostMan),
-        annualEscalationPct: Number(formState.annualEscalationPct) || 0,
-        exitMonth: Math.max(1, Number(formState.exitMonth) || 12),
-        remainingObligationMonths: Math.max(0, Number(formState.remainingObligationMonths) || 0),
-        penaltyKrw: toKrw(formState.penaltyMan),
-        restorationKrw: toKrw(formState.restorationMan),
-        penaltyOverlapsRent: formState.penaltyOverlapsRent,
-      };
-    },
+    (rentMan: number | null = null): CostParams => costParamsFrom(formState, rentMan),
     [formState],
+  );
+
+  /** 저장해 둔 진단 입력을 되살리고 결과를 계산한다. 동·업종을 찾지 못하면 지금 선택값으로 계산한다 */
+  const restoreDiagnosis = useCallback(
+    (snapshot: DiagnosisSnapshot) => {
+      const restored = selectionFrom(snapshot.selection) ?? selection;
+      setChosen(restored);
+      saveSelection(toSaved(restored));
+      setFormState(snapshot.form);
+      setUsedExample(false);
+      setExampleConfirmed(false);
+      setReport(buildReport(restored, snapshot.form, snapshot.rentMan));
+      setInitialRentMan(snapshot.rentMan);
+      setSliderRentMan(snapshot.rentMan);
+    },
+    [selection],
   );
 
   const value = useMemo<StartupState>(
@@ -240,12 +290,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       report,
       runDiagnosis: (options) => {
         const rent = Math.max(0, Number(formState.rentMan) || 0);
-        const params = buildCostParams(rent);
-        setReport({
-          survival: buildSurvival({ neighborhood, category, radiusM, radiusStats, dongSummary }),
-          profit: calcProfit(params),
-          loss: calcLoss(params),
-        });
+        setReport(buildReport(selection, formState, rent));
         setInitialRentMan(rent);
         setSliderRentMan(rent);
         // 로그인한 사용자의 진단은 분석기록에 남긴다 (예시 화면이라 이 브라우저에만, lib/my-report)
@@ -254,6 +299,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
             address: `${neighborhood.name} 선택 위치`,
             category_id: category.id,
             dong_name: neighborhood.shortName,
+            snapshot: { selection: toSaved(selection), form: formState, rentMan: rent },
           });
         }
       },
@@ -274,7 +320,15 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       setAppliedContract: (contract) => {
         setAppliedContract(contract);
         // 계약서 검토를 마쳐 손익에 반영하면 분석기록에 남긴다
-        if (contract && getSessionStatus() === "logged_in") recordContract("confirmed");
+        if (contract && getSessionStatus() === "logged_in") {
+          recordContract("confirmed", {
+            snapshot: {
+              fields: contractFields,
+              applied: contract,
+              diagnosis: { selection: toSaved(selection), form: formState, rentMan: initialRentMan },
+            },
+          });
+        }
       },
       resetAll: () => {
         setReport(null);
@@ -283,6 +337,27 @@ export function StartupProvider({ children }: { children: ReactNode }) {
         setAppliedContract(null);
         setUsedExample(false);
         setExampleConfirmed(false);
+      },
+      openDiagnosis: restoreDiagnosis,
+      openContract: (snapshot) => {
+        if (snapshot.diagnosis) restoreDiagnosis(snapshot.diagnosis);
+        setContractFields(snapshot.fields);
+        setAppliedContract(snapshot.applied);
+        setContractStage("result");
+      },
+      startNewDiagnosis: () => {
+        setFormState(INITIAL_FORM);
+        setReport(null);
+        setUsedExample(false);
+        setExampleConfirmed(false);
+        const rent = Number(INITIAL_FORM.rentMan) || 0;
+        setInitialRentMan(rent);
+        setSliderRentMan(rent);
+      },
+      startNewContract: () => {
+        setContractStage("upload");
+        setContractFields([]);
+        setAppliedContract(null);
       },
     }),
     [
@@ -308,6 +383,8 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       contractStage,
       contractFields,
       appliedContract,
+      selection,
+      restoreDiagnosis,
     ],
   );
 
