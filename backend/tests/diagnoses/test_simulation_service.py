@@ -1,6 +1,9 @@
 """A13 손익 다시 계산의 계산 부분(DB 없이). 진단 조회와 저장은 test_simulation_db.py가 확인한다."""
 
 import copy
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -208,3 +211,20 @@ def test_stored_inputs_match_the_table_definition():
     assert (
         compute_simulation(COST_INPUT, request(overrides={"deposit": 1})).inputs()["exit"] is None
     )
+
+
+def test_service_loads_the_contract_table_that_simulations_point_to():
+    # simulations.contract_id가 contracts를 가리키므로 서비스만 불러도 외래 키가 풀려야 저장된다.
+    # 다른 테스트가 계약 모델을 먼저 불러 가리지 않도록 새 프로세스에서 확인한다.
+    code = (
+        "import app.diagnoses.service as s\n"
+        "from app.diagnoses.models import Simulation\n"
+        "fk = next(iter(Simulation.__table__.c.contract_id.foreign_keys))\n"
+        "print(fk.column.table.name)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, cwd=Path(__file__).parents[2]
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "contracts"

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.contracts import models as _contracts_models  # noqa: F401  (simulations.contract_id 외래 키가 contracts를 찾도록)
 from app.diagnoses.calculations import (
     ExitInput,
     LossResult,
