@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { ExploreMapView } from "@/components/screens/explore-map-view";
+import type { MapLayers } from "@/lib/entry-draft";
 import { buildDongSummary, generateStores } from "@/lib/mock/startup/calc";
 import { CATEGORIES, INITIAL_PIN, NEIGHBORHOODS } from "@/lib/mock/startup/data";
 import type { Category, Neighborhood } from "@/lib/mock/startup/types";
@@ -75,26 +76,49 @@ describe("S03 상권 요약 잠금 (Notion 기획서 S03)", () => {
   const neighborhood = NEIGHBORHOODS[0] as Neighborhood;
   const category = CATEGORIES[0] as Category;
   const dongSummary = buildDongSummary(neighborhood, category);
-  const render = (dongLocked: boolean) =>
+  const render = (dongLocked: boolean, layers?: MapLayers) =>
     renderToStaticMarkup(
       createElement(ExploreMapView, {
         neighborhood,
         category,
         radiusM: 500,
-        onSelectRadius: () => {},
         stores: generateStores(neighborhood, category),
         pinCenter: INITIAL_PIN,
         onMovePin: () => {},
-        onResetPin: () => {},
+        onReset: () => {},
         radiusStats: { activeCount: 12, open1yCount: 3, close1yCount: 2 },
         dongSummary,
-        onOpenModal: () => {},
         onGoDiagnose: () => {},
         onGoContract: () => {},
         dongLocked,
         onLogin: () => {},
+        layers,
       }),
     );
+
+  it("조건을 고르기 전에는 바탕 지도만 보여 주고 지역·반경·요약을 그리지 않는다", () => {
+    const markup = render(true, { pin: false, radius: false, stores: false, summary: false });
+    expect(markup).toContain("상권 탐색 지도");
+    expect(markup).not.toContain(neighborhood.name);
+    expect(markup).not.toContain(neighborhood.mapStyle.station.name);
+    expect(markup).not.toContain("매장 목록");
+    expect(markup).not.toContain("상권 요약");
+  });
+
+  it("적용만 하면 매장은 그리고 왼쪽 아래 상권 요약은 분석하기 전까지 숨긴다", () => {
+    const markup = render(true, { pin: true, radius: true, stores: true, summary: false });
+    expect(markup).toContain("매장 목록");
+    // 초기화는 핀을 옮기지 않아도 늘 보인다. 누르면 조건을 모두 지운다
+    expect(markup).toContain("초기화");
+    expect(markup).not.toContain("상권 요약");
+  });
+
+  it("조건을 고른 뒤에도 지도 위에 지역·반경 버튼을 따로 두지 않는다 (시작 선택 패널이 보여 준다)", () => {
+    const markup = render(true);
+    expect(markup).toContain("매장 목록");
+    expect(markup).not.toContain("조건 변경");
+    expect(markup).not.toContain(">150m<");
+  });
 
   it("로그인 전에는 행정동 지표 대신 잠금 안내와 로그인 버튼을 보여 준다", () => {
     const markup = render(true);

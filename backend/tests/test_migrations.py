@@ -16,6 +16,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import models as _auth_models  # noqa: F401
+from app.contracts import models as _contracts_models  # noqa: F401
 from app.data_status import models as _data_status_models  # noqa: F401
 from app.db import normalize_database_url
 from app.diagnoses import models as _diagnoses_models  # noqa: F401
@@ -44,9 +45,23 @@ TABLES = {
     "model_versions",
     "diagnoses",
     "simulations",
+    "law_articles",
+    "risk_rules",
+    "contracts",
+    "contract_files",
+    "contract_terms",
+    "contract_findings",
 }
 LOGIN_TABLES = {"users", "login_attempts", "sessions"}
 DIAGNOSIS_TABLES = {"model_versions", "diagnoses", "simulations"}
+CONTRACT_TABLES = {
+    "law_articles",
+    "risk_rules",
+    "contracts",
+    "contract_files",
+    "contract_terms",
+    "contract_findings",
+}
 
 
 def alembic(url: str, *args: str) -> None:
@@ -100,10 +115,12 @@ def table_names(engine) -> set[str]:
 def test_upgrade_downgrade_upgrade(database_url, engine):
     assert table_names(engine) == TABLES
     # 리비전마다 그 리비전의 테이블만 사라지고 이전 리비전의 테이블은 남는다.
+    alembic(database_url, "downgrade", "0004")
+    assert table_names(engine) == TABLES - CONTRACT_TABLES
     alembic(database_url, "downgrade", "0003")
-    assert table_names(engine) == TABLES - DIAGNOSIS_TABLES
+    assert table_names(engine) == TABLES - CONTRACT_TABLES - DIAGNOSIS_TABLES
     alembic(database_url, "downgrade", "0002")
-    assert table_names(engine) == TABLES - DIAGNOSIS_TABLES - LOGIN_TABLES
+    assert table_names(engine) == TABLES - CONTRACT_TABLES - DIAGNOSIS_TABLES - LOGIN_TABLES
     alembic(database_url, "downgrade", "0001")
     assert table_names(engine) == set()
     alembic(database_url, "upgrade", "head")
@@ -160,6 +177,14 @@ def test_indexes(engine):
         "ix_simulations_diagnosis_id": "(diagnosis_id)",
         "ix_simulations_initial": "(diagnosis_id) WHERE (source = 'initial'::text)",
         "ix_simulations_contract_id_created_at": "(contract_id, created_at DESC)",
+        "ix_contracts_user_id": "(user_id)",
+        "ix_contracts_diagnosis_id": "(diagnosis_id)",
+        "ix_contracts_expires_at": "(expires_at)",
+        "ix_contracts_status_updated_at": "(status, updated_at)",
+        "ix_contracts_processing": "(user_id) WHERE (status = 'processing'::text)",
+        "ix_contracts_user_id_created_at_id": "(user_id, created_at DESC, id DESC)",
+        "ix_contract_files_contract_id": "(contract_id)",
+        "ix_contract_findings_contract_id": "(contract_id)",
     }
     for name, definition in expected.items():
         assert definition in indexes.get(name, ""), name
@@ -625,29 +650,358 @@ def test_only_one_initial_simulation_per_diagnosis(db, diagnosis):
 
 
 def test_contract_simulation_needs_contract_and_comparison(db, diagnosis):
-    _, diagnosis_id = diagnosis
-    add_simulation(db, diagnosis_id, source="contract", contract_id=uuid.uuid4(), comparison="{}")
+    user_id, diagnosis_id = diagnosis
+    contract_id = add_contract(db, user_id, diagnosis_id=diagnosis_id)
+    add_simulation(db, diagnosis_id, source="contract", contract_id=contract_id, comparison="{}")
 
     assert count(db, "simulations") == 1
 
 
 @pytest.mark.parametrize(
-    "values",
+    ("values", "with_contract"),
     [
-        {"source": "unknown"},
-        {"source": "contract"},
-        {"source": "contract", "contract_id": uuid.UUID(int=1)},
-        {"source": "contract", "comparison": "{}"},
-        {"source": "user", "contract_id": uuid.UUID(int=1)},
-        {"source": "user", "comparison": "{}"},
+        ({"source": "unknown"}, False),
+        ({"source": "contract"}, False),
+        ({"source": "contract"}, True),
+        ({"source": "contract", "comparison": "{}"}, False),
+        ({"source": "user"}, True),
+        ({"source": "user", "comparison": "{}"}, False),
     ],
 )
-def test_simulation_rejects_invalid_source_combinations(db, diagnosis, values):
-    _, diagnosis_id = diagnosis
-    with pytest.raises(IntegrityError):
+def test_simulation_rejects_invalid_source_combinations(db, diagnosis, values, with_contract):
+    # contract_id는 실제 계약을 가리켜 외래 키가 아니라 CHECK로 거부되는지 확인한다.
+    user_id, diagnosis_id = diagnosis
+    if with_contract:
+        values = values | {"contract_id": add_contract(db, user_id, diagnosis_id=diagnosis_id)}
+    with pytest.raises(IntegrityError, match="ck_simulations"):
         add_simulation(db, diagnosis_id, **values)
 
 
 def test_simulation_rejects_unknown_diagnosis(db):
     with pytest.raises(IntegrityError):
         add_simulation(db, uuid.UUID(int=0))
+
+
+# --- 계약 테이블 (contracts, contract_files, contract_terms, contract_findings, ...) ---
+
+
+def add_contract(
+    db, user_id, diagnosis_id=None, status="processing", original_deleted=False, **values
+) -> uuid.UUID:
+    row = {
+        "user_id": user_id,
+        "diagnosis_id": diagnosis_id,
+        "status": status,
+        "step": "ocr" if status == "processing" else None,
+        "page_count": 2,
+        "error_code": None,
+        "original_deleted": original_deleted,
+    } | values
+    return db.execute(
+        text(
+            "INSERT INTO contracts (id, user_id, diagnosis_id, status, step, page_count, "
+            "consent_version, consented_at, original_deleted_at, error_code, created_at, "
+            "updated_at, expires_at) VALUES (gen_random_uuid(), :user_id, :diagnosis_id, "
+            ":status, :step, :page_count, 'v1', now(), "
+            "CASE WHEN :original_deleted THEN now() END, :error_code, now(), now(), "
+            "now() + interval '30 days') RETURNING id"
+        ),
+        row,
+    ).scalar_one()
+
+
+def add_file(db, contract_id, sort_order=1) -> None:
+    db.execute(
+        text(
+            "INSERT INTO contract_files (id, contract_id, sort_order, blob_key) "
+            "VALUES (gen_random_uuid(), :contract_id, :sort_order, 'blob-key')"
+        ),
+        {"contract_id": contract_id, "sort_order": sort_order},
+    )
+
+
+def add_term(db, contract_id, term_key="monthly_rent", confidence=0.96) -> None:
+    db.execute(
+        text(
+            "INSERT INTO contract_terms (contract_id, term_key, extracted_value, confidence) "
+            "VALUES (:contract_id, :term_key, '2700000', :confidence)"
+        ),
+        {"contract_id": contract_id, "term_key": term_key, "confidence": confidence},
+    )
+
+
+def add_rule(db, rule_id="R02", severity="high", law_article_id=None) -> None:
+    db.execute(
+        text(
+            "INSERT INTO risk_rules (id, title, default_severity, law_article_id, is_active) "
+            "VALUES (:id, '원상복구 범위', :severity, :law, true)"
+        ),
+        {"id": rule_id, "severity": severity, "law": law_article_id},
+    )
+
+
+def add_finding(db, contract_id, rule_id="R02", severity="high", confidence=0.88) -> None:
+    db.execute(
+        text(
+            "INSERT INTO contract_findings (id, contract_id, rule_id, severity, evidence_text, "
+            "reason, check_points, question, confidence) VALUES (gen_random_uuid(), "
+            ":contract_id, :rule_id, :severity, '원문', '이유', '[]', '질문', :confidence)"
+        ),
+        {
+            "contract_id": contract_id,
+            "rule_id": rule_id,
+            "severity": severity,
+            "confidence": confidence,
+        },
+    )
+
+
+def test_contract_tables_have_only_agreed_columns(engine):
+    expected = {
+        "contracts": {
+            "id",
+            "user_id",
+            "diagnosis_id",
+            "status",
+            "step",
+            "page_count",
+            "consent_version",
+            "consented_at",
+            "original_deleted_at",
+            "error_code",
+            "created_at",
+            "updated_at",
+            "expires_at",
+        },
+        "contract_files": {
+            "id",
+            "contract_id",
+            "sort_order",
+            "blob_key",
+            "ocr_result_id",
+            "ocr_started_at",
+            "blob_deleted_at",
+            "ocr_deleted_at",
+        },
+        "contract_terms": {
+            "contract_id",
+            "term_key",
+            "extracted_value",
+            "confirmed_value",
+            "evidence_text",
+            "page_no",
+            "confidence",
+            "confirmed_at",
+        },
+        "contract_findings": {
+            "id",
+            "contract_id",
+            "rule_id",
+            "severity",
+            "evidence_text",
+            "page_no",
+            "reason",
+            "check_points",
+            "suggestion",
+            "question",
+            "confidence",
+        },
+        "law_articles": {
+            "id",
+            "law_name",
+            "article_no",
+            "body",
+            "source_url",
+            "effective_on",
+            "checked_at",
+        },
+        "risk_rules": {"id", "title", "default_severity", "law_article_id", "is_active"},
+    }
+    inspector = inspect(engine)
+    for table, columns in expected.items():
+        assert {c["name"] for c in inspector.get_columns(table)} == columns, table
+
+
+def test_contract_without_diagnosis_is_allowed(db):
+    add_contract(db, add_user(db))
+
+    assert count(db, "contracts") == 1
+
+
+def test_deleting_diagnosis_keeps_contract_and_unlinks_it(db, diagnosis):
+    user_id, diagnosis_id = diagnosis
+    contract_id = add_contract(db, user_id, diagnosis_id=diagnosis_id)
+    add_simulation(db, diagnosis_id, source="contract", contract_id=contract_id, comparison="{}")
+
+    db.execute(text("DELETE FROM diagnoses WHERE id = :id"), {"id": diagnosis_id})
+
+    linked = db.execute(
+        text("SELECT diagnosis_id FROM contracts WHERE id = :id"), {"id": contract_id}
+    ).scalar_one()
+    assert linked is None
+    # 그 진단으로 만든 계약 반영 계산은 진단과 함께 지워진다.
+    assert count(db, "simulations") == 0
+
+
+def test_deleting_user_deletes_contracts(db):
+    user_id = add_user(db)
+    contract_id = add_contract(db, user_id)
+    add_term(db, contract_id)
+
+    db.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+
+    assert count(db, "contracts") == 0
+    assert count(db, "contract_terms") == 0
+
+
+def test_deleting_contract_deletes_terms_findings_and_simulations(db, diagnosis):
+    user_id, diagnosis_id = diagnosis
+    contract_id = add_contract(db, user_id, diagnosis_id=diagnosis_id)
+    add_rule(db)
+    add_term(db, contract_id)
+    add_finding(db, contract_id)
+    add_simulation(db, diagnosis_id)
+    add_simulation(db, diagnosis_id, source="contract", contract_id=contract_id, comparison="{}")
+
+    db.execute(text("DELETE FROM contracts WHERE id = :id"), {"id": contract_id})
+
+    assert count(db, "contract_terms") == 0
+    assert count(db, "contract_findings") == 0
+    # 계약 반영 계산만 지워지고 initial 계산은 남는다.
+    assert count(db, "simulations") == 1
+
+
+def test_contract_with_files_cannot_be_deleted_first(db):
+    contract_id = add_contract(db, add_user(db))
+    add_file(db, contract_id)
+
+    with pytest.raises(IntegrityError):
+        db.execute(text("DELETE FROM contracts WHERE id = :id"), {"id": contract_id})
+
+
+def test_user_with_contract_files_cannot_be_deleted_first(db):
+    user_id = add_user(db)
+    add_file(db, add_contract(db, user_id))
+
+    with pytest.raises(IntegrityError):
+        db.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+
+
+def test_diagnosis_with_contract_files_can_be_deleted(db, diagnosis):
+    # 진단은 계약을 지우지 않고 연결만 풀므로 원본 파일 행이 있어도 막히지 않는다.
+    user_id, diagnosis_id = diagnosis
+    add_file(db, add_contract(db, user_id, diagnosis_id=diagnosis_id))
+
+    db.execute(text("DELETE FROM diagnoses WHERE id = :id"), {"id": diagnosis_id})
+
+    assert count(db, "contract_files") == 1
+
+
+def test_only_one_processing_contract_per_user(db):
+    user_id = add_user(db)
+    add_contract(db, user_id)
+    add_contract(db, user_id, status="failed")
+    add_contract(db, user_id, status="confirmed", original_deleted=True)
+    # 다른 사용자는 따로 하나씩 가질 수 있다.
+    add_contract(db, add_user(db, subject="subject-2"))
+    with pytest.raises(IntegrityError):
+        add_contract(db, user_id)
+
+
+@pytest.mark.parametrize("status", ["needs_review", "confirmed"])
+def test_analyzed_contract_requires_deleted_original(db, status):
+    user_id = add_user(db)
+    add_contract(db, user_id, status=status, original_deleted=True)
+    with pytest.raises(IntegrityError, match="original_deleted_when_analyzed"):
+        add_contract(db, user_id, status=status, original_deleted=False)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"status": "done"},
+        {"step": "upload"},
+        {"error_code": "unknown"},
+        {"page_count": 0},
+        {"page_count": 11},
+    ],
+)
+def test_contract_rejects_invalid_values(db, values):
+    with pytest.raises(IntegrityError, match="ck_contracts"):
+        add_contract(db, add_user(db), **values)
+
+
+def test_contract_accepts_failed_with_error_code(db):
+    add_contract(db, add_user(db), status="failed", error_code="masking_failed", page_count=10)
+
+    assert count(db, "contracts") == 1
+
+
+def test_contract_rejects_unknown_diagnosis(db):
+    with pytest.raises(IntegrityError):
+        add_contract(db, add_user(db), diagnosis_id=uuid.UUID(int=0))
+
+
+def test_contract_file_order_is_unique(db):
+    contract_id = add_contract(db, add_user(db))
+    add_file(db, contract_id, sort_order=1)
+    add_file(db, contract_id, sort_order=2)
+    with pytest.raises(IntegrityError):
+        add_file(db, contract_id, sort_order=1)
+
+
+@pytest.mark.parametrize(
+    "term_key",
+    [
+        "deposit",
+        "monthly_rent",
+        "management_fee",
+        "rent_vat_included",
+        "start_date",
+        "end_date",
+        "annual_increase_rate",
+        "early_termination",
+        "restoration",
+    ],
+)
+def test_contract_term_accepts_agreed_keys(db, term_key):
+    add_term(db, add_contract(db, add_user(db)), term_key=term_key)
+
+    assert count(db, "contract_terms") == 1
+
+
+@pytest.mark.parametrize("values", [{"term_key": "rent"}, {"confidence": 1.001}])
+def test_contract_term_rejects_invalid_values(db, values):
+    with pytest.raises(IntegrityError, match="ck_contract_terms"):
+        add_term(db, add_contract(db, add_user(db)), **values)
+
+
+def test_contract_term_is_unique_per_key(db):
+    contract_id = add_contract(db, add_user(db))
+    add_term(db, contract_id)
+    with pytest.raises(IntegrityError):
+        add_term(db, contract_id)
+
+
+@pytest.mark.parametrize("values", [{"severity": "critical"}, {"confidence": -0.001}])
+def test_contract_finding_rejects_invalid_values(db, values):
+    contract_id = add_contract(db, add_user(db))
+    add_rule(db)
+    with pytest.raises(IntegrityError, match="ck_contract_findings"):
+        add_finding(db, contract_id, **values)
+
+
+def test_contract_finding_rejects_unknown_rule(db):
+    contract_id = add_contract(db, add_user(db))
+    with pytest.raises(IntegrityError):
+        add_finding(db, contract_id, rule_id="R99")
+
+
+def test_risk_rule_rejects_unknown_severity(db):
+    with pytest.raises(IntegrityError, match="ck_risk_rules"):
+        add_rule(db, severity="critical")
+
+
+def test_risk_rule_rejects_unknown_law_article(db):
+    with pytest.raises(IntegrityError):
+        add_rule(db, law_article_id="없는 조문")

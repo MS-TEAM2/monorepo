@@ -4,7 +4,14 @@ import { createContext, useCallback, useContext, useMemo, useState, useSyncExter
 
 import { buildDongSummary, buildSurvival, calcLoss, calcProfit, generateStores } from "@/lib/mock/startup/calc";
 import { CATEGORIES, EXAMPLE_FORM, INITIAL_FORM, INITIAL_PIN, MAP_SCALE, NEIGHBORHOODS } from "@/lib/mock/startup/data";
-import { parseSelection, readSelectionRaw, saveSelection } from "@/lib/startup-selection";
+import { recordContract, recordDiagnosis } from "@/lib/my-report";
+import { getSessionStatus } from "@/lib/session";
+import {
+  clearSelection as clearSavedSelection,
+  parseSelection,
+  readSelectionRaw,
+  saveSelection,
+} from "@/lib/startup-selection";
 import type {
   AppliedContract,
   Category,
@@ -24,17 +31,22 @@ import type {
 type Setter<T> = (value: T | ((previous: T) => T)) => void;
 
 export type StartupState = {
-  entryModalOpen: boolean;
-  setEntryModalOpen: (open: boolean) => void;
   neighborhood: Neighborhood;
-  selectNeighborhood: (neighborhood: Neighborhood) => void;
+  /** 사용자가 동네·업종·반경을 직접 고른 적이 있는지. 없으면 지도는 아무 조건도 반영하지 않는다 */
+  hasSelection: boolean;
+  /** 시작 선택 패널에서 세 값을 모두 고르면 한 번에 반영한다 */
+  applySelection: (next: {
+    neighborhood: Neighborhood;
+    category: Category;
+    radiusM: RadiusM;
+    pinCenter?: Point;
+  }) => void;
   category: Category;
-  setCategory: (category: Category) => void;
   radiusM: RadiusM;
-  setRadiusM: (radius: RadiusM) => void;
   pinCenter: Point;
   setPinCenter: (point: Point) => void;
-  resetPin: () => void;
+  /** 고른 동네·업종·반경·핀을 모두 지운다. 상권 지도는 처음 들어온 상태로 돌아간다 */
+  clearSelection: () => void;
   stores: Store[];
   radiusStats: RadiusStats;
   dongSummary: DongSummary;
@@ -46,7 +58,8 @@ export type StartupState = {
   fillExample: () => void;
   buildCostParams: (rentMan?: number | null) => CostParams;
   report: Report | null;
-  runDiagnosis: () => void;
+  /** record: 사용자가 `진단하기`를 눌렀을 때만 true. 결과 화면을 바로 열어 다시 계산할 때는 분석기록에 남기지 않는다 */
+  runDiagnosis: (options?: { record?: boolean }) => void;
   sliderRentMan: number;
   initialRentMan: number;
   changeSliderRent: (rentMan: number) => void;
@@ -90,7 +103,6 @@ function restoreSelection(raw: string | null): Selection | null {
  * 실제 API가 연결되면 각 화면이 API 결과를 쓰도록 바꾼다.
  */
 export function StartupProvider({ children }: { children: ReactNode }) {
-  const [entryModalOpen, setEntryModalOpen] = useState(false);
   // 선택값(동네·업종·반경·핀)은 이 탭의 sessionStorage 에도 둔다. 로그인하러 사이트를 떠났다 와도 되살린다
   // (Notion 기획서 2장). 정적 HTML 은 기본값으로 그리고 브라우저에서 저장값으로 맞춘다
   const savedRaw = useSyncExternalStore(
@@ -115,8 +127,6 @@ export function StartupProvider({ children }: { children: ReactNode }) {
     },
     [selection],
   );
-  const setCategory = useCallback((next: Category) => choose({ category: next }), [choose]);
-  const setRadiusM = useCallback((next: RadiusM) => choose({ radiusM: next }), [choose]);
   const setPinCenter = useCallback((next: Point) => choose({ pinCenter: next }), [choose]);
   const [formState, setFormState] = useState<FormState>(INITIAL_FORM);
   const [usedExample, setUsedExample] = useState(false);
@@ -175,17 +185,17 @@ export function StartupProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StartupState>(
     () => ({
-      entryModalOpen,
-      setEntryModalOpen,
       neighborhood,
-      selectNeighborhood: (next) => choose({ neighborhood: next, pinCenter: INITIAL_PIN }),
+      hasSelection: chosen !== null || saved !== null,
+      applySelection: (next) => choose({ pinCenter: INITIAL_PIN, ...next }),
       category,
-      setCategory,
       radiusM,
-      setRadiusM,
       pinCenter,
       setPinCenter,
-      resetPin: () => setPinCenter(INITIAL_PIN),
+      clearSelection: () => {
+        clearSavedSelection();
+        setChosen(null);
+      },
       stores,
       radiusStats,
       dongSummary,
@@ -201,7 +211,7 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       },
       buildCostParams,
       report,
-      runDiagnosis: () => {
+      runDiagnosis: (options) => {
         const rent = Math.max(0, Number(formState.rentMan) || 0);
         const params = buildCostParams(rent);
         setReport({
@@ -211,6 +221,14 @@ export function StartupProvider({ children }: { children: ReactNode }) {
         });
         setInitialRentMan(rent);
         setSliderRentMan(rent);
+        // 로그인한 사용자의 진단은 분석기록에 남긴다 (예시 화면이라 이 브라우저에만, lib/my-report)
+        if (options?.record && getSessionStatus() === "logged_in") {
+          recordDiagnosis({
+            address: `${neighborhood.name} 선택 위치`,
+            category_id: category.id,
+            dong_name: neighborhood.shortName,
+          });
+        }
       },
       sliderRentMan,
       initialRentMan,
@@ -226,7 +244,11 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       contractFields,
       setContractFields,
       appliedContract,
-      setAppliedContract,
+      setAppliedContract: (contract) => {
+        setAppliedContract(contract);
+        // 계약서 검토를 마쳐 손익에 반영하면 분석기록에 남긴다
+        if (contract && getSessionStatus() === "logged_in") recordContract("confirmed");
+      },
       resetAll: () => {
         setReport(null);
         setContractStage("upload");
@@ -237,10 +259,9 @@ export function StartupProvider({ children }: { children: ReactNode }) {
       },
     }),
     [
-      entryModalOpen,
       choose,
-      setCategory,
-      setRadiusM,
+      chosen,
+      saved,
       setPinCenter,
       neighborhood,
       category,
