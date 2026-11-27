@@ -1,12 +1,13 @@
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Response
 from fastapi.responses import RedirectResponse
 
 from app.auth import service
 from app.auth.dependencies import OidcHttp
 from app.auth.schemas import TokenRequest, TokenResponse
-from app.deps import BearerToken, DbSession
+from app.deps import CurrentUser, DbSession
 from app.errors import error_responses
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -22,8 +23,9 @@ ProviderPath = Annotated[str, Path(json_schema_extra={"enum": ["google", "kakao"
     responses=error_responses(400, 409, 422, 429, 503),
     summary="1회용 코드를 세션 토큰으로 교환 (A01)",
 )
-async def issue_token(body: TokenRequest) -> TokenResponse:
-    return await service.issue_token()
+async def issue_token(db: DbSession, response: Response, body: TokenRequest) -> TokenResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return await service.exchange_code(db, body.code, body.code_verifier, datetime.now(UTC))
 
 
 @router.get(
@@ -82,5 +84,5 @@ async def finish_login(
     responses=error_responses(401, 429, 503),
     summary="로그아웃 (A29)",
 )
-async def logout(token: BearerToken) -> None:
-    await service.logout()
+async def logout(user: CurrentUser, db: DbSession) -> None:
+    await service.revoke_session(db, user.session_id, datetime.now(UTC))

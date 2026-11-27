@@ -13,13 +13,19 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from fastapi import Response
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
 
 from app.auth import service
-from app.auth.models import LoginAttempt
+from app.auth.models import LoginAttempt, UserSession
+from app.config import settings
 from app.db import create_engine as create_async_app_engine
 from app.db import create_session_factory, normalize_database_url
+from app.deps import get_login_user
+from app.errors import AppError
+from app.main import app
 from app.users.models import User
 
 SERVER_URL = os.environ.get("TEST_DATABASE_URL")
@@ -196,3 +202,248 @@ def test_deleting_account_is_not_changed(database_url):
         assert (rejected.user_id, rejected.exchange_code_hash) == (None, None)
 
     run(database_url, scenario)
+
+
+# A01 코드 교환, 로그인 필수 의존성, A29 로그아웃
+
+VERIFIER = "v" * 43
+
+
+async def issue_code(factory, code="login-code", now=None, subject="subject-1"):
+    """A26·A27이 하는 것처럼 1회용 코드를 발급한다."""
+    now = now or datetime.now(UTC)
+    attempt = new_attempt(service._hash(f"state:{code}"), now)
+    attempt.code_challenge = service._s256(VERIFIER)
+    await save(factory, attempt)
+    claimed = await claim(factory, attempt.state_hash, now=now)
+    async with factory() as db:
+        assert await service.complete_login(
+            db, claimed, "google", subject, service._hash(code), now
+        )
+
+
+async def exchange(factory, code="login-code", verifier=VERIFIER, now=None):
+    async with factory() as db:
+        return await service.exchange_code(db, code, verifier, now or datetime.now(UTC))
+
+
+async def exchange_error(factory, **kwargs):
+    with pytest.raises(AppError) as raised:
+        await exchange(factory, **kwargs)
+    return raised.value.status, raised.value.code
+
+
+async def find(factory, token, now=None):
+    async with factory() as db:
+        found = await service.find_login(db, token, now or datetime.now(UTC))
+        # 조회한 뒤에는 트랜잭션과 연결을 잡지 않는다.
+        assert not db.in_transaction()
+        return found
+
+
+async def execute(factory, sql):
+    async with factory() as db:
+        await db.execute(text(sql))
+        await db.commit()
+
+
+INVALID_CODE = (400, "invalid_login_code")
+
+
+def test_exchange_stores_only_token_hash_for_30_days(database_url):
+    async def scenario(factory):
+        now = datetime(2026, 11, 27, tzinfo=UTC)
+        await issue_code(factory, now=now)
+
+        issued = await exchange(factory, now=now)
+
+        [session] = await rows(factory, UserSession)
+        [user] = await rows(factory, User)
+        [attempt] = await rows(factory, LoginAttempt)
+        assert session.user_id == user.id
+        assert session.token_hash == service._hash(issued.token)
+        assert (session.created_at, session.expires_at) == (now, now + timedelta(days=30))
+        assert (issued.expires_at, session.revoked_at) == (session.expires_at, None)
+        assert attempt.consumed_at == now
+        async with factory() as db:
+            stored = " ".join(
+                [
+                    row[0]
+                    for table in ("users", "login_attempts", "sessions")
+                    for row in await db.execute(text(f"SELECT t::text FROM {table} t"))
+                ]
+            )
+        for secret in (issued.token, "login-code", VERIFIER):
+            assert secret not in stored
+
+    run(database_url, scenario)
+
+
+def test_code_is_exchanged_once(database_url):
+    async def scenario(factory):
+        await issue_code(factory)
+        await exchange(factory)
+
+        assert await exchange_error(factory) == INVALID_CODE
+        assert len(await rows(factory, UserSession)) == 1
+
+    run(database_url, scenario)
+
+
+def test_concurrent_exchanges_have_one_winner(database_url):
+    async def scenario(factory):
+        await issue_code(factory)
+
+        results = await asyncio.gather(
+            *(exchange(factory) for _ in range(5)), return_exceptions=True
+        )
+
+        failures = [r for r in results if isinstance(r, AppError)]
+        assert [(f.status, f.code) for f in failures] == [INVALID_CODE] * 4
+        assert len(await rows(factory, UserSession)) == 1
+
+    run(database_url, scenario)
+
+
+@pytest.mark.parametrize("late", [timedelta(), timedelta(seconds=1)])
+def test_expired_code_is_rejected(database_url, late):
+    async def scenario(factory):
+        now = datetime(2026, 11, 27, tzinfo=UTC)
+        await issue_code(factory, now=now)
+
+        error = await exchange_error(factory, now=now + service.CODE_TTL + late)
+
+        assert error == INVALID_CODE
+        assert await rows(factory, UserSession) == []
+
+    run(database_url, scenario)
+
+
+def test_wrong_verifier_is_rejected_without_consuming_code(database_url):
+    async def scenario(factory):
+        await issue_code(factory)
+
+        # provider_verifier(우리와 구글 사이의 값)로는 교환할 수 없다.
+        for wrong in ("w" * 43, "verifier", ""):
+            assert await exchange_error(factory, verifier=wrong) == INVALID_CODE
+        [attempt] = await rows(factory, LoginAttempt)
+        assert attempt.consumed_at is None
+        assert await rows(factory, UserSession) == []
+
+        await exchange(factory)
+
+    run(database_url, scenario)
+
+
+@pytest.mark.parametrize("code", ["unknown-code", ""])
+def test_unknown_code_is_rejected(database_url, code):
+    async def scenario(factory):
+        await issue_code(factory)
+
+        assert await exchange_error(factory, code=code) == INVALID_CODE
+
+    run(database_url, scenario)
+
+
+def test_deleting_account_gets_no_session_and_code_is_consumed(database_url):
+    async def scenario(factory):
+        await issue_code(factory)
+        await execute(factory, "UPDATE users SET deletion_requested_at = now()")
+
+        assert await exchange_error(factory) == (409, "account_deleting")
+
+        [attempt] = await rows(factory, LoginAttempt)
+        assert attempt.consumed_at is not None
+        assert await rows(factory, UserSession) == []
+
+    run(database_url, scenario)
+
+
+def test_valid_token_finds_user_and_session(database_url):
+    async def scenario(factory):
+        await issue_code(factory)
+        issued = await exchange(factory)
+
+        async with factory() as db:
+            login_user = await get_login_user(issued.token, db, Response())
+
+        [session] = await rows(factory, UserSession)
+        assert (login_user.user_id, login_user.session_id) == (session.user_id, session.id)
+        assert await find(factory, "unknown-token") is None
+        # DB에서 해시를 알아내도 토큰으로 쓸 수 없다.
+        assert await find(factory, session.token_hash) is None
+
+    run(database_url, scenario)
+
+
+def test_expired_token_is_rejected(database_url):
+    async def scenario(factory):
+        now = datetime(2026, 11, 27, tzinfo=UTC)
+        await issue_code(factory, now=now)
+        issued = await exchange(factory, now=now)
+
+        last_moment = issued.expires_at - timedelta(microseconds=1)
+        assert await find(factory, issued.token, now=last_moment) is not None
+        assert await find(factory, issued.token, now=issued.expires_at) is None
+
+    run(database_url, scenario)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE sessions SET revoked_at = now()",
+        "UPDATE users SET deletion_requested_at = now()",
+    ],
+)
+def test_revoked_or_deleting_token_is_rejected(database_url, change):
+    async def scenario(factory):
+        await issue_code(factory)
+        issued = await exchange(factory)
+        await execute(factory, change)
+
+        assert await find(factory, issued.token) is None
+
+    run(database_url, scenario)
+
+
+def test_revoke_keeps_first_time_and_other_sessions(database_url):
+    async def scenario(factory):
+        await issue_code(factory, code="first")
+        first = await exchange(factory, code="first")
+        await issue_code(factory, code="second")
+        second = await exchange(factory, code="second")
+        _, session_id = await find(factory, first.token)
+        revoked_at = datetime(2026, 11, 27, tzinfo=UTC)
+
+        for at in (revoked_at, revoked_at + timedelta(minutes=1)):
+            async with factory() as db:
+                await service.revoke_session(db, session_id, at)
+
+        sessions = {s.id: s.revoked_at for s in await rows(factory, UserSession)}
+        assert sessions[session_id] == revoked_at
+        assert list(sessions.values()).count(None) == 1
+        assert await find(factory, first.token) is None
+        assert await find(factory, second.token) is not None
+
+    run(database_url, scenario)
+
+
+def test_http_login_me_logout_flow(database_url, monkeypatch):
+    async def prepare(factory):
+        await issue_code(factory)
+
+    run(database_url, prepare)
+    monkeypatch.setattr(settings, "database_url", database_url)
+
+    with TestClient(app) as client:
+        body = {"code": "login-code", "code_verifier": VERIFIER}
+        issued = client.post("/api/v1/auth/token", json=body)
+        assert issued.status_code == 201
+        headers = {"Authorization": f"Bearer {issued.json()['token']}"}
+
+        me = client.get("/api/v1/users/me", headers=headers)
+        assert (me.status_code, me.json()["provider"]) == (200, "google")
+        assert client.post("/api/v1/auth/logout", headers=headers).status_code == 204
+        assert client.get("/api/v1/users/me", headers=headers).status_code == 401
+        assert client.post("/api/v1/auth/logout", headers=headers).status_code == 401
