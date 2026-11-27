@@ -1,6 +1,11 @@
 import { normalizeConditionValue } from "./formatters";
 import { sampleConditions } from "./sample-data";
 import type { ContractConditionId } from "./types";
+import type { components } from "@/lib/api/schema";
+
+export type ContractApplyRequest = components["schemas"]["ContractApplyRequest"];
+export type ContractApplication = components["schemas"]["ContractApplication"];
+export type ContractApplyExit = components["schemas"]["ContractApplyExit"];
 
 export type SampleCostParameters = {
   rentKrw: number;
@@ -9,7 +14,7 @@ export type SampleCostParameters = {
   laborKrw: number;
   otherFixedKrw: number;
   variableCostRatePct: number;
-  expectedSalesKrw: number;
+  expectedSalesKrw: number | null;
   keyMoneyKrw: number;
   facilityCostKrw: number;
   annualEscalationPct: number;
@@ -22,8 +27,34 @@ export type SampleCostParameters = {
 
 export type SampleProfit = {
   bepSalesKrw: number;
-  expectedMonthlyProfitKrw: number;
+  expectedMonthlyProfitKrw: number | null;
 };
+
+export type ExitInputStrings = {
+  month: string;
+  obligationMonths: string;
+  restorationCost: string;
+  penaltyAmount: string;
+  penaltyCoversRemainingRent: "true" | "false" | "unknown";
+};
+
+export const initialExitInputs: ExitInputStrings = {
+  month: "12",
+  obligationMonths: "12",
+  restorationCost: "",
+  penaltyAmount: "",
+  penaltyCoversRemainingRent: "unknown",
+};
+
+let savedExitInputs = initialExitInputs;
+
+export function saveExitInputs(inputs: ExitInputStrings): void {
+  savedExitInputs = inputs;
+}
+
+export function readExitInputs(): ExitInputStrings {
+  return savedExitInputs;
+}
 
 /** 참고 프로토타입의 시연 기본값입니다. 실제 사용자 입력이나 운영 데이터가 아닙니다. */
 export const sampleBaseCosts: SampleCostParameters = {
@@ -109,15 +140,16 @@ export function calculateSampleProfit(parameters: SampleCostParameters): SampleP
     parameters.laborKrw +
     parameters.otherFixedKrw;
   const marginRatio = 1 - Math.min(95, Math.max(0, parameters.variableCostRatePct)) / 100;
-  const contribution = parameters.expectedSalesKrw * marginRatio;
+  const contribution = parameters.expectedSalesKrw === null ? null : parameters.expectedSalesKrw * marginRatio;
 
   return {
     bepSalesKrw: Math.round(fixedCosts / marginRatio),
-    expectedMonthlyProfitKrw: Math.round(contribution - fixedCosts),
+    expectedMonthlyProfitKrw: contribution === null ? null : Math.round(contribution - fixedCosts),
   };
 }
 
-export function calculateSampleExitLoss(parameters: SampleCostParameters): number {
+export function calculateSampleExitLoss(parameters: SampleCostParameters): number | null {
+  if (parameters.expectedSalesKrw === null) return null;
   const vatMultiplier = parameters.rentVatSeparate ? 1.1 : 1;
   const baseRent = parameters.rentKrw * vatMultiplier;
   const nonRentFixed = parameters.maintenanceKrw + parameters.laborKrw + parameters.otherFixedKrw;
@@ -154,6 +186,115 @@ export function calculateSampleExitLoss(parameters: SampleCostParameters): numbe
       contractExitBurden +
       parameters.restorationKrw,
   );
+}
+
+export function calculateSampleApplication(
+  base: SampleCostParameters,
+  confirmedValues: Partial<Record<ContractConditionId, string>>,
+  exitInputs: ExitInputStrings,
+): ContractApplication {
+  const resolved = resolveExitCosts(exitInputs, confirmedValues);
+  const afterCosts = applyConfirmedTerms(base, confirmedValues);
+  afterCosts.exitMonth = Number(exitInputs.month);
+  afterCosts.remainingObligationMonths = Number(exitInputs.obligationMonths);
+  afterCosts.restorationKrw = resolved.restorationKrw;
+  afterCosts.penaltyKrw = resolved.penaltyKrw;
+  afterCosts.penaltyOverlapsRent = resolved.request.exit.penalty_covers_remaining_rent ?? true;
+  const before = calculateSampleProfit(base);
+  const after = calculateSampleProfit(afterCosts);
+  return {
+    before: {
+      monthly_rent: base.rentKrw,
+      break_even_sales: before.bepSalesKrw,
+      monthly_profit: before.expectedMonthlyProfitKrw,
+      estimated_loss: calculateSampleExitLoss(base),
+    },
+    after: {
+      monthly_rent: afterCosts.rentKrw,
+      break_even_sales: after.bepSalesKrw,
+      monthly_profit: after.expectedMonthlyProfitKrw,
+      estimated_loss: calculateSampleExitLoss(afterCosts),
+    },
+    term_changes: [],
+    assumptions: resolved.assumptions,
+    simulation_id: "00000000-0000-4000-8000-000000000153",
+    exit: {
+      ...resolved.request.exit,
+      restoration_cost: resolved.restorationKrw,
+      penalty_amount: resolved.penaltyKrw,
+      penalty_covers_remaining_rent: resolved.request.exit.penalty_covers_remaining_rent ?? null,
+    },
+    created_at: "2026-11-27T00:00:00Z",
+  };
+}
+
+export function getContractApplyError(diagnosisLinked: boolean): { status: 409; code: "contract_not_linked" } | null {
+  return diagnosisLinked ? null : { status: 409, code: "contract_not_linked" };
+}
+
+function resolvedNumber(
+  input: string,
+  confirmedValue: number | undefined,
+  label: string,
+  assumptions: string[],
+): number {
+  const parsed = input.trim() === "" ? undefined : Number(input);
+  if (parsed !== undefined && Number.isFinite(parsed)) return Math.max(0, Math.round(parsed));
+  if (confirmedValue !== undefined) return confirmedValue;
+  assumptions.push(`${label} 미입력 · 0원으로 계산`);
+  return 0;
+}
+
+export function buildContractApplyRequest(
+  inputs: ExitInputStrings,
+  confirmed: Partial<Record<"restoration" | "earlyTermination", string>>,
+): ContractApplyRequest {
+  const month = Number(inputs.month);
+  const obligationMonths = Number(inputs.obligationMonths);
+  if (!Number.isInteger(month) || month < 1 || month > 120) throw new Error("종료 시점은 1~120개월로 입력해 주세요.");
+  if (!Number.isInteger(obligationMonths) || obligationMonths < 0 || obligationMonths > 120)
+    throw new Error("남은 의무 개월은 0~120개월로 입력해 주세요.");
+  const costs = [
+    { label: "원상복구비", value: inputs.restorationCost },
+    { label: "위약금", value: inputs.penaltyAmount },
+  ];
+  for (const { label, value } of costs) {
+    if (value.trim() && (!/^\d+$/.test(value) || Number(value) > 10_000_000_000))
+      throw new Error(`${label}는 0~10,000,000,000원 정수로 입력해 주세요.`);
+  }
+  const restorationConfirmed = confirmed.restoration
+    ? Number(confirmed.restoration.replace(/[^\d]/g, "")) * 10_000
+    : undefined;
+  const penaltyMatch = confirmed.earlyTermination?.match(/[\d,]+/);
+  const penaltyConfirmed = penaltyMatch ? Number(penaltyMatch[0].replace(/,/g, "")) * 10_000 : undefined;
+  return {
+    exit: {
+      month,
+      obligation_months: obligationMonths,
+      restoration_cost: inputs.restorationCost.trim() ? Number(inputs.restorationCost) : (restorationConfirmed ?? null),
+      penalty_amount: inputs.penaltyAmount.trim() ? Number(inputs.penaltyAmount) : (penaltyConfirmed ?? null),
+      penalty_covers_remaining_rent:
+        inputs.penaltyCoversRemainingRent === "unknown" ? null : inputs.penaltyCoversRemainingRent === "true",
+    },
+  };
+}
+
+export function resolveExitCosts(
+  inputs: ExitInputStrings,
+  confirmed: Partial<Record<"restoration" | "earlyTermination", string>>,
+) {
+  const assumptions: string[] = [];
+  const request = buildContractApplyRequest(inputs, confirmed);
+  const restorationConfirmed = confirmed.restoration
+    ? Number(confirmed.restoration.replace(/[^\d]/g, "")) * 10_000
+    : undefined;
+  const penaltyMatch = confirmed.earlyTermination?.match(/[\d,]+/);
+  const penaltyConfirmed = penaltyMatch ? Number(penaltyMatch[0].replace(/,/g, "")) * 10_000 : undefined;
+  const restorationKrw = resolvedNumber(inputs.restorationCost, restorationConfirmed, "원상복구비", assumptions);
+  const penaltyKrw = resolvedNumber(inputs.penaltyAmount, penaltyConfirmed, "위약금", assumptions);
+  if (inputs.penaltyCoversRemainingRent === "unknown")
+    assumptions.push("위약금과 남은 월세 중복 여부 미확인 · 큰 값만 반영");
+  return { request, restorationKrw, penaltyKrw, assumptions };
 }
 
 export function confirmedValuesForCalculation(
