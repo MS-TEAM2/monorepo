@@ -14,6 +14,7 @@ from app.diagnoses.router import router as diagnoses_router
 from app.errors import register_error_handlers
 from app.explore.router import router as explore_router
 from app.prediction.router import router as prediction_router
+from app.storage import open_temp_file_store
 from app.system.router import router as system_router
 from app.users.router import router as users_router
 
@@ -30,7 +31,10 @@ async def lifespan(app: FastAPI):
     engine = create_engine(settings.database_url) if settings.database_url else None
     app.state.session_factory = create_session_factory(engine) if engine else None
     try:
-        yield
+        # 계약서 원본을 지우는 API(A02 등)가 쓴다. Blob 클라이언트는 이벤트 루프에 묶여 여기서 연다.
+        async with open_temp_file_store(settings) as store:
+            app.state.temp_store = store
+            yield
     finally:
         if engine:
             await engine.dispose()

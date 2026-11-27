@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
 from app.errors import AppError
+from app.storage import TempFileStore
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
@@ -22,6 +23,14 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+def get_temp_store(request: Request) -> TempFileStore:
+    """lifespan에서 연 임시 원본 저장소(계약서 원본 삭제에 쓴다)."""
+    return request.app.state.temp_store
+
+
+TempStore = Annotated[TempFileStore, Depends(get_temp_store)]
 
 
 _bearer = HTTPBearer(auto_error=False, description="A01에서 받은 세션 토큰")

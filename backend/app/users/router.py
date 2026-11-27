@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
+from fastapi.responses import JSONResponse
 
-from app.deps import BearerToken, CurrentUser, DbSession
+from app.deps import BearerToken, CurrentUser, DbSession, TempStore
 from app.errors import error_responses
-from app.schemas import DELETING_RESPONSE
+from app.schemas import DELETING_RESPONSE, DeletingResponse
 from app.users import service
 from app.users.schemas import MeResponse
 
@@ -44,5 +45,11 @@ async def delete_me(token: BearerToken) -> None:
         "때만 503이다."
     ),
 )
-async def delete_my_data(token: BearerToken) -> None:
-    await service.delete_my_data()
+async def delete_my_data(user: CurrentUser, db: DbSession, store: TempStore) -> Response:
+    # Response를 직접 돌려주면 CurrentUser가 붙인 헤더가 빠지므로 여기서 다시 붙인다.
+    headers = {"Cache-Control": "no-store"}
+    if await service.delete_my_data(db, store, user.user_id):
+        return Response(status_code=204, headers=headers)
+    return JSONResponse(
+        DeletingResponse(status="deleting").model_dump(), status_code=202, headers=headers
+    )

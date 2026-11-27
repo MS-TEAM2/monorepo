@@ -8,8 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.deps import get_db
+from app.deps import LoginUser, get_db, get_login_user
 from app.main import app
+from app.users import service
 
 URL = "/api/v1/users/me"
 USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000010")
@@ -91,11 +92,63 @@ def test_delete_my_data_requires_bearer_token(client, header):
     assert response.json()["code"] == "unauthorized"
 
 
-def test_delete_my_data_is_not_implemented_yet(client):
-    response = client.delete(DATA_URL, headers={"Authorization": "Bearer any"})
+@pytest.fixture
+def signed_in():
+    """로그인한 사용자와 가짜 세션. 서비스는 각 테스트가 바꾼다."""
 
-    assert response.status_code == 503
-    assert response.json()["code"] == "service_unavailable"
+    async def fake_db():
+        yield FakeDb()
+
+    app.dependency_overrides[get_db] = fake_db
+    app.dependency_overrides[get_login_user] = lambda: LoginUser(USER_ID, uuid.uuid4())
+    yield
+    app.dependency_overrides.clear()
+
+
+def delete_data(client):
+    return client.delete(DATA_URL, headers={"Authorization": "Bearer any-token"})
+
+
+@pytest.mark.parametrize(
+    ("finished", "status", "body"), [(True, 204, b""), (False, 202, b'{"status":"deleting"}')]
+)
+def test_delete_my_data_returns_204_or_202(client, signed_in, monkeypatch, finished, status, body):
+    calls = []
+
+    async def fake_delete(db, store, user_id):
+        calls.append((store, user_id))
+        return finished
+
+    monkeypatch.setattr(service, "delete_my_data", fake_delete)
+
+    response = delete_data(client)
+
+    assert (response.status_code, response.content) == (status, body)
+    assert response.headers["Cache-Control"] == "no-store"
+    # lifespan에서 연 임시 원본 저장소로 로그인한 사용자의 자료만 지운다.
+    assert calls == [(app.state.temp_store, USER_ID)]
+
+
+def test_delete_my_data_is_503_when_request_cannot_be_recorded(client, signed_in, use_db):
+    use_db(SQLAlchemyError("secret-database-detail"))
+
+    response = delete_data(client)
+
+    assert (response.status_code, response.json()["code"]) == (503, "service_unavailable")
+    assert "secret-database-detail" not in response.text
+
+
+def test_delete_my_data_checks_login_before_deleting(client, use_db, monkeypatch):
+    # 만료·로그아웃·탈퇴 요청 토큰은 로그인 조회가 비어 401이고 삭제를 부르지 않는다.
+    async def fail(*args):
+        raise AssertionError("삭제를 부르면 안 된다")
+
+    monkeypatch.setattr(service, "delete_my_data", fail)
+    use_db(None)
+
+    response = delete_data(client)
+
+    assert (response.status_code, response.json()["code"]) == (401, "unauthorized")
 
 
 def test_deleting_response_is_shared_by_all_delete_apis():
@@ -134,6 +187,9 @@ class FakeDb:
         if isinstance(result, Exception):
             raise result
         return FakeResult(result)
+
+    async def commit(self):
+        pass
 
     async def rollback(self):
         pass
