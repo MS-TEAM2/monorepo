@@ -13,7 +13,7 @@ const COMPLETE: EntryDraft = {
   pin: INITIAL_PIN,
 };
 
-function render(draft: EntryDraft = COMPLETE) {
+function render(draft: EntryDraft = COMPLETE, applied = true) {
   return renderToStaticMarkup(
     createElement(EntryModal, {
       draft,
@@ -22,7 +22,8 @@ function render(draft: EntryDraft = COMPLETE) {
       onAnalyze: vi.fn(),
       picking: false,
       onPickingChange: vi.fn(),
-      mapPickCount: 0,
+      applied,
+      collapseKey: 0,
     }),
   );
 }
@@ -47,23 +48,22 @@ describe("EntryModal", () => {
   });
 
   it("starts with no area, all 9 categories and the default 500m radius (specs/area-map R3)", () => {
-    const markup = render(EMPTY_DRAFT);
+    const markup = render(EMPTY_DRAFT, false);
 
     expect(markup.match(/선택해 주세요/g)).toHaveLength(1);
     expect(markup).not.toContain(NEIGHBORHOODS[0].shortName);
     expect(markup).toContain("전체 9종");
     expect(markup).toContain("500m");
     expect(markup).not.toContain("닫기");
-    expect(markup).toContain("관심 상권을 골라 주세요");
+    expect(markup).toContain("세 항목을 모두 고르면 바로 지도에 보여 드려요");
     expect(markup.match(/disabled=""/g)).toHaveLength(2);
   });
 
-  it("allows applying with several categories but analyzing only with one (A07 takes one category)", () => {
+  it("allows applying and analyzing with several categories", () => {
     const markup = render({ ...COMPLETE, categories: [CATEGORIES[0]!, CATEGORIES[1]!] });
 
     expect(markup).toContain(`${CATEGORIES[0]!.label} 외 1`);
-    expect(markup.match(/disabled=""/g)).toHaveLength(1);
-    expect(markup).toContain("상권 요약은 업종을 1개 골라야 볼 수 있어요");
+    expect(markup).not.toContain('disabled=""');
   });
 
   it("offers apply and analyze actions once every item is chosen", () => {

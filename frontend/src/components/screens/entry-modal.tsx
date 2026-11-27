@@ -6,40 +6,37 @@ import { SampleDataBadge } from "@/components/feedback/sample-data";
 import { Mascot } from "@/components/mascot";
 import { Input } from "@/components/ui/input";
 import { getAreaSearcher } from "@/lib/area-search";
-import { canAnalyzeDraft, isCompleteDraft, type EntryDraft } from "@/lib/entry-draft";
+import { isCompleteDraft, type EntryDraft } from "@/lib/entry-draft";
 import { CATEGORIES, INITIAL_PIN, NEIGHBORHOODS, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
 import type { Category, Neighborhood, Point, RadiusM } from "@/lib/mock/startup/types";
 import { locateInSample } from "@/lib/sample-location";
 import { cn } from "@/lib/utils";
 
+export type StepId = "neighborhood" | "category" | "radius";
+
 type EntryModalProps = {
-  /** 고르는 중인 조건 (적용 전이면 지도에 미리보기로만 쓴다) */
+  /** 고르는 중인 조건. `적용`하기 전에는 지도에 반영하지 않는다 */
   draft: EntryDraft;
-  onChange: (patch: Partial<EntryDraft>) => void;
+  /** 값을 바꾼 항목(step)도 함께 알린다. 처음 세 항목을 다 고르면 화면이 바로 적용한다 */
+  onChange: (patch: Partial<EntryDraft>, step: StepId) => void;
   /** 조건을 지도에 반영하고 매장을 보여 준다 */
   onApply: () => void;
   /** 조건을 반영하고 상권 요약 결과까지 보여 준다 */
   onAnalyze: () => void;
+  /** 한 번이라도 적용했는지. 적용 전에는 세 항목을 다 고르면 바로 보여 준다는 안내를 단다 */
+  applied: boolean;
   /** 지도에서 관심 상권 위치를 고르는 중인지 */
   picking: boolean;
   onPickingChange: (picking: boolean) => void;
-  /** 지도에서 위치를 고를 때마다 바뀌는 값. 바뀌면 다음 단계(업종)를 펼친다 */
-  mapPickCount: number;
+  /** 바뀌면 패널을 접는다. 처음 세 항목을 다 골라 자동으로 적용했을 때 쓴다 */
+  collapseKey: number;
 };
-
-type StepId = "neighborhood" | "category" | "radius";
 
 const STEPS: { id: StepId; label: string }[] = [
   { id: "neighborhood", label: "관심 상권" },
   { id: "category", label: "업종 선택" },
   { id: "radius", label: "분석 반경" },
 ];
-
-const NEXT_STEP: Record<StepId, StepId | null> = {
-  neighborhood: "category",
-  category: "radius",
-  radius: null,
-};
 
 /** SCRUM-191 시안의 선택 칩 (지원정책 분야 칩과 같은 모양) */
 const CHIP = "min-h-11 rounded-full border px-4 text-sm font-bold transition-colors";
@@ -277,28 +274,30 @@ function AreaSearchStep({
 
 /**
  * 상권 지도의 시작 선택 패널 (S01 역할). 지도를 가리지 않고 왼쪽 위에 늘 떠서 상권·업종·반경을 고르게 한다.
- * 고르는 동안 지도는 위치와 반경만 미리 보여 준다. `적용`은 매장을, `분석하기`는 상권 요약 결과까지 보여 준다.
- * 둘 중 하나를 누르면 접히고 제목 자리에 고른 조건을 보여 준다. 지도 위에 조건을 바꿀 다른 입구가 없어 닫지 않는다.
+ * 고르는 동안에는 지도를 옮기지 않고 다음 항목으로 넘어가지도 않는다. 고른 값은 옵션에 그대로 표시한다.
+ * 처음 세 항목을 다 고르면 화면이 바로 적용하고 이 패널을 접는다. 그 뒤로는 `적용`·`분석하기`를 눌러도 접지 않는다.
+ * 접으면 제목 자리에 고른 조건을 보여 준다. 지도 위에 조건을 바꿀 다른 입구가 없어 닫지 않는다.
  */
 export function EntryModal({
   draft,
   onChange,
   onApply,
   onAnalyze,
+  applied,
   picking,
   onPickingChange,
-  mapPickCount,
+  collapseKey,
 }: EntryModalProps) {
   const [step, setStep] = useState<StepId | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const complete = isCompleteDraft(draft);
-  const analyzable = canAnalyzeDraft(draft);
 
-  // 지도에서 위치를 고르면 업종 단계로 넘어간다
-  const [seenPickCount, setSeenPickCount] = useState(mapPickCount);
-  if (seenPickCount !== mapPickCount) {
-    setSeenPickCount(mapPickCount);
-    setStep(NEXT_STEP.neighborhood);
+  // 처음 세 항목을 다 골라 화면이 자동으로 적용하면 접는다
+  const [seenCollapseKey, setSeenCollapseKey] = useState(collapseKey);
+  if (seenCollapseKey !== collapseKey) {
+    setSeenCollapseKey(collapseKey);
+    setStep(null);
+    setCollapsed(true);
   }
 
   // 조건을 다 고른 뒤에만 Esc 로 접는다. 지도에서 고르는 중이면 고르기를 취소한다
@@ -318,15 +317,14 @@ export function EntryModal({
     radius: radiusLabel(draft.radiusM),
   };
 
+  // 고른 뒤에도 그 항목의 옵션을 열어 두어 무엇을 골랐는지 보이게 한다
   function pick(patch: Partial<EntryDraft>, current: StepId) {
-    onChange(patch);
-    setStep(NEXT_STEP[current]);
+    onChange(patch, current);
   }
 
+  // 적용·분석하기는 지도에 반영만 하고 패널은 그대로 둔다. 이어서 다른 값도 바꿔 보기 쉽게 한다
   function finish(action: () => void) {
     onPickingChange(false);
-    setStep(null);
-    setCollapsed(true);
     action();
   }
 
@@ -428,7 +426,7 @@ export function EntryModal({
                   <button
                     type="button"
                     aria-pressed={draft.categories.length === 0}
-                    onClick={() => onChange({ categories: [] })}
+                    onClick={() => pick({ categories: [] }, "category")}
                     className={cn(CHIP, draft.categories.length === 0 ? CHIP_ON : CHIP_OFF)}
                   >
                     전체
@@ -439,7 +437,7 @@ export function EntryModal({
                       <button
                         type="button"
                         aria-pressed={s}
-                        onClick={() => onChange({ categories: toggleCategory(draft.categories, e) })}
+                        onClick={() => pick({ categories: toggleCategory(draft.categories, e) }, "category")}
                         className={cn(CHIP, s ? CHIP_ON : CHIP_OFF)}
                         key={e.id}
                       >
@@ -481,18 +479,16 @@ export function EntryModal({
               <button
                 type="button"
                 onClick={() => finish(onAnalyze)}
-                disabled={!analyzable}
+                disabled={!complete}
                 className="flex min-h-12 items-center justify-center rounded-2xl bg-primary font-extrabold text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-ink-400"
               >
                 분석하기
               </button>
             </div>
-            {!complete ? (
-              <p className="text-center text-xs text-ink-400">관심 상권을 골라 주세요</p>
+            {!applied ? (
+              <p className="text-center text-xs text-ink-400">세 항목을 모두 고르면 바로 지도에 보여 드려요</p>
             ) : (
-              !analyzable && (
-                <p className="text-center text-xs text-ink-400">상권 요약은 업종을 1개 골라야 볼 수 있어요</p>
-              )
+              !complete && <p className="text-center text-xs text-ink-400">관심 상권을 골라 주세요</p>
             )}
           </div>
         </div>

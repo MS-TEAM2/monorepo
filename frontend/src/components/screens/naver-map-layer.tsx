@@ -22,6 +22,8 @@ export type MapLayerStore = Store & { inside: boolean };
 /** 이만큼 누르고 있으면 길게 누르기로 본다 */
 const LONG_PRESS_MS = 550;
 
+const DRAFT_PIN = `<div aria-hidden="true" style="transform:translate(-50%,-100%);opacity:.6"><svg width="30" height="38" viewBox="-15 -38 30 38"><path d="M0 -1 C -2.5 -9 -13 -15 -13 -25 A 13 13 0 1 1 13 -25 C 13 -15 2.5 -9 0 -1 Z" class="fill-brand-light stroke-card" stroke-width="2"/><circle cy="-25" r="5" class="fill-card"/></svg></div>`;
+
 const CENTER_PIN = `<div aria-hidden="true" style="transform:translate(-50%,-100%)"><svg width="30" height="38" viewBox="-15 -38 30 38"><path d="M0 -1 C -2.5 -9 -13 -15 -13 -25 A 13 13 0 1 1 13 -25 C 13 -15 2.5 -9 0 -1 Z" class="fill-brand stroke-card" stroke-width="2"/><circle cy="-25" r="5" class="fill-card"/></svg></div>`;
 
 function storeDot(store: MapLayerStore, selected: boolean): string {
@@ -47,6 +49,8 @@ type Props = {
   showPin?: boolean;
   /** 반경 원을 그릴지. 반경을 고르기 전에는 false */
   showRadius?: boolean;
+  /** 지도에서 골랐지만 아직 적용하지 않은 위치. 흐린 핀으로 그린다 */
+  draftPin?: Point | null;
   stores: readonly MapLayerStore[];
   selectedStoreId: string | null;
   /** 지도를 누른 지점(목업 좌표) */
@@ -67,6 +71,7 @@ export function NaverMapLayer({
   radiusM,
   showPin = true,
   showRadius = true,
+  draftPin = null,
   stores,
   selectedStoreId,
   onPressMap,
@@ -77,6 +82,7 @@ export function NaverMapLayer({
   const element = useRef<HTMLDivElement>(null);
   const naver = useRef<{ maps: NaverMapsNS; map: NMap; circle: NCircle; pin: NMarker } | null>(null);
   const storeMarkers = useRef<NMarker[]>([]);
+  const draftMarker = useRef<NMarker | null>(null);
   const latest = useRef({
     origin,
     pinCenter,
@@ -252,19 +258,21 @@ export function NaverMapLayer({
       }
       naver.current = null;
       storeMarkers.current = [];
+      draftMarker.current = null;
     };
   }, [clientId, drawStores, fail, guard]);
 
-  // 동네·반경을 바꾸면 핀 위치로 지도를 옮기고 반경이 들어오게 확대한다
+  // 동네를 바꾸면 핀 위치로 지도를 옮기고 반경이 들어오게 확대한다.
+  // 반경만 바꿀 때는 사용자가 보던 배율과 위치를 그대로 두고 원 크기만 바꾼다(아래 효과)
   useEffect(() => {
     guard(() => {
       const ctx = naver.current;
       if (!ctx) return;
       const pinAt = mapPointToLatLng(latest.current.pinCenter, origin);
       ctx.map.setCenter(new ctx.maps.LatLng(pinAt.lat, pinAt.lng));
-      ctx.map.setZoom(ZOOM_FOR_RADIUS[radiusM]);
+      ctx.map.setZoom(ZOOM_FOR_RADIUS[latest.current.radiusM]);
     });
-  }, [origin, radiusM, guard]);
+  }, [origin, guard]);
 
   // 핀을 옮기거나 반경을 바꾸면 원과 핀을 다시 놓는다. 지도는 옮기지 않는다
   useEffect(() => {
@@ -280,6 +288,37 @@ export function NaverMapLayer({
   }, [origin, pinCenter, radiusM, guard]);
 
   useEffect(() => drawStores(), [stores, selectedStoreId, origin, drawStores]);
+
+  // 지도에서 고른(아직 적용 전) 위치를 흐린 핀으로 보여 준다
+  useEffect(() => {
+    guard(() => {
+      const ctx = naver.current;
+      if (!ctx) return;
+      draftMarker.current?.setMap(null);
+      draftMarker.current = null;
+      if (!draftPin) return;
+      const at = mapPointToLatLng(draftPin, origin);
+      draftMarker.current = new ctx.maps.Marker({
+        map: ctx.map,
+        position: new ctx.maps.LatLng(at.lat, at.lng),
+        icon: { content: DRAFT_PIN, anchor: new ctx.maps.Point(0, 0) },
+        zIndex: 90,
+        clickable: false,
+      });
+    });
+  }, [draftPin, origin, guard]);
+
+  // 매장을 고르면(목록에서 눌러도) 지도를 그 매장 위치로 옮긴다
+  useEffect(() => {
+    guard(() => {
+      const ctx = naver.current;
+      if (!ctx || !selectedStoreId) return;
+      const store = latest.current.stores.find((item) => item.id === selectedStoreId);
+      if (!store) return;
+      const at = mapPointToLatLng(store, origin);
+      ctx.map.panTo(new ctx.maps.LatLng(at.lat, at.lng));
+    });
+  }, [selectedStoreId, origin, guard]);
 
   // 시작 선택 패널에서 고른 단계에 맞춰 핀과 반경 원을 보이거나 숨긴다
   useEffect(() => {

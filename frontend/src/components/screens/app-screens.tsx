@@ -7,13 +7,13 @@ import { ContractView } from "@/components/screens/contract-view";
 import { DiagnosisInputView } from "@/components/screens/diagnosis-input-view";
 import { DiagnosisProgress, PROGRESS_STEP_MS } from "@/components/screens/diagnosis-progress";
 import { DiagnosisReportView } from "@/components/screens/diagnosis-report-view";
-import { EntryModal } from "@/components/screens/entry-modal";
+import { EntryModal, type StepId } from "@/components/screens/entry-modal";
 import { ExploreMapView } from "@/components/screens/explore-map-view";
 import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
-import { canAnalyzeDraft, EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
+import { EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
 import { calcLoss } from "@/lib/mock/startup/calc";
 import type { Point } from "@/lib/mock/startup/types";
 import { loginRequiredHref } from "@/lib/return-to";
@@ -39,28 +39,53 @@ export function ExploreScreen() {
   const draft = edited ?? applied ?? EMPTY_DRAFT;
   const [analyzed, setAnalyzed] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [mapPickCount, setMapPickCount] = useState(0);
+  // 처음 적용하기 전에 업종·반경을 직접 골랐는지. 관심 상권까지 셋 다 고르면 바로 적용한다
+  const [touched, setTouched] = useState({ category: false, radius: false });
+  const [collapseKey, setCollapseKey] = useState(0);
   // 초기화하면 패널을 새로 그려 처음처럼 펼친다
   const [panelKey, setPanelKey] = useState(0);
-  const layers = mapLayers({ draft, applied: applied !== null, pending: edited !== null, analyzed });
+  const layers = mapLayers({ applied: applied !== null, analyzed });
+  // 지도는 적용한 동을 그린다. 적용 전이면 기본 동의 바탕 지도만 보인다
+  const shownNeighborhood = applied?.neighborhood ?? s.neighborhood;
+  // 지도에서 고른 위치는 같은 지도 위에 흐린 핀으로만 보여 준다(지도는 옮기지 않는다)
+  const draftPin =
+    edited?.pin && edited.neighborhood?.dongCode === shownNeighborhood.dongCode && edited.pin !== applied?.pin
+      ? edited.pin
+      : null;
 
-  function commit(): boolean {
-    if (!isCompleteDraft(draft)) return false;
+  function commit(next: EntryDraft = draft): boolean {
+    if (!isCompleteDraft(next)) return false;
     s.applySelection({
-      neighborhood: draft.neighborhood,
-      categories: draft.categories,
-      radiusM: draft.radiusM,
-      pinCenter: draft.pin,
+      neighborhood: next.neighborhood,
+      categories: next.categories,
+      radiusM: next.radiusM,
+      pinCenter: next.pin,
     });
     setEdited(null);
     return true;
   }
 
+  function change(patch: Partial<EntryDraft>, step: StepId) {
+    const next = { ...draft, ...patch };
+    const nextTouched = {
+      category: touched.category || step === "category",
+      radius: touched.radius || step === "radius",
+    };
+    setTouched(nextTouched);
+    // 처음엔 세 항목을 모두 고르면 바로 적용하고 패널을 접는다. 그 뒤로는 `적용`을 눌러야 반영한다
+    if (applied === null && nextTouched.category && nextTouched.radius && isCompleteDraft(next)) {
+      commit(next);
+      setAnalyzed(false);
+      setCollapseKey((n) => n + 1);
+      return;
+    }
+    setEdited(next);
+  }
+
   /** 지금 지도에 보이는 동에서 누른 위치를 관심 상권으로 삼는다. 실제 지도가 붙으면 좌표로 행정동을 찾는다(A04) */
   function pickOnMap(point: Point) {
-    setEdited({ ...draft, neighborhood: draft.neighborhood ?? s.neighborhood, pin: point });
     setPicking(false);
-    setMapPickCount((n) => n + 1);
+    change({ neighborhood: shownNeighborhood, pin: point }, "neighborhood");
   }
 
   function onMapClick(point: Point) {
@@ -75,11 +100,13 @@ export function ExploreScreen() {
   return (
     <main className="relative flex-1">
       <ExploreMapView
-        neighborhood={draft.neighborhood ?? s.neighborhood}
-        category={draft.categories.length === 1 ? (draft.categories[0] ?? s.category) : s.category}
-        radiusM={draft.radiusM}
+        neighborhood={shownNeighborhood}
+        category={s.category}
+        categories={s.categories}
+        radiusM={s.radiusM}
         stores={s.stores}
-        pinCenter={draft.pin ?? s.pinCenter}
+        pinCenter={s.pinCenter}
+        draftPin={draftPin}
         onMovePin={onMapClick}
         // 지도를 길게 누르면 언제든 그 자리를 관심 상권으로 고른다 (specs/area-map R2)
         onLongPress={pickOnMap}
@@ -88,10 +115,10 @@ export function ExploreScreen() {
           setEdited(null);
           setAnalyzed(false);
           setPicking(false);
+          setTouched({ category: false, radius: false });
           setPanelKey((n) => n + 1);
         }}
         radiusStats={s.radiusStats}
-        dongSummary={s.dongSummary}
         layers={layers}
         pinMovable={picking || layers.stores}
         onGoDiagnose={() => go("diagnose")}
@@ -103,16 +130,17 @@ export function ExploreScreen() {
       <EntryModal
         key={panelKey}
         draft={draft}
-        onChange={(patch) => setEdited({ ...draft, ...patch })}
+        onChange={change}
         onApply={() => {
           if (commit()) setAnalyzed(false);
         }}
         onAnalyze={() => {
-          if (canAnalyzeDraft(draft) && commit()) setAnalyzed(true);
+          if (commit()) setAnalyzed(true);
         }}
+        applied={applied !== null}
         picking={picking}
         onPickingChange={setPicking}
-        mapPickCount={mapPickCount}
+        collapseKey={collapseKey}
       />
     </main>
   );

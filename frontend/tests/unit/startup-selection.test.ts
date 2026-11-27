@@ -85,7 +85,7 @@ describe("S03 상권 요약 잠금 (Notion 기획서 S03)", () => {
   const neighborhood = NEIGHBORHOODS[0] as Neighborhood;
   const category = CATEGORIES[0] as Category;
   const dongSummary = buildDongSummary(neighborhood, category);
-  const render = (dongLocked: boolean, layers?: MapLayers) =>
+  const render = (dongLocked: boolean, layers?: MapLayers, categories?: Category[]) =>
     renderToStaticMarkup(
       createElement(ExploreMapView, {
         neighborhood,
@@ -96,14 +96,23 @@ describe("S03 상권 요약 잠금 (Notion 기획서 S03)", () => {
         onMovePin: () => {},
         onReset: () => {},
         radiusStats: { activeCount: 12, open1yCount: 3, close1yCount: 2 },
-        dongSummary,
         onGoDiagnose: () => {},
         onGoContract: () => {},
         dongLocked,
         onLogin: () => {},
         layers,
+        categories,
       }),
     );
+
+  it("업종을 여러 개 고르면 요약 제목에 묶어 보여 주고, 행정동 집계는 업종 칩으로 하나씩 본다(A07)", () => {
+    const picked = [CATEGORIES[0] as Category, CATEGORIES[1] as Category];
+    const markup = render(false, undefined, picked);
+    expect(markup).toContain(`${picked[0]!.label} 외 1 상권 요약`);
+    expect(markup).toContain("영업 매장");
+    expect(markup).toContain('aria-label="행정동 집계 업종"');
+    expect(markup).toContain(`행정동 집계 · ${dongSummary.quarter} · ${picked[0]!.label}`);
+  });
 
   it("조건을 고르기 전에는 바탕 지도만 보여 주고 지역·반경·요약을 그리지 않는다", () => {
     const markup = render(true, { pin: false, radius: false, stores: false, summary: false });
