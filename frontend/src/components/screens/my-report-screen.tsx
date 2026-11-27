@@ -8,12 +8,15 @@ import { DeleteMyData } from "@/components/about-data/delete-my-data";
 import { SampleDataBadge } from "@/components/feedback/sample-data";
 import { PageIntro } from "@/components/screens/page-intro";
 import { PageShell } from "@/components/screens/page-shell";
+import { useRequireLogin } from "@/components/auth/login-required";
 import { useStartup } from "@/components/screens/startup-provider";
-import { useGoScreen } from "@/components/screens/use-go-screen";
+import { SCREEN_PATHS } from "@/components/screens/use-go-screen";
 import { PRIVACY_NOTES } from "@/lib/data-status";
 import { CATEGORIES } from "@/lib/mock/startup/data";
 import {
   clearMyReports,
+  contractSnapshotFor,
+  diagnosisSnapshotFor,
   parseMyReports,
   readMyReportsRaw,
   sampleReports,
@@ -98,6 +101,20 @@ function EmptyState({ message, action, onAction }: { message: string; action: st
   );
 }
 
+/** 누르면 그 기록의 결과를 다시 여는 카드 (SCRUM-208) */
+function RecordButton({ label, onOpen, children }: { label: string; onOpen: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={label}
+      className="group block w-full rounded-2xl border border-border bg-secondary p-4 text-left transition-colors hover:border-brand-light hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-primary"
+    >
+      {children}
+    </button>
+  );
+}
+
 function RecordMeta({ createdAt, expiresAt, now }: { createdAt: string; expiresAt: string; now: Date }) {
   return (
     <p className="mt-1 text-xs text-ink-400 tabular-nums">
@@ -113,8 +130,8 @@ function RecordMeta({ createdAt, expiresAt, now }: { createdAt: string; expiresA
  * 진단·계약서를 자동으로 보관하는 동작은 다른 담당이 맡는다. 이 화면은 보관된 기록을 보여 주기만 한다.
  */
 export function MyReportScreen() {
-  const go = useGoScreen();
-  const { resetAll } = useStartup();
+  const { navigate } = useRequireLogin();
+  const { resetAll, openDiagnosis, openContract, startNewDiagnosis, startNewContract } = useStartup();
   const [now] = useState(() => new Date());
   const raw = useSyncExternalStore(
     subscribeMyReports,
@@ -122,6 +139,16 @@ export function MyReportScreen() {
     () => null,
   );
   const reports = useMemo(() => withSamples(parseMyReports(raw, now), now), [raw, now]);
+
+  // 새로 진단·검토는 이전 입력 없이 각 기능의 첫 단계부터 시작한다 (SCRUM-208)
+  const newDiagnosis = () => {
+    startNewDiagnosis();
+    navigate(SCREEN_PATHS.diagnose);
+  };
+  const newContract = () => {
+    startNewContract();
+    navigate(SCREEN_PATHS.contract);
+  };
 
   return (
     <PageShell>
@@ -136,30 +163,37 @@ export function MyReportScreen() {
             count={reports.diagnoses.length}
           >
             {reports.diagnoses.length === 0 ? (
-              <EmptyState
-                message="아직 진단한 기록이 없어요."
-                action="창업 진단하러 가기"
-                onAction={() => go("diagnose")}
-              />
+              <EmptyState message="아직 진단한 기록이 없어요." action="창업 진단하러 가기" onAction={newDiagnosis} />
             ) : (
               <ul className="space-y-2">
                 {reports.diagnoses.map((item) => (
-                  <li key={item.id} className="rounded-2xl border border-border bg-secondary p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-bold text-foreground">
-                        {item.dong_name} · {categoryLabel(item.category_id)}
-                      </p>
-                      {item.sample && <SampleDataBadge className="shrink-0" />}
-                    </div>
-                    <p className="mt-0.5 truncate text-sm text-ink-500">{item.address}</p>
-                    <RecordMeta createdAt={item.created_at} expiresAt={item.expires_at} now={now} />
+                  <li key={item.id}>
+                    <RecordButton
+                      label={`${item.dong_name} ${categoryLabel(item.category_id)} 진단 결과 보기`}
+                      onOpen={() => {
+                        openDiagnosis(diagnosisSnapshotFor(item));
+                        navigate(SCREEN_PATHS.report);
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-bold text-foreground">
+                          {item.dong_name} · {categoryLabel(item.category_id)}
+                        </p>
+                        <span className="flex shrink-0 items-center gap-1">
+                          {item.sample && <SampleDataBadge />}
+                          <ChevronRight className="size-4 text-ink-400 group-hover:text-primary" aria-hidden="true" />
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-sm text-ink-500">{item.address}</p>
+                      <RecordMeta createdAt={item.created_at} expiresAt={item.expires_at} now={now} />
+                    </RecordButton>
                   </li>
                 ))}
               </ul>
             )}
             <button
               type="button"
-              onClick={() => go("diagnose")}
+              onClick={newDiagnosis}
               className="flex min-h-11 w-full items-center justify-center gap-1 rounded-2xl border border-input bg-card text-sm font-bold text-ink-600 transition-colors hover:border-brand-light hover:text-primary"
             >
               새로 진단하기
@@ -174,34 +208,41 @@ export function MyReportScreen() {
             count={reports.contracts.length}
           >
             {reports.contracts.length === 0 ? (
-              <EmptyState
-                message="아직 검토한 계약서가 없어요."
-                action="계약서 검토하러 가기"
-                onAction={() => go("contract")}
-              />
+              <EmptyState message="아직 검토한 계약서가 없어요." action="계약서 검토하러 가기" onAction={newContract} />
             ) : (
               <ul className="space-y-2">
                 {reports.contracts.map((item) => {
                   const status = CONTRACT_STATUS[item.status];
                   return (
-                    <li key={item.id} className="rounded-2xl border border-border bg-secondary p-4">
-                      {/* 진단 항목과 같은 글자 크기: 제목(굵게) → 보조(작게) → 날짜(더 작게) */}
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-bold text-foreground">
-                          임대차 계약서
-                          {item.diagnosis && ` · ${categoryLabel(item.diagnosis.category_id)}`}
+                    <li key={item.id}>
+                      <RecordButton
+                        label="계약서 검토 결과 보기"
+                        onOpen={() => {
+                          openContract(contractSnapshotFor(item, reports));
+                          navigate(SCREEN_PATHS.contract);
+                        }}
+                      >
+                        {/* 진단 항목과 같은 글자 크기: 제목(굵게) → 보조(작게) → 날짜(더 작게) */}
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-bold text-foreground">
+                            임대차 계약서
+                            {item.diagnosis && ` · ${categoryLabel(item.diagnosis.category_id)}`}
+                          </p>
+                          <span className="flex shrink-0 items-center gap-1">
+                            {item.sample && <SampleDataBadge />}
+                            <ChevronRight className="size-4 text-ink-400 group-hover:text-primary" aria-hidden="true" />
+                          </span>
+                        </div>
+                        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-ink-500">
+                          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-bold", status.tone)}>
+                            {status.label}
+                          </span>
+                          <span className="truncate">
+                            {item.diagnosis ? item.diagnosis.address : "진단과 연결하지 않은 계약서"}
+                          </span>
                         </p>
-                        {item.sample && <SampleDataBadge className="shrink-0" />}
-                      </div>
-                      <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-ink-500">
-                        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-bold", status.tone)}>
-                          {status.label}
-                        </span>
-                        <span className="truncate">
-                          {item.diagnosis ? item.diagnosis.address : "진단과 연결하지 않은 계약서"}
-                        </span>
-                      </p>
-                      <RecordMeta createdAt={item.created_at} expiresAt={item.expires_at} now={now} />
+                        <RecordMeta createdAt={item.created_at} expiresAt={item.expires_at} now={now} />
+                      </RecordButton>
                     </li>
                   );
                 })}
@@ -209,7 +250,7 @@ export function MyReportScreen() {
             )}
             <button
               type="button"
-              onClick={() => go("contract")}
+              onClick={newContract}
               className="flex min-h-11 w-full items-center justify-center gap-1 rounded-2xl border border-input bg-card text-sm font-bold text-ink-600 transition-colors hover:border-brand-light hover:text-primary"
             >
               새 계약서 검토하기

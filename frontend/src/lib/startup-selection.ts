@@ -44,6 +44,11 @@ export function parseSelection(raw: string | null): StartupSelection | null {
   } catch {
     return null;
   }
+  return toSelection(value);
+}
+
+/** 읽어 온 값이 선택값 모양인지 확인한다. 분석기록에 저장한 선택값도 이것으로 확인한다 (SCRUM-208) */
+export function toSelection(value: unknown): StartupSelection | null {
   if (typeof value !== "object" || value === null) return null;
   const { dongCode, categoryId, categoryIds, radiusM, pin } = value as Record<string, unknown>;
   if (typeof dongCode !== "string" || typeof categoryId !== "string") return null;
