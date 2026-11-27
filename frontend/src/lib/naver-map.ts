@@ -12,7 +12,9 @@ export type NMap = {
   /** 부드럽게 옮긴다 */
   panTo(center: NLatLng): void;
   getCenter(): NLatLng;
-  setZoom(zoom: number): void;
+  setZoom(zoom: number, effect?: boolean): void;
+  getZoom(): number;
+  morph(coord: NLatLng, zoom?: number): void;
   getProjection(): { fromCoordToOffset(coord: NLatLng): NPoint };
   destroy(): void;
 };
