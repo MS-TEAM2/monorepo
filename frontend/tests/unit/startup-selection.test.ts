@@ -27,6 +27,15 @@ function memoryStorage(): SessionStorageLike {
 
 const selection = { dongCode: "1168064000", categoryId: "cafe", radiusM: 300 as const, pin: { x: 120, y: 80 } };
 
+describe("지도 업종 복수 선택 보관 (specs/area-map R3)", () => {
+  it("고른 업종 목록을 함께 저장하고 되살린다. 예전 저장값에는 없어도 된다", () => {
+    const storage = memoryStorage();
+    saveSelection({ ...selection, categoryIds: ["cafe", "korean"] }, { storage });
+    expect(loadSelection({ storage })?.categoryIds).toEqual(["cafe", "korean"]);
+    expect(parseSelection(JSON.stringify(selection))?.categoryIds).toBeUndefined();
+  });
+});
+
 describe("시안 화면 선택값 보관 (Notion 기획서 2장: 로그인 후 위치·반경·업종 복귀)", () => {
   it("저장한 동네·업종·반경·핀을 그대로 되살린다", () => {
     const storage = memoryStorage();

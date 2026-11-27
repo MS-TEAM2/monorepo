@@ -2,26 +2,30 @@ import type { Category, Neighborhood, Point, RadiusM } from "@/lib/mock/startup/
 
 /**
  * 상권 지도 시작 선택 패널에서 고르는 중인 조건. `적용`을 누르기 전까지는 지도에 미리보기로만 쓴다.
- * pin 은 관심 상권의 중심점이다. 동을 목록에서 고르면 그 동의 기본 위치, 지도에서 고르면 누른 위치다.
+ * pin 은 관심 상권의 중심점이다. 동을 목록에서 고르면 그 동의 기본 위치, 현재 위치·지도에서 고르면 그 위치다.
+ * 업종은 외식 9종 복수 선택이고 비어 있으면 9종 전체, 반경은 기본 500m다 (specs/area-map R3).
  */
 export type EntryDraft = {
   neighborhood: Neighborhood | null;
-  category: Category | null;
-  radiusM: RadiusM | null;
+  categories: Category[];
+  radiusM: RadiusM;
   pin: Point | null;
 };
 
-export type CompleteEntryDraft = {
-  neighborhood: Neighborhood;
-  category: Category;
-  radiusM: RadiusM;
-  pin: Point;
-};
+export type CompleteEntryDraft = EntryDraft & { neighborhood: Neighborhood; pin: Point };
 
-export const EMPTY_DRAFT: EntryDraft = { neighborhood: null, category: null, radiusM: null, pin: null };
+export const DEFAULT_RADIUS_M: RadiusM = 500;
 
+export const EMPTY_DRAFT: EntryDraft = { neighborhood: null, categories: [], radiusM: DEFAULT_RADIUS_M, pin: null };
+
+/** 관심 상권(위치)만 고르면 적용할 수 있다. 업종은 비면 9종 전체, 반경은 기본값이 있다 */
 export function isCompleteDraft(draft: EntryDraft): draft is CompleteEntryDraft {
-  return draft.neighborhood !== null && draft.category !== null && draft.radiusM !== null && draft.pin !== null;
+  return draft.neighborhood !== null && draft.pin !== null;
+}
+
+/** 상권 요약(A07)은 업종 1개만 받으므로 업종을 1개 골랐을 때만 분석할 수 있다 */
+export function canAnalyzeDraft(draft: EntryDraft): boolean {
+  return isCompleteDraft(draft) && draft.categories.length === 1;
 }
 
 export type MapLayers = {
@@ -50,7 +54,7 @@ export function mapLayers(input: {
   const stores = input.applied && !input.pending;
   return {
     pin,
-    radius: pin && input.draft.radiusM !== null,
+    radius: pin,
     stores,
     summary: stores && input.analyzed,
   };

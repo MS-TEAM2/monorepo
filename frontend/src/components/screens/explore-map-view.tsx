@@ -19,6 +19,10 @@ import type { MapLayers } from "@/lib/entry-draft";
 import { naverMapClientId } from "@/lib/naver-map";
 import { cn } from "@/lib/utils";
 
+/** 이만큼 누르고 있으면 길게 누르기로 본다. 그 사이 이만큼 움직이면 지도 끌기로 보고 취소한다 */
+const LONG_PRESS_MS = 550;
+const LONG_PRESS_SLOP_PX = 10;
+
 const ALL_LAYERS: MapLayers = { pin: true, radius: true, stores: true, summary: true };
 const NO_STORES: PlacedStore[] = [];
 
@@ -49,6 +53,8 @@ type ExploreMapViewProps = {
   layers?: MapLayers;
   /** 지도를 누르면 onMovePin 을 부를지. 조건을 적용하기 전에는 지도에서 위치를 고를 때만 true */
   pinMovable?: boolean;
+  /** 지도를 길게 누른 지점. 조건을 고르기 전에도 부른다 (specs/area-map R2) */
+  onLongPress?: (point: Point) => void;
   onGoDiagnose: () => void;
   onGoContract: () => void;
   /** 로그인 전에는 행정동 지표를 잠근다 (Notion 기획서 S03, specs/social-login R4) */
@@ -73,12 +79,31 @@ export function ExploreMapView({
   dongSummary,
   layers = ALL_LAYERS,
   pinMovable = true,
+  onLongPress,
   onGoDiagnose,
   onGoContract,
   dongLocked = false,
   onLogin,
 }: ExploreMapViewProps) {
   const containerRef = useRef<SVGSVGElement>(null);
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  const cancelLongPress = () => {
+    if (longPress.current) window.clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  };
+  useEffect(() => cancelLongPress, []);
+  /** 화면 좌표를 예시 지도 좌표로 바꾼다. 가장자리 30px 안쪽으로 맞춘다 */
+  const toMapPoint = (clientX: number, clientY: number): Point | null => {
+    if (!containerRef.current) return null;
+    const t = containerRef.current.getBoundingClientRect();
+    const s = Math.max(t.width / MAP_SIZE.width, t.height / MAP_SIZE.height);
+    const r = (t.width - MAP_SIZE.width * s) / 2;
+    const a = (t.height - MAP_SIZE.height * s) / 2;
+    const n = Math.min(MAP_SIZE.width - 30, Math.max(30, (clientX - t.left - r) / s));
+    const l = Math.min(MAP_SIZE.height - 30, Math.max(30, (clientY - t.top - a) / s));
+    return { x: Number(n.toFixed(1)), y: Number(l.toFixed(1)) };
+  };
   const selectionKey = `${neighborhood.dongCode}-${category.id}-${radiusM}`;
   const [selectedState, setSelectedState] = useState<{
     key: string;
@@ -158,6 +183,14 @@ export function ExploreMapView({
             selectStore(null);
             onMovePin(point);
           }}
+          onLongPressMap={
+            onLongPress
+              ? (point) => {
+                  selectStore(null);
+                  onLongPress(point);
+                }
+              : undefined
+          }
           onSelectStore={(id) => selectStore(activeInside.find((store) => store.id === id) ?? null)}
           onLoadError={() => setNaverFailed(true)}
         />
@@ -166,19 +199,45 @@ export function ExploreMapView({
           ref={containerRef}
           viewBox={`0 0 ${MAP_SIZE.width} ${MAP_SIZE.height}`}
           preserveAspectRatio="xMidYMid slice"
+          onPointerDown={(e) => {
+            if (!onLongPress) return;
+            cancelLongPress();
+            const { clientX, clientY } = e;
+            longPress.current = {
+              x: clientX,
+              y: clientY,
+              timer: window.setTimeout(() => {
+                longPress.current = null;
+                const point = toMapPoint(clientX, clientY);
+                if (!point) return;
+                // 길게 누른 뒤 손을 떼면 click 도 오므로 한 번 무시한다
+                suppressClick.current = true;
+                selectStore(null);
+                onLongPress(point);
+              }, LONG_PRESS_MS),
+            };
+          }}
+          onPointerMove={(e) => {
+            const start = longPress.current;
+            if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > LONG_PRESS_SLOP_PX) cancelLongPress();
+          }}
+          onPointerUp={cancelLongPress}
+          onPointerCancel={cancelLongPress}
+          onPointerLeave={cancelLongPress}
+          onContextMenu={(e) => {
+            // 휴대폰에서 길게 누르면 뜨는 메뉴를 막는다
+            if (onLongPress) e.preventDefault();
+          }}
           onClick={(e) => {
-            if (!pinMovable || !containerRef.current) return;
-            const t = containerRef.current.getBoundingClientRect();
-            const s = Math.max(t.width / MAP_SIZE.width, t.height / MAP_SIZE.height);
-            const r = (t.width - MAP_SIZE.width * s) / 2;
-            const a = (t.height - MAP_SIZE.height * s) / 2;
-            const n = Math.min(MAP_SIZE.width - 30, Math.max(30, (e.clientX - t.left - r) / s));
-            const l = Math.min(MAP_SIZE.height - 30, Math.max(30, (e.clientY - t.top - a) / s));
+            if (suppressClick.current) {
+              suppressClick.current = false;
+              return;
+            }
+            if (!pinMovable) return;
+            const point = toMapPoint(e.clientX, e.clientY);
+            if (!point) return;
             selectStore(null);
-            onMovePin({
-              x: Number(n.toFixed(1)),
-              y: Number(l.toFixed(1)),
-            });
+            onMovePin(point);
           }}
           className={cn("w-full h-full block", pinMovable && "cursor-crosshair")}
           role="application"

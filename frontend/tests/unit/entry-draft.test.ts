@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
+import { canAnalyzeDraft, EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
 import { CATEGORIES, INITIAL_PIN, NEIGHBORHOODS } from "@/lib/mock/startup/data";
 
 const located: EntryDraft = { ...EMPTY_DRAFT, neighborhood: NEIGHBORHOODS[0]!, pin: INITIAL_PIN };
-const complete: EntryDraft = { ...located, category: CATEGORIES[0]!, radiusM: 500 };
+const complete: EntryDraft = { ...located, categories: [CATEGORIES[0]!], radiusM: 500 };
 
-describe("시작 선택 조건", () => {
-  it("동·업종·반경·위치가 모두 있어야 완료다", () => {
+describe("시작 선택 조건 (specs/area-map R3)", () => {
+  it("처음엔 업종 전체(빈 배열)와 반경 500m이고, 관심 상권만 고르면 적용할 수 있다", () => {
+    expect(EMPTY_DRAFT.categories).toEqual([]);
+    expect(EMPTY_DRAFT.radiusM).toBe(500);
     expect(isCompleteDraft(EMPTY_DRAFT)).toBe(false);
-    expect(isCompleteDraft(located)).toBe(false);
-    expect(isCompleteDraft(complete)).toBe(true);
+    expect(isCompleteDraft(located)).toBe(true);
+  });
+
+  it("상권 요약은 업종을 1개 골랐을 때만 분석한다", () => {
+    expect(canAnalyzeDraft(located)).toBe(false);
+    expect(canAnalyzeDraft(complete)).toBe(true);
+    expect(canAnalyzeDraft({ ...complete, categories: [CATEGORIES[0]!, CATEGORIES[1]!] })).toBe(false);
   });
 });
 
@@ -24,10 +31,10 @@ describe("지도 표시 단계", () => {
     });
   });
 
-  it("고르는 중에는 위치와 반경만 미리 보여 준다", () => {
+  it("고르는 중에는 위치와 반경(기본 500m)만 미리 보여 준다", () => {
     expect(mapLayers({ draft: located, applied: false, pending: false, analyzed: false })).toMatchObject({
       pin: true,
-      radius: false,
+      radius: true,
       stores: false,
     });
     expect(mapLayers({ draft: complete, applied: false, pending: false, analyzed: false })).toMatchObject({
