@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
+import { collapsesPanel, EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
 import { INITIAL_PIN, NEIGHBORHOODS } from "@/lib/mock/startup/data";
 
 const located: EntryDraft = { ...EMPTY_DRAFT, neighborhood: NEIGHBORHOODS[0]!, pin: INITIAL_PIN };
@@ -32,5 +32,16 @@ describe("지도 표시 단계", () => {
       summary: false,
     });
     expect(mapLayers({ applied: true, analyzed: true }).summary).toBe(true);
+  });
+});
+
+describe("시작 선택 패널 접기 (SCRUM-207)", () => {
+  it("분석하기와 처음 자동 적용은 패널을 접는다", () => {
+    expect(collapsesPanel("analyze")).toBe(true);
+    expect(collapsesPanel("auto-apply")).toBe(true);
+  });
+
+  it("적용은 이어서 고칠 수 있게 펼친 채로 둔다", () => {
+    expect(collapsesPanel("apply")).toBe(false);
   });
 });

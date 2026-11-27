@@ -13,7 +13,7 @@ import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
-import { EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
+import { collapsesPanel, EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
 import { calcLoss } from "@/lib/mock/startup/calc";
 import type { Point } from "@/lib/mock/startup/types";
 import { loginRequiredHref } from "@/lib/return-to";
@@ -76,7 +76,7 @@ export function ExploreScreen() {
     if (applied === null && nextTouched.category && nextTouched.radius && isCompleteDraft(next)) {
       commit(next);
       setAnalyzed(false);
-      setCollapseKey((n) => n + 1);
+      if (collapsesPanel("auto-apply")) setCollapseKey((n) => n + 1);
       return;
     }
     setEdited(next);
@@ -135,7 +135,10 @@ export function ExploreScreen() {
           if (commit()) setAnalyzed(false);
         }}
         onAnalyze={() => {
-          if (commit()) setAnalyzed(true);
+          if (!commit()) return;
+          setAnalyzed(true);
+          // 분석 결과 창과 겹치지 않게 조건 패널을 접는다. `조건 변경`으로 다시 펼친다
+          if (collapsesPanel("analyze")) setCollapseKey((n) => n + 1);
         }}
         applied={applied !== null}
         picking={picking}
