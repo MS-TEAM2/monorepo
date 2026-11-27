@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.data_status import service
 from app.data_status.schemas import DataStatusResponse
+from app.deps import DbSession
 from app.errors import error_responses
 
 router = APIRouter(tags=["data_status"])
@@ -18,5 +19,5 @@ router = APIRouter(tags=["data_status"])
         "`stale`은 true다. `model`은 사용 중인 생존모델이 없으면 null이다."
     ),
 )
-async def get_data_status() -> DataStatusResponse:
-    return await service.get_data_status()
+async def get_data_status(db: DbSession) -> DataStatusResponse:
+    return await service.get_data_status(db)
