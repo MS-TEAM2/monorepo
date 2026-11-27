@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from ai_core.predict import analyze_contract, load_survival_model, predict_survival
+from ai_core.predict import load_survival_model, predict_survival
 from ai_core.survival.contract import (
     CATEGORY_IDS,
     HORIZON_MONTHS,
@@ -137,8 +137,3 @@ def test_at_most_three_factors_per_direction():
     four = tuple(Factor(name=f"f{i}", direction="risk", contribution=0.01) for i in range(4))
     with pytest.raises(ValueError):
         replace(EXAMPLE_SURVIVAL_RESULT, factors=four).validate()
-
-
-def test_contract_analysis_is_a_placeholder_for_d2():
-    with pytest.raises(NotImplementedError):
-        analyze_contract([("application/pdf", b"%PDF")])

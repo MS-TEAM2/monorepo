@@ -13,37 +13,87 @@ import { GuideView } from "@/components/screens/guide-view";
 import { PageShell } from "@/components/screens/page-shell";
 import { useStartup } from "@/components/screens/startup-provider";
 import { useGoScreen } from "@/components/screens/use-go-screen";
+import { canAnalyzeDraft, EMPTY_DRAFT, isCompleteDraft, mapLayers, type EntryDraft } from "@/lib/entry-draft";
 import { calcLoss } from "@/lib/mock/startup/calc";
+import type { Point } from "@/lib/mock/startup/types";
 import { loginRequiredHref } from "@/lib/return-to";
 import { useSessionStatus } from "@/lib/use-session";
 
-/** S02·S03 상권 지도. 홈(/)에서는 시작 선택 창을 열어 둔 채로 보여 준다. */
-export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boolean }) {
+/**
+ * S02·S03 상권 지도. 왼쪽 위에 시작 선택 패널을 늘 띄운다.
+ * 패널에서 고르는 값은 여기 draft 로 두고 지도에는 위치·반경만 미리 보여 준다.
+ * `적용`하면 StartupProvider 에 반영해 매장을 그리고, `분석하기`하면 왼쪽 아래 상권 요약까지 보여 준다.
+ */
+export function ExploreScreen() {
   const go = useGoScreen();
   const router = useRouter();
   const pathname = usePathname();
   const s = useStartup();
-  const { setEntryModalOpen } = s;
   const session = useSessionStatus();
 
-  useEffect(() => {
-    setEntryModalOpen(withEntryModal);
-  }, [withEntryModal, setEntryModalOpen]);
+  const applied: EntryDraft | null = s.hasSelection
+    ? { neighborhood: s.neighborhood, categories: s.categories, radiusM: s.radiusM, pin: s.pinCenter }
+    : null;
+  // null 이면 적용한 조건 그대로다. 패널에서 무언가 바꾸면 적용 전까지 여기에 둔다
+  const [edited, setEdited] = useState<EntryDraft | null>(null);
+  const draft = edited ?? applied ?? EMPTY_DRAFT;
+  const [analyzed, setAnalyzed] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [mapPickCount, setMapPickCount] = useState(0);
+  // 초기화하면 패널을 새로 그려 처음처럼 펼친다
+  const [panelKey, setPanelKey] = useState(0);
+  const layers = mapLayers({ draft, applied: applied !== null, pending: edited !== null, analyzed });
+
+  function commit(): boolean {
+    if (!isCompleteDraft(draft)) return false;
+    s.applySelection({
+      neighborhood: draft.neighborhood,
+      categories: draft.categories,
+      radiusM: draft.radiusM,
+      pinCenter: draft.pin,
+    });
+    setEdited(null);
+    return true;
+  }
+
+  /** 지금 지도에 보이는 동에서 누른 위치를 관심 상권으로 삼는다. 실제 지도가 붙으면 좌표로 행정동을 찾는다(A04) */
+  function pickOnMap(point: Point) {
+    setEdited({ ...draft, neighborhood: draft.neighborhood ?? s.neighborhood, pin: point });
+    setPicking(false);
+    setMapPickCount((n) => n + 1);
+  }
+
+  function onMapClick(point: Point) {
+    if (picking) {
+      pickOnMap(point);
+      return;
+    }
+    // 적용한 조건을 보고 있을 때는 지금처럼 누른 곳으로 중심을 바로 옮긴다
+    if (layers.stores) s.setPinCenter(point);
+  }
 
   return (
-    <main className="flex-1">
+    <main className="relative flex-1">
       <ExploreMapView
-        neighborhood={s.neighborhood}
-        category={s.category}
-        radiusM={s.radiusM}
-        onSelectRadius={s.setRadiusM}
+        neighborhood={draft.neighborhood ?? s.neighborhood}
+        category={draft.categories.length === 1 ? (draft.categories[0] ?? s.category) : s.category}
+        radiusM={draft.radiusM}
         stores={s.stores}
-        pinCenter={s.pinCenter}
-        onMovePin={s.setPinCenter}
-        onResetPin={s.resetPin}
+        pinCenter={draft.pin ?? s.pinCenter}
+        onMovePin={onMapClick}
+        // 지도를 길게 누르면 언제든 그 자리를 관심 상권으로 고른다 (specs/area-map R2)
+        onLongPress={pickOnMap}
+        onReset={() => {
+          s.clearSelection();
+          setEdited(null);
+          setAnalyzed(false);
+          setPicking(false);
+          setPanelKey((n) => n + 1);
+        }}
         radiusStats={s.radiusStats}
         dongSummary={s.dongSummary}
-        onOpenModal={() => s.setEntryModalOpen(true)}
+        layers={layers}
+        pinMovable={picking || layers.stores}
         onGoDiagnose={() => go("diagnose")}
         onGoContract={() => go("contract")}
         dongLocked={session !== "logged_in"}
@@ -51,19 +101,18 @@ export function ExploreScreen({ withEntryModal = false }: { withEntryModal?: boo
         onLogin={() => router.push(loginRequiredHref(pathname))}
       />
       <EntryModal
-        open={s.entryModalOpen}
-        onClose={() => s.setEntryModalOpen(false)}
-        neighborhood={s.neighborhood}
-        onSelectNeighborhood={s.selectNeighborhood}
-        category={s.category}
-        onSelectCategory={s.setCategory}
-        radiusM={s.radiusM}
-        onSelectRadius={s.setRadiusM}
-        onNavigate={(screen) => {
-          if (screen !== "map") go(screen);
+        key={panelKey}
+        draft={draft}
+        onChange={(patch) => setEdited({ ...draft, ...patch })}
+        onApply={() => {
+          if (commit()) setAnalyzed(false);
         }}
-        hasReport={!!s.report}
-        hasContractApplied={!!s.appliedContract}
+        onAnalyze={() => {
+          if (canAnalyzeDraft(draft) && commit()) setAnalyzed(true);
+        }}
+        picking={picking}
+        onPickingChange={setPicking}
+        mapPickCount={mapPickCount}
       />
     </main>
   );
@@ -87,7 +136,7 @@ export function DiagnosisInputScreen() {
   const handleRun = () => {
     if (isRunning) return;
     setIsRunning(true);
-    s.runDiagnosis();
+    s.runDiagnosis({ record: true });
     runTimer.current = window.setTimeout(() => go("report"), PROGRESS_STEP_MS * 4);
   };
 

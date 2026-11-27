@@ -11,12 +11,16 @@ import {
   onNaverAuthFailure,
   type NaverMapsNS,
   type NCircle,
+  type NLatLng,
   type NListener,
   type NMap,
   type NMarker,
 } from "@/lib/naver-map";
 
 export type MapLayerStore = Store & { inside: boolean };
+
+/** 이만큼 누르고 있으면 길게 누르기로 본다 */
+const LONG_PRESS_MS = 550;
 
 const CENTER_PIN = `<div aria-hidden="true" style="transform:translate(-50%,-100%)"><svg width="30" height="38" viewBox="-15 -38 30 38"><path d="M0 -1 C -2.5 -9 -13 -15 -13 -25 A 13 13 0 1 1 13 -25 C 13 -15 2.5 -9 0 -1 Z" class="fill-brand stroke-card" stroke-width="2"/><circle cy="-25" r="5" class="fill-card"/></svg></div>`;
 
@@ -39,10 +43,16 @@ type Props = {
   origin: LatLng;
   pinCenter: Point;
   radiusM: RadiusM;
+  /** 중심 핀을 그릴지. 시작 선택 패널에서 위치를 고르기 전에는 false */
+  showPin?: boolean;
+  /** 반경 원을 그릴지. 반경을 고르기 전에는 false */
+  showRadius?: boolean;
   stores: readonly MapLayerStore[];
   selectedStoreId: string | null;
   /** 지도를 누른 지점(목업 좌표) */
   onPressMap: (point: Point) => void;
+  /** 지도를 길게 누른 지점(목업 좌표) */
+  onLongPressMap?: (point: Point) => void;
   /** 반경 안 영업 매장을 누름 */
   onSelectStore: (storeId: string) => void;
   /** 스크립트 로드·인증 실패. 화면은 예시 지도로 돌아간다 */
@@ -55,9 +65,12 @@ export function NaverMapLayer({
   origin,
   pinCenter,
   radiusM,
+  showPin = true,
+  showRadius = true,
   stores,
   selectedStoreId,
   onPressMap,
+  onLongPressMap,
   onSelectStore,
   onLoadError,
 }: Props) {
@@ -68,14 +81,29 @@ export function NaverMapLayer({
     origin,
     pinCenter,
     radiusM,
+    showPin,
+    showRadius,
     stores,
     selectedStoreId,
     onPressMap,
+    onLongPressMap,
     onSelectStore,
     onLoadError,
   });
   useLayoutEffect(() => {
-    latest.current = { origin, pinCenter, radiusM, stores, selectedStoreId, onPressMap, onSelectStore, onLoadError };
+    latest.current = {
+      origin,
+      pinCenter,
+      radiusM,
+      showPin,
+      showRadius,
+      stores,
+      selectedStoreId,
+      onPressMap,
+      onLongPressMap,
+      onSelectStore,
+      onLoadError,
+    };
   });
 
   const broken = useRef(false);
@@ -165,9 +193,40 @@ export function NaverMapLayer({
             zIndex: 100,
             clickable: false,
           });
+          if (!latest.current.showRadius) circle.setMap(null);
+          if (!latest.current.showPin) pin.setMap(null);
           naver.current = { maps, map, circle, pin };
+          // 길게 누르기: 누른 채로 LONG_PRESS_MS 가 지나면 그 지점을 고른다. 지도를 끌면 취소한다
+          let pressTimer: number | null = null;
+          let suppressClick = false;
+          const cancelPress = () => {
+            if (pressTimer !== null) window.clearTimeout(pressTimer);
+            pressTimer = null;
+          };
+          const startPress = (event: { coord?: NLatLng }) => {
+            cancelPress();
+            const coord = event.coord;
+            if (!coord || !latest.current.onLongPressMap) return;
+            pressTimer = window.setTimeout(() => {
+              pressTimer = null;
+              if (disposed) return;
+              suppressClick = true;
+              const point = { lat: coord.lat(), lng: coord.lng() };
+              latest.current.onLongPressMap?.(latLngToMapPoint(point, latest.current.origin));
+            }, LONG_PRESS_MS);
+          };
+          for (const name of ["mousedown", "touchstart"]) {
+            listeners.push(maps.Event.addListener(map, name, startPress));
+          }
+          for (const name of ["mouseup", "touchend", "dragstart", "zoom_changed"]) {
+            listeners.push(maps.Event.addListener(map, name, cancelPress));
+          }
           listeners.push(
             maps.Event.addListener(map, "click", (event) => {
+              if (suppressClick) {
+                suppressClick = false;
+                return;
+              }
               if (event.coord) {
                 const point = { lat: event.coord.lat(), lng: event.coord.lng() };
                 latest.current.onPressMap(latLngToMapPoint(point, latest.current.origin));
@@ -221,6 +280,16 @@ export function NaverMapLayer({
   }, [origin, pinCenter, radiusM, guard]);
 
   useEffect(() => drawStores(), [stores, selectedStoreId, origin, drawStores]);
+
+  // 시작 선택 패널에서 고른 단계에 맞춰 핀과 반경 원을 보이거나 숨긴다
+  useEffect(() => {
+    guard(() => {
+      const ctx = naver.current;
+      if (!ctx) return;
+      ctx.pin.setMap(showPin ? ctx.map : null);
+      ctx.circle.setMap(showRadius ? ctx.map : null);
+    });
+  }, [showPin, showRadius, guard]);
 
   // 네이버지도가 지도 요소의 position 을 relative 로 바꾸므로 위치는 바깥 요소가 잡는다
   return (

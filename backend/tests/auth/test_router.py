@@ -1,8 +1,9 @@
-"""로그인 API 명세(A01, A26, A27, A29)와 빈 라우트의 동작."""
+"""로그인 API 명세(A01, A26, A27, A29)와 빈 라우트(A01, A29)의 동작."""
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.deps import get_db
 from app.main import app
 
 TOKEN_BODY = {"code": "one-time-code", "code_verifier": "example-verifier"}
@@ -62,40 +63,23 @@ def test_browser_routes_list_parameters(path, expected):
     assert parameters["provider"]["schema"]["enum"] == ["google", "kakao"]
 
 
-@pytest.mark.parametrize(
-    ("method", "url", "body"),
-    [
-        ("POST", "/api/v1/auth/token", TOKEN_BODY),
-        (
-            "GET",
-            "/api/v1/auth/google/start?client=web&code_challenge=x&terms_version=v1",
-            None,
-        ),
-        ("GET", "/api/v1/auth/kakao/callback?state=s&code=c", None),
-    ],
-)
-def test_public_stubs_are_not_implemented_yet(client, method, url, body):
-    response = client.request(method, url, json=body)
+def test_token_stub_is_not_implemented_yet(client):
+    response = client.post("/api/v1/auth/token", json=TOKEN_BODY)
 
     assert (response.status_code, response.json()["code"]) == NOT_IMPLEMENTED
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        # 입력 오류·미지원 공급자는 422가 아니라 302·404로 답해야 한다(구현은 SCRUM-178).
-        "/api/v1/auth/google/start?client=web",
-        "/api/v1/auth/naver/start?client=web",
-        "/api/v1/auth/google/callback",
-    ],
-)
-def test_browser_routes_leave_validation_to_implementation(client, url):
-    assert client.get(url).status_code == 503
-
-
 @pytest.mark.parametrize("query", ["", "?client=desktop"])
 def test_start_rejects_unknown_client(client, query):
-    response = client.get(f"/api/v1/auth/google/start{query}")
+    # DB 접속 주소가 없는 환경에서도 입력 검증 결과를 확인한다.
+    async def fake_db():
+        yield object()
+
+    app.dependency_overrides[get_db] = fake_db
+    try:
+        response = client.get(f"/api/v1/auth/google/start{query}")
+    finally:
+        app.dependency_overrides.clear()
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"

@@ -4,9 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ai_core.predict import load_model
+from app.access_log import AccessLogMiddleware, configure_access_log
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.contracts.router import router as contracts_router
+from app.data_status.router import router as data_status_router
 from app.db import create_engine, create_session_factory
 from app.diagnoses.router import router as diagnoses_router
 from app.errors import register_error_handlers
@@ -16,6 +18,8 @@ from app.system.router import router as system_router
 from app.users.router import router as users_router
 
 API_PREFIX = "/api/v1"
+
+configure_access_log()
 
 
 @asynccontextmanager
@@ -40,6 +44,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 마지막에 더한 미들웨어가 가장 바깥이라 CORS 사전 요청까지 기록한다.
+app.add_middleware(AccessLogMiddleware)
 register_error_handlers(app)
 
 # 도메인 라우터는 여기서만 등록한다.
@@ -50,3 +56,4 @@ app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(explore_router, prefix=API_PREFIX)
 app.include_router(diagnoses_router, prefix=API_PREFIX)
 app.include_router(contracts_router, prefix=API_PREFIX)
+app.include_router(data_status_router, prefix=API_PREFIX)

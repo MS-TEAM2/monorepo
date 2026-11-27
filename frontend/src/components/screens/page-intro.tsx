@@ -12,7 +12,8 @@ export function PageIntro({
   mood = "default",
   aside,
 }: {
-  eyebrow: string;
+  /** 제목 위 작은 글. 없으면 제목만 보여 준다 */
+  eyebrow?: string;
   title: string;
   description?: ReactNode;
   mood?: MascotMood;
@@ -22,7 +23,7 @@ export function PageIntro({
     <div className="flex items-center gap-3">
       <Mascot mood={mood} className="size-12 shrink-0" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-ink-500">{eyebrow}</p>
+        {eyebrow && <p className="text-sm text-ink-500">{eyebrow}</p>}
         <h1 className="text-xl leading-snug font-extrabold text-foreground">{title}</h1>
         {description && <p className="mt-0.5 text-sm text-ink-500">{description}</p>}
       </div>
