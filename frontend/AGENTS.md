@@ -17,7 +17,7 @@ Next.js 16 App Router + TypeScript strict + Tailwind v4 + shadcn/ui. TokClass �
 
 ## 프론트엔드 협업
 
-- 환승결제 티켓의 구현과 검증에는 [frontend-task 스킬](../.agents/skills/frontend-task/SKILL.md)을 사용한다. Codex는 `$frontend-task`, Claude Code는 `/frontend-task`로 부른다.
+- 전지적창업시점 티켓의 구현과 검증에는 [frontend-task 스킬](../.agents/skills/frontend-task/SKILL.md)을 사용한다. Codex는 `$frontend-task`, Claude Code는 `/frontend-task`로 부른다.
 - 화면 전환을 추가하거나 바꿀 때는 앞뒤 화면이 주고받는 값과 복귀 동작을 확인한다. 공통 라우팅, API 클라이언트, 브리지, 공통 UI를 바꿀 때는 영향받는 화면의 담당자에게 변경 범위를 먼저 공유한다.
 - PR의 `확인 방법`에는 변경한 동작의 확인 결과와 실행한 검사를 적는다. 샘플 응답으로 확인한 범위와 실제 API나 실기기에서 확인이 남은 항목도 적는다.
 

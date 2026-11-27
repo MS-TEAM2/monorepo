@@ -103,17 +103,11 @@ SUB_ID=$(az account show --query id -o tsv)
 az role assignment create --assignee $APP_ID --role Contributor \
   --scope /subscriptions/$SUB_ID/resourceGroups/$RG
 
-# main 배포용 + PR 미리보기용 자격 증명 2개
+# main 배포용 자격 증명. PR 미리보기는 쓰지 않으므로 PR용 자격 증명은 만들지 않는다.
 az ad app federated-credential create --id $APP_ID --parameters '{
   "name": "github-main",
   "issuer": "https://token.actions.githubusercontent.com",
   "subject": "repo:'$GH_REPO':ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
-az ad app federated-credential create --id $APP_ID --parameters '{
-  "name": "github-pr",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:'$GH_REPO':pull_request",
   "audiences": ["api://AzureADTokenExchange"]
 }'
 

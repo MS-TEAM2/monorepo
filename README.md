@@ -25,6 +25,7 @@ PR을 올리기 전에 `pnpm check`가 통과하는지 확인한다.
 AGENTS.md            팀 규칙 원본 (Claude Code · Codex 공용)
 .agents/skills/      팀 스킬: spec ticket start pr standup retro
 specs/               기능별 스펙 → 계획 → 태스크
+docs/notion.md       기준 문서(Notion) 주소와 연결 방법
 docs/api/            OpenAPI 명세 (FE·BE·AI 계약)
 frontend/            Next.js (정적 내보내기) — 웹·앱 공용 화면
 mobile/              Expo 웹뷰 앱 — 웹을 띄우는 껍데기 + 네이티브 기능
@@ -42,4 +43,4 @@ infra/               Azure 리소스 생성 절차
 
 규칙은 [AGENTS.md](./AGENTS.md)를 본다.
 
-Notion MCP로 기획 문서를 읽어 작업 내용을 확인했습니다.
+API·테이블 작업 전에는 [Notion 기준 문서](./docs/notion.md)를 읽는다.
