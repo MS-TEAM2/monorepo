@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ai_core.ingest.categories import NOT_TARGET_UPTAE
+from ai_core.ingest.categories import EXCLUDED, UNMAPPED
 from ai_core.ingest.licenses import FetchError, clean, fetch_api, iter_sources, read_csv_file
 
 
@@ -68,15 +68,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def _report(result) -> dict:
     s = result.stores
-    target = ~s["source_type"].isin(NOT_TARGET_UPTAE)
     return {
         "rows_read": result.rows_read,
         "rows": len(s),
         "excluded": result.excluded,
         "base_date": result.base_date,
         "status_counts": s["status"].value_counts().to_dict(),
-        "not_target_type": int((~target).sum()),
-        "unmapped_target": int((target & s["category_id"].isna()).sum()),
+        "not_target": int((s["mapping_status"] == EXCLUDED).sum()),
+        "unmapped_target": int((s["mapping_status"] == UNMAPPED).sum()),
         "missing_coordinates": int((s["x"].isna() | s["y"].isna()).sum()),
         "date_inverted": int(
             (pd.to_datetime(s["closed_on"]) < pd.to_datetime(s["licensed_on"])).sum()
