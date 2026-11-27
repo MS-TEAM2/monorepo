@@ -13,7 +13,10 @@ const RADII = [150, 300, 500, 1000] as const;
 
 export type StartupSelection = {
   dongCode: string;
+  /** 상권 요약·진단에 쓰는 업종 1개 */
   categoryId: string;
+  /** 지도에서 거르는 업종들 (외식 9종 복수 선택). 빈 배열이면 9종 전체. 예전 저장값에는 없다 */
+  categoryIds?: string[];
   radiusM: (typeof RADII)[number];
   pin: { x: number; y: number };
 };
@@ -42,14 +45,18 @@ export function parseSelection(raw: string | null): StartupSelection | null {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { dongCode, categoryId, radiusM, pin } = value as Record<string, unknown>;
+  const { dongCode, categoryId, categoryIds, radiusM, pin } = value as Record<string, unknown>;
   if (typeof dongCode !== "string" || typeof categoryId !== "string") return null;
   const radius = RADII.find((r) => r === radiusM);
   if (radius === undefined) return null;
   if (typeof pin !== "object" || pin === null) return null;
   const { x, y } = pin as Record<string, unknown>;
   if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
-  return { dongCode, categoryId, radiusM: radius, pin: { x, y } };
+  const selection: StartupSelection = { dongCode, categoryId, radiusM: radius, pin: { x, y } };
+  if (Array.isArray(categoryIds) && categoryIds.every((id) => typeof id === "string")) {
+    selection.categoryIds = categoryIds;
+  }
+  return selection;
 }
 
 export function saveSelection(selection: StartupSelection, { storage = defaultStorage() }: StorageOption = {}): void {

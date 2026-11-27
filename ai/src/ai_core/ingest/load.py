@@ -69,6 +69,7 @@ ingest_runs = Table(
     Column("dataset", Text),
     Column("status", Text),
     Column("base_date", Date),
+    Column("base_quarter", Text),  # 분기 데이터(SCRUM-109)만 쓴다
     Column("row_count", Integer),
     Column("excluded_count", Integer),
     Column("error_code", Text),

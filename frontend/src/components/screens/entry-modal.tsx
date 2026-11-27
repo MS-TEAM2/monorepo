@@ -1,248 +1,502 @@
 "use client";
 
-import {
-  BookOpen,
-  Calculator,
-  ChevronRight,
-  Compass,
-  FileText,
-  MapPin,
-  Sparkles,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import type { ScreenName } from "@/components/screens/use-go-screen";
-import { CATEGORIES, NEIGHBORHOODS, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
-import type { Category, Neighborhood, RadiusM } from "@/lib/mock/startup/types";
+import { ChevronDown, ChevronUp, Crosshair, LocateFixed, MapPin, Search } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { SampleDataBadge } from "@/components/feedback/sample-data";
+import { Mascot } from "@/components/mascot";
+import { Input } from "@/components/ui/input";
+import { getAreaSearcher } from "@/lib/area-search";
+import { canAnalyzeDraft, isCompleteDraft, type EntryDraft } from "@/lib/entry-draft";
+import { CATEGORIES, INITIAL_PIN, NEIGHBORHOODS, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
+import type { Category, Neighborhood, Point, RadiusM } from "@/lib/mock/startup/types";
+import { locateInSample } from "@/lib/sample-location";
+import { cn } from "@/lib/utils";
+
 type EntryModalProps = {
-  open: boolean;
-  onClose: () => void;
-  neighborhood: Neighborhood;
-  onSelectNeighborhood: (neighborhood: Neighborhood) => void;
-  category: Category;
-  onSelectCategory: (category: Category) => void;
-  radiusM: RadiusM;
-  onSelectRadius: (radius: RadiusM) => void;
-  onNavigate: (screen: ScreenName) => void;
-  hasReport: boolean;
-  hasContractApplied: boolean;
-};
-type Feature = {
-  id: ScreenName;
-  badge: string;
-  title: string;
-  desc: string;
-  icon: LucideIcon;
-  accent: string;
-  highlight?: boolean;
-  actionLabel: string;
+  /** 고르는 중인 조건 (적용 전이면 지도에 미리보기로만 쓴다) */
+  draft: EntryDraft;
+  onChange: (patch: Partial<EntryDraft>) => void;
+  /** 조건을 지도에 반영하고 매장을 보여 준다 */
+  onApply: () => void;
+  /** 조건을 반영하고 상권 요약 결과까지 보여 준다 */
+  onAnalyze: () => void;
+  /** 지도에서 관심 상권 위치를 고르는 중인지 */
+  picking: boolean;
+  onPickingChange: (picking: boolean) => void;
+  /** 지도에서 위치를 고를 때마다 바뀌는 값. 바뀌면 다음 단계(업종)를 펼친다 */
+  mapPickCount: number;
 };
 
-/** 첫 화면의 시작 선택 창 (S01 역할). 관심 상권·업종·반경을 고르고 기능으로 이동한다 */
-export function EntryModal({
-  open,
-  onClose,
-  neighborhood,
-  onSelectNeighborhood,
-  category,
-  onSelectCategory,
-  radiusM,
-  onSelectRadius,
-  onNavigate,
-  hasReport,
-  hasContractApplied,
-}: EntryModalProps) {
-  if (!open) return null;
-  const features: Feature[] = [
-    {
-      id: "map",
-      badge: "S02 · S03",
-      title: "전체 지도에서 상권 탐색",
-      desc: "선택한 동네·반경의 영업/폐업 매장과 행정동 유동·추정매출 확인",
-      icon: Compass,
-      accent: "from-background to-primary-soft border-brand-300 text-primary",
-      actionLabel: "지도 바로 보기",
-    },
-    {
-      id: "diagnose",
-      badge: "S04 · S05",
-      title: "생존확률 · 월세 손익 진단",
-      desc: "1·2·3년 생존추정과 실시간 월세 슬라이더·중도종료 손실 계산",
-      icon: Calculator,
-      accent: "from-background to-white border-line-warm text-brand",
-      actionLabel: hasReport ? "진단 결과 이어보기" : "이 자리 진단하기",
-    },
-    {
-      id: "contract",
-      badge: "S06~S08 · 핵심",
-      title: "임대차 계약서 검토 · 손익 반영",
-      desc: "계약서 OCR 추출, 숨은 인상률·위약금·특약 점검 및 손익 전후 비교",
-      icon: FileText,
-      accent: "from-brand to-primary border-brand text-white",
-      highlight: true,
-      actionLabel: hasContractApplied ? "반영 결과 보기" : "계약서 검토하기",
-    },
-    {
-      id: "guide",
-      badge: "S12 · 가이드",
-      title: "외식업 창업 체크리스트",
-      desc: "업종·영업조건별 인허가·위생교육·소방·세무 필수 절차 안내",
-      icon: BookOpen,
-      accent: "from-muted to-white border-input text-ink-600",
-      actionLabel: "체크리스트 열기",
-    },
-  ];
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-foreground/55 backdrop-blur-[3px] p-0 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="영역 및 기능 선택 모달"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-secondary rounded-t-[28px] sm:rounded-[28px] border border-border shadow-lifted"
-        onClick={(e) => e.stopPropagation()}
+type StepId = "neighborhood" | "category" | "radius";
+
+const STEPS: { id: StepId; label: string }[] = [
+  { id: "neighborhood", label: "관심 상권" },
+  { id: "category", label: "업종 선택" },
+  { id: "radius", label: "분석 반경" },
+];
+
+const NEXT_STEP: Record<StepId, StepId | null> = {
+  neighborhood: "category",
+  category: "radius",
+  radius: null,
+};
+
+/** SCRUM-191 시안의 선택 칩 (지원정책 분야 칩과 같은 모양) */
+const CHIP = "min-h-11 rounded-full border px-4 text-sm font-bold transition-colors";
+const CHIP_ON = "border-primary bg-primary text-primary-foreground";
+const CHIP_OFF = "border-input bg-card text-ink-600 hover:border-brand-light";
+
+/** SCRUM-191 시안의 단계 전환 움직임 (진단 입력과 같은 모양) */
+const STEP_MOTION =
+  "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300";
+
+function categoriesLabel(categories: readonly Category[]): string {
+  if (categories.length === 0) return "전체 9종";
+  const [first] = categories;
+  return categories.length === 1 ? (first?.label ?? "") : `${first?.label ?? ""} 외 ${categories.length - 1}`;
+}
+
+/** 업종 칩을 누르면 넣거나 뺀다. 9종을 모두 고르면 전체와 같으므로 비운다 */
+function toggleCategory(categories: readonly Category[], target: Category): Category[] {
+  const next = categories.some((c) => c.id === target.id)
+    ? categories.filter((c) => c.id !== target.id)
+    : [...categories, target];
+  return next.length === CATEGORIES.length ? [] : next;
+}
+
+function radiusLabel(radiusM: RadiusM) {
+  return radiusM >= 1000 ? "1km" : `${radiusM}m`;
+}
+
+const SEARCH_DELAY_MS = 250;
+
+type SearchState =
+  { kind: "idle" } | { kind: "searching" } | { kind: "results"; items: Neighborhood[] } | { kind: "error" };
+
+/**
+ * 관심 상권 단계. 동 이름을 직접 입력해 찾고, 입력 전에는 예시 상권을 바로 고를 수 있게 보여 준다.
+ * 검색은 getAreaSearcher()를 거친다 (지금은 예시, 나중에 카카오 검색 API).
+ */
+function AreaSearchStep({
+  selected,
+  onSelect,
+  onLocate,
+  picking,
+  onPickingChange,
+}: {
+  selected: Neighborhood | null;
+  onSelect: (area: Neighborhood) => void;
+  /** 현재 위치를 예시 지도의 동·핀으로 바꿔 넘긴다 */
+  onLocate: (location: { neighborhood: Neighborhood; pin: Point }) => void;
+  picking: boolean;
+  onPickingChange: (picking: boolean) => void;
+}) {
+  const searcher = getAreaSearcher();
+  const inputId = useId();
+  const [query, setQuery] = useState("");
+  const [state, setState] = useState<SearchState>({ kind: "idle" });
+  const trimmed = query.trim();
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+
+  function locate() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocateError("이 기기에서는 현재 위치를 쓸 수 없어요. 동 이름으로 찾아 주세요.");
+      return;
+    }
+    setLocating(true);
+    setLocateError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocating(false);
+        const found = locateInSample({ lat: position.coords.latitude, lng: position.coords.longitude });
+        if (found) onLocate(found);
+        else setLocateError("지금 위치 근처는 예시 지도에 없어요. 예시 상권 6곳 중에서 골라 주세요.");
+      },
+      () => {
+        setLocating(false);
+        setLocateError("현재 위치를 가져오지 못했어요. 위치 권한을 확인하거나 동 이름으로 찾아 주세요.");
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
+    );
+  }
+
+  useEffect(() => {
+    if (trimmed.length === 0) return;
+    const controller = new AbortController();
+    // 글자를 칠 때마다 부르지 않도록 잠깐 기다린다. 외부 API로 바꿔도 호출 수가 늘지 않게 한다
+    const timer = window.setTimeout(() => {
+      setState({ kind: "searching" });
+      searcher
+        .search(trimmed, controller.signal)
+        .then((items) => {
+          if (!controller.signal.aborted) setState({ kind: "results", items });
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setState({ kind: "error" });
+        });
+    }, SEARCH_DELAY_MS);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [trimmed, searcher]);
+
+  const chip = (area: Neighborhood) => {
+    const s = area.dongCode === selected?.dongCode;
+    return (
+      <button
+        type="button"
+        aria-pressed={s}
+        onClick={() => onSelect(area)}
+        className={cn(CHIP, s ? CHIP_ON : CHIP_OFF)}
+        key={area.dongCode}
       >
-        <div className="sticky top-0 z-10 bg-gradient-to-r from-brand to-brand-light text-white px-5 py-4 sm:px-6 sm:py-5 flex items-start justify-between gap-3">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-[13px] font-bold mb-1.5">
-              <span>서울 외식 9종</span>
-              <span>·</span>
-              <span>탐색은 로그인 없이</span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
-              계약서 도장 찍기 전, 어디서 시작할까요?
-            </h2>
-            <p className="text-xs text-white/80 mt-1">
-              상권 영역을 먼저 고른 뒤, 원하는 핵심 기능으로 바로 이동할 수 있어요.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="모달 닫고 지도 보기"
-            className="p-2 rounded-full bg-white/15 hover:bg-white/25 text-white transition shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+        {area.name}
+      </button>
+    );
+  };
+
+  // 지도에서 고르는 동안에는 지도가 잘 보이도록 안내 한 줄만 남긴다
+  if (picking) {
+    return (
+      <div
+        role="status"
+        className="flex items-center justify-between gap-2 rounded-2xl border border-brand-200 bg-primary-soft py-1 pl-4 pr-1"
+      >
+        <span className="flex items-center gap-2 text-sm font-bold text-primary">
+          <Crosshair className="size-4 shrink-0" aria-hidden="true" />
+          지도에서 원하는 위치를 눌러 주세요
+        </span>
+        <button
+          type="button"
+          onClick={() => onPickingChange(false)}
+          className="min-h-11 shrink-0 rounded-xl px-3 text-sm font-bold text-ink-600 transition-colors hover:bg-card"
+        >
+          취소
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <form role="search" onSubmit={(e) => e.preventDefault()}>
+        <label htmlFor={inputId} className="sr-only">
+          관심 상권 검색
+        </label>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-400"
+            aria-hidden="true"
+          />
+          <Input
+            id={inputId}
+            type="search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (e.target.value.trim().length === 0) setState({ kind: "idle" });
+            }}
+            placeholder="동 이름으로 검색 (예: 공덕동)"
+            autoComplete="off"
+            enterKeyHint="search"
+            className="min-h-11 rounded-xl pl-9 text-base"
+          />
         </div>
-        <div className="p-5 sm:p-6 space-y-5">
-          <div className="bg-white rounded-2xl border border-border p-4 space-y-3.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-brand" />
-                1. 관심 상권 · 업종 · 반경 선택
-              </span>
-              <span className="text-[13px] font-bold text-brand">
-                {neighborhood.shortName} · {category.label} · {radiusM >= 1000 ? "1km" : `${radiusM}m`}
-              </span>
+      </form>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={locate}
+          disabled={locating}
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-2xl border border-brand-200 bg-primary-soft px-3 text-sm font-bold text-primary transition-colors hover:bg-brand-100 disabled:cursor-wait disabled:opacity-60"
+        >
+          <LocateFixed className="size-4" aria-hidden="true" />
+          {locating ? "찾는 중…" : "현재 위치"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onPickingChange(true)}
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-2xl border border-brand-200 bg-primary-soft px-3 text-sm font-bold text-primary transition-colors hover:bg-brand-100"
+        >
+          <Crosshair className="size-4" aria-hidden="true" />
+          지도에서 선택
+        </button>
+      </div>
+      {locateError && (
+        <p role="alert" className="text-sm text-destructive">
+          {locateError}
+        </p>
+      )}
+      <p className="text-xs text-ink-400">지도를 길게 눌러도 그 자리를 관심 상권으로 골라요.</p>
+
+      <div aria-live="polite">
+        {trimmed.length === 0 || state.kind === "idle" ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-ink-500">추천 상권</span>
+              {searcher.isSample && <SampleDataBadge />}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {NEIGHBORHOODS.map((e) => {
-                const s = e.dongCode === neighborhood.dongCode;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => onSelectNeighborhood(e)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${s ? "bg-foreground text-white border-foreground" : "bg-secondary text-ink-600 border-input hover:border-brand-light"}`}
-                    key={e.dongCode}
+            <div className="flex flex-wrap gap-2">{NEIGHBORHOODS.map(chip)}</div>
+          </div>
+        ) : state.kind === "searching" ? (
+          <p className="text-sm text-ink-500">상권을 찾는 중이에요…</p>
+        ) : state.kind === "error" ? (
+          <p role="alert" className="text-sm text-destructive">
+            검색하지 못했어요. 잠시 뒤 다시 입력해 주세요.
+          </p>
+        ) : state.items.length === 0 ? (
+          <p className="text-sm text-ink-500">
+            찾는 상권이 없어요.{searcher.isSample && " 지금은 예시 상권 6곳만 검색돼요."}
+          </p>
+        ) : (
+          <ul
+            aria-label="상권 검색 결과"
+            className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card"
+          >
+            {state.items.map((area) => (
+              <li key={area.dongCode}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(area)}
+                  aria-current={area.dongCode === selected?.dongCode || undefined}
+                  className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm font-bold text-foreground transition-colors hover:bg-primary-soft"
+                >
+                  <MapPin className="size-4 shrink-0 text-brand" aria-hidden="true" />
+                  {area.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 상권 지도의 시작 선택 패널 (S01 역할). 지도를 가리지 않고 왼쪽 위에 늘 떠서 상권·업종·반경을 고르게 한다.
+ * 고르는 동안 지도는 위치와 반경만 미리 보여 준다. `적용`은 매장을, `분석하기`는 상권 요약 결과까지 보여 준다.
+ * 둘 중 하나를 누르면 접히고 제목 자리에 고른 조건을 보여 준다. 지도 위에 조건을 바꿀 다른 입구가 없어 닫지 않는다.
+ */
+export function EntryModal({
+  draft,
+  onChange,
+  onApply,
+  onAnalyze,
+  picking,
+  onPickingChange,
+  mapPickCount,
+}: EntryModalProps) {
+  const [step, setStep] = useState<StepId | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const complete = isCompleteDraft(draft);
+  const analyzable = canAnalyzeDraft(draft);
+
+  // 지도에서 위치를 고르면 업종 단계로 넘어간다
+  const [seenPickCount, setSeenPickCount] = useState(mapPickCount);
+  if (seenPickCount !== mapPickCount) {
+    setSeenPickCount(mapPickCount);
+    setStep(NEXT_STEP.neighborhood);
+  }
+
+  // 조건을 다 고른 뒤에만 Esc 로 접는다. 지도에서 고르는 중이면 고르기를 취소한다
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (picking) onPickingChange(false);
+      else if (complete) setCollapsed(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [complete, picking, onPickingChange]);
+
+  const values: Record<StepId, string | null> = {
+    neighborhood: draft.neighborhood?.shortName ?? null,
+    category: categoriesLabel(draft.categories),
+    radius: radiusLabel(draft.radiusM),
+  };
+
+  function pick(patch: Partial<EntryDraft>, current: StepId) {
+    onChange(patch);
+    setStep(NEXT_STEP[current]);
+  }
+
+  function finish(action: () => void) {
+    onPickingChange(false);
+    setStep(null);
+    setCollapsed(true);
+    action();
+  }
+
+  return (
+    <section
+      aria-label="상권 · 업종 · 반경 선택"
+      className="absolute top-3 right-3 left-3 z-30 flex max-h-[calc(100%-24px)] flex-col overflow-hidden rounded-[22px] border border-line-warm bg-white/95 shadow-lifted backdrop-blur-md md:right-auto md:w-[340px]"
+    >
+      <h2>
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "조건 선택 펼치기" : "조건 선택 접기"}
+          className={cn(
+            "flex w-full min-h-11 items-center justify-between gap-2 px-4 text-left",
+            collapsed ? "py-3" : "pt-4 pb-3",
+          )}
+        >
+          {collapsed && complete ? (
+            <span className="flex min-w-0 items-center gap-2">
+              <MapPin className="size-4 shrink-0 text-brand" aria-hidden="true" />
+              <span className="truncate text-base font-extrabold text-foreground">
+                {values.neighborhood} · {values.category} · {values.radius}
+              </span>
+            </span>
+          ) : (
+            <span className="flex min-w-0 items-center gap-2.5">
+              <Mascot mood="thinking" className="size-9" />
+              <span className="min-w-0">
+                <span className="block text-xs text-ink-500">상권 · 업종 · 반경</span>
+                <span className="block text-base leading-snug font-extrabold text-foreground">어디서 시작할까요?</span>
+              </span>
+            </span>
+          )}
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-ink-500">
+            {collapsed && complete && <span className="text-primary">조건 변경</span>}
+            {collapsed ? (
+              <ChevronDown className="size-5" aria-hidden="true" />
+            ) : (
+              <ChevronUp className="size-5" aria-hidden="true" />
+            )}
+          </span>
+        </button>
+      </h2>
+
+      {!collapsed && (
+        <div className="flex flex-col min-h-0">
+          <div className="grid grid-cols-3 gap-2 px-4">
+            {STEPS.map((e, i) => {
+              const active = step === e.id;
+              return (
+                <button
+                  type="button"
+                  aria-expanded={active}
+                  aria-controls={`entry-options-${e.id}`}
+                  onClick={() => {
+                    if (picking) onPickingChange(false);
+                    setStep(active ? null : e.id);
+                  }}
+                  className={cn(
+                    "min-h-14 rounded-2xl border px-1.5 py-2 text-center transition-colors",
+                    active ? "border-brand-light bg-primary-soft" : "border-border bg-card hover:border-brand-300",
+                  )}
+                  key={e.id}
+                >
+                  <span className={cn("block text-sm font-extrabold", active ? "text-primary" : "text-foreground")}>
+                    <span className="tabular-nums">{i + 1}.</span> {e.label}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-0.5 block truncate text-xs",
+                      values[e.id] ? "font-bold text-ink-600" : "text-ink-400",
+                    )}
                   >
-                    {e.name}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((e) => {
-                const s = e.id === category.id;
-                return (
+                    {values[e.id] ?? "선택해 주세요"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="min-h-0 overflow-y-auto px-4 pt-3">
+            {step === "neighborhood" && (
+              <div id="entry-options-neighborhood" className={STEP_MOTION}>
+                <AreaSearchStep
+                  selected={draft.neighborhood}
+                  onSelect={(area) => pick({ neighborhood: area, pin: INITIAL_PIN }, "neighborhood")}
+                  onLocate={(location) => pick(location, "neighborhood")}
+                  picking={picking}
+                  onPickingChange={onPickingChange}
+                />
+              </div>
+            )}
+            {step === "category" && (
+              <div id="entry-options-category" className={cn("space-y-2", STEP_MOTION)}>
+                <p className="text-xs text-ink-500">여러 개 고를 수 있어요. 고르지 않으면 외식 9종 전체를 봐요.</p>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => onSelectCategory(e)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold border transition ${s ? "bg-brand-light text-white border-brand-light" : "bg-white text-ink-600 border-input hover:bg-background"}`}
-                    key={e.id}
+                    aria-pressed={draft.categories.length === 0}
+                    onClick={() => onChange({ categories: [] })}
+                    className={cn(CHIP, draft.categories.length === 0 ? CHIP_ON : CHIP_OFF)}
+                  >
+                    전체
+                  </button>
+                  {CATEGORIES.map((e) => {
+                    const s = draft.categories.some((c) => c.id === e.id);
+                    return (
+                      <button
+                        type="button"
+                        aria-pressed={s}
+                        onClick={() => onChange({ categories: toggleCategory(draft.categories, e) })}
+                        className={cn(CHIP, s ? CHIP_ON : CHIP_OFF)}
+                        key={e.id}
+                      >
+                        {e.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {step === "radius" && (
+              <div id="entry-options-radius" className={cn("grid grid-cols-4 gap-2", STEP_MOTION)}>
+                {RADIUS_OPTIONS.map((e) => (
+                  <button
+                    type="button"
+                    aria-pressed={draft.radiusM === e.value}
+                    onClick={() => pick({ radiusM: e.value }, "radius")}
+                    className={cn(CHIP, "px-0 tabular-nums", draft.radiusM === e.value ? CHIP_ON : CHIP_OFF)}
+                    key={e.value}
                   >
                     {e.label}
                   </button>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl bg-background border border-brand-200">
-              {RADIUS_OPTIONS.map((e) => (
-                <button
-                  type="button"
-                  onClick={() => onSelectRadius(e.value)}
-                  className={`py-1.5 rounded-lg text-xs font-extrabold tabular-nums transition ${radiusM === e.value ? "bg-brand text-white shadow-sm" : "text-ink-600 hover:bg-primary-soft"}`}
-                  key={e.value}
-                >
-                  {e.label}
-                </button>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
+            {step === null && <p className="text-sm text-ink-500">항목을 누르면 고를 수 있는 옵션이 나와요.</p>}
           </div>
-          <div>
-            <div className="text-xs font-extrabold text-foreground mb-2.5 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-brand" />
-              2. 바로 이동할 기능 선택
+
+          <div className="p-4 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => finish(onApply)}
+                disabled={!complete}
+                className="flex min-h-12 items-center justify-center rounded-2xl border border-input bg-card font-bold text-ink-600 transition-colors hover:border-brand-light hover:text-primary disabled:cursor-not-allowed disabled:text-ink-400 disabled:hover:border-input"
+              >
+                적용
+              </button>
+              <button
+                type="button"
+                onClick={() => finish(onAnalyze)}
+                disabled={!analyzable}
+                className="flex min-h-12 items-center justify-center rounded-2xl bg-primary font-extrabold text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-line-strong disabled:text-ink-400"
+              >
+                분석하기
+              </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {features.map((e) => {
-                const Icon = e.icon;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onNavigate(e.id);
-                      onClose();
-                    }}
-                    className={`text-left p-4 rounded-2xl border bg-gradient-to-br transition-all hover:scale-[1.01] active:scale-[0.99] shadow-sm flex flex-col justify-between gap-3 ${e.accent}`}
-                    key={e.id}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[12px] font-extrabold ${e.highlight ? "bg-white/20 text-white" : "bg-primary-soft text-primary"}`}
-                        >
-                          {e.badge}
-                        </span>
-                        <Icon className={`w-5 h-5 ${e.highlight ? "text-white" : "text-brand"}`} />
-                      </div>
-                      <h3 className={`mt-2 text-sm font-extrabold ${e.highlight ? "text-white" : "text-foreground"}`}>
-                        {e.title}
-                      </h3>
-                      <p
-                        className={`mt-1 text-[14px] leading-relaxed ${e.highlight ? "text-white/80" : "text-ink-500"}`}
-                      >
-                        {e.desc}
-                      </p>
-                    </div>
-                    <div
-                      className={`inline-flex items-center gap-1 text-xs font-extrabold ${e.highlight ? "text-white" : "text-brand"}`}
-                    >
-                      {e.actionLabel}
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex items-center justify-between pt-1 text-[13px] text-ink-400">
-            <span>배경 지도는 언제든 클릭해 중심 핀을 옮길 수 있습니다.</span>
-            <button
-              type="button"
-              onClick={() => {
-                onNavigate("about");
-                onClose();
-              }}
-              className="font-bold text-ink-600 hover:text-brand underline"
-            >
-              데이터·한계 보기
-            </button>
+            {!complete ? (
+              <p className="text-center text-xs text-ink-400">관심 상권을 골라 주세요</p>
+            ) : (
+              !analyzable && (
+                <p className="text-center text-xs text-ink-400">상권 요약은 업종을 1개 골라야 볼 수 있어요</p>
+              )
+            )}
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </section>
   );
 }
