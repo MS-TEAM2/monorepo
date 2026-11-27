@@ -2,7 +2,15 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    field_validator,
+)
 from pydantic.functional_validators import SkipValidation
 
 # canceling 계약은 404라 응답에 없다.
@@ -172,3 +180,42 @@ class ContractTermsUpdateRequest(BaseModel):
         if len({term.term_key for term in terms}) != len(terms):
             raise ValueError("같은 조건 키를 두 번 보낼 수 없습니다")
         return terms
+
+
+# 상한 100억 원은 JS 안전 정수 범위를 지키기 위한 값이다(A09와 같다).
+MAX_AMOUNT = 10_000_000_000
+
+
+class ContractApplyExit(BaseModel):
+    """A18 종료 조건. 규칙은 A13 `exit`와 같고, 직접 입력한 값이 확인한 계약값보다 우선한다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    month: int = Field(ge=1, le=120, description="종료 시점(개업 후 개월)", examples=[12])
+    obligation_months: int = Field(
+        ge=0, le=120, description="종료 후 남은 의무 개월 수", examples=[6]
+    )
+    restoration_cost: int | None = Field(
+        default=None,
+        ge=0,
+        le=MAX_AMOUNT,
+        description="없으면 확인한 계약값, 그것도 없으면 0과 가정 표시",
+        examples=[5_000_000],
+    )
+    penalty_amount: int | None = Field(
+        default=None,
+        ge=0,
+        le=MAX_AMOUNT,
+        description="없으면 확인한 계약값, 그것도 없으면 0과 가정 표시",
+    )
+    penalty_covers_remaining_rent: bool | None = Field(
+        default=None,
+        description="true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. "
+        "모르면 큰 값과 확인 필요 가정을 표시",
+    )
+
+
+class ContractApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exit: ContractApplyExit

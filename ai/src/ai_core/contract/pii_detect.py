@@ -142,10 +142,12 @@ class AzurePiiDetector:
                 params={"api-version": API_VERSION},
                 json=body,
             )
+            # send_request 는 stream=False(기본)로 본문까지 읽어 둔다. 다시 read() 하면
+            # 본문이 빈 응답(예: 게이트웨이 오류)에서 StreamConsumedError 가 나 상태 코드를
+            # 잃는다 (실측, SCRUM-136)
             try:
                 async with asyncio.timeout(TIMEOUT_SECONDS):
                     response = await self._client.send_request(request)
-                    await response.read()
             except (AzureError, TimeoutError, OSError) as error:
                 logger.warning("PII 탐지 호출 오류 error=%s", type(error).__name__)
                 status = None

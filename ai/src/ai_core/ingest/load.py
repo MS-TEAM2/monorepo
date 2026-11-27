@@ -3,7 +3,8 @@
 - 기본 키(source, management_no)로 덮어쓴다. 다시 실행해도 행이 늘지 않는다.
 - 업종 기준표·매핑표·매장·성공 기록을 한 트랜잭션으로 반영한다. 중간에 실패하면 모두 되돌려
   직전 성공본이 그대로 남고, 실패 기록은 별도 트랜잭션으로 남긴다.
-- `location`, `dong_code`는 좌표 단계(SCRUM-101)가 채운다. 여기서는 덮어쓰지 않는다.
+- `location`, `dong_code`는 좌표 단계(`coords.locate`, SCRUM-101) 결과로 매번 덮어쓴다.
+- `regions`는 경계 단계(`boundaries`, SCRUM-101)가 채운다. 없어진 동은 지우지 않고 비활성으로 둔다.
 - 원천에서 사라진 관리번호는 지우지 않고 건수만 보고한다.
   처리 방법은 테이블 정의서 12장에서 확인이 필요하다.
 """
@@ -14,7 +15,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pandas as pd
+import shapely
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -32,11 +35,30 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, insert
+from sqlalchemy.types import UserDefinedType
 
-from ai_core.ingest.categories import CATEGORIES, UPTAE_TO_CATEGORY, mapping_status
+from ai_core.ingest.categories import CATEGORIES, mapping_status, uptae_category
+from ai_core.ingest.coords import Boundaries
 from ai_core.ingest.licenses import STORE_COLUMNS, CleanResult, Source
 
 BATCH_SIZE = 5000
+
+
+class _Geometry(UserDefinedType):
+    """PostGIS geometry(4326). 값은 WKT 문자열로 넘기고 DB에서 도형으로 바꾼다."""
+
+    cache_ok = True
+
+    def __init__(self, shape: str):
+        self.shape = shape
+
+    def get_col_spec(self, **kw) -> str:
+        return f"geometry({self.shape},4326)"
+
+    def bind_expression(self, bindvalue):
+        geom = func.ST_GeomFromText(bindvalue, 4326)
+        return func.ST_Multi(geom) if self.shape == "MultiPolygon" else geom
+
 
 # 백엔드 마이그레이션(0002)이 만든 테이블 중 여기서 쓰는 열만 적는다. 테이블을 만들지는 않는다.
 _meta = MetaData()
@@ -47,6 +69,7 @@ ingest_runs = Table(
     Column("dataset", Text),
     Column("status", Text),
     Column("base_date", Date),
+    Column("base_quarter", Text),  # 분기 데이터(SCRUM-109)만 쓴다
     Column("row_count", Integer),
     Column("excluded_count", Integer),
     Column("error_code", Text),
@@ -83,8 +106,20 @@ stores = Table(
     Column("area_sqm", Numeric(10, 2)),
     Column("road_address", Text),
     Column("lot_address", Text),
+    Column("location", _Geometry("Point")),
+    Column("dong_code", Text),
     Column("source_updated_at", DateTime(timezone=True)),
     Column("ingest_run_id", Uuid),
+)
+regions = Table(
+    "regions",
+    _meta,
+    Column("dong_code", Text, primary_key=True),
+    Column("dong_name", Text),
+    Column("gu_name", Text),
+    Column("boundary", _Geometry("MultiPolygon")),
+    Column("boundary_version", Date),
+    Column("is_active", Boolean),
 )
 
 
@@ -169,7 +204,7 @@ def _upsert_category_mappings(conn, source: Source, source_types: pd.Series) -> 
             {
                 "source": source.name,
                 "source_type": t,
-                "category_id": UPTAE_TO_CATEGORY.get(t),
+                "category_id": uptae_category(t),
                 "mapping_status": mapping_status(t),
             }
         )
@@ -189,24 +224,82 @@ def _upsert_category_mappings(conn, source: Source, source_types: pd.Series) -> 
 def _upsert_stores(conn, rows: list[dict]) -> None:
     stmt = insert(stores)
     updated = [c for c in STORE_COLUMNS if c not in ("source", "management_no")]
+    updated += ["location", "dong_code", "ingest_run_id"]
     conn.execute(
         stmt.on_conflict_do_update(
             index_elements=["source", "management_no"],
-            set_={c: stmt.excluded[c] for c in [*updated, "ingest_run_id"]},
+            set_={c: stmt.excluded[c] for c in updated},
         ),
         rows,
     )
 
 
 def _store_rows(frame: pd.DataFrame, run_id: uuid.UUID) -> list[dict]:
+    if "location_status" not in frame:
+        raise ValueError("좌표 단계(coords.locate)를 거치지 않은 매장은 반영하지 않습니다")
     rows = []
-    for rec in frame[STORE_COLUMNS].to_dict("records"):
+    for rec in frame[[*STORE_COLUMNS, "lon", "lat", "dong_code"]].to_dict("records"):
+        lon, lat = rec.pop("lon"), rec.pop("lat")
         row = {k: _db_value(v) for k, v in rec.items()}
         if row["area_sqm"] is not None:
             row["area_sqm"] = Decimal(str(row["area_sqm"]))
+        row["location"] = None if pd.isna(lon) or pd.isna(lat) else f"POINT({lon!r} {lat!r})"
         row["ingest_run_id"] = run_id
         rows.append(row)
     return rows
+
+
+# ---------- 행정동 경계 ----------
+def load_regions(engine: Engine, frame: pd.DataFrame) -> list[str]:
+    """경계를 dong_code로 덮어쓴다. 이번에 없는 기존 동은 지우지 않고 비활성으로 바꾼다.
+
+    한 트랜잭션이라 중간에 실패하면 직전 경계가 그대로 남는다. 비활성으로 바꾼 동 코드를 돌려준다.
+    """
+    rows = [
+        {
+            "dong_code": r.dong_code,
+            "dong_name": r.dong_name,
+            "gu_name": r.gu_name,
+            "boundary": r.boundary.wkt,
+            "boundary_version": r.boundary_version,
+            "is_active": bool(r.is_active),
+        }
+        for r in frame.itertuples(index=False)
+    ]
+    stmt = insert(regions)
+    with engine.begin() as conn:
+        conn.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["dong_code"],
+                set_={c: stmt.excluded[c] for c in rows[0] if c != "dong_code"},
+            ),
+            rows,
+        )
+        gone = conn.execute(
+            update(regions)
+            .where(regions.c.dong_code.not_in([r["dong_code"] for r in rows]), regions.c.is_active)
+            .values(is_active=False)
+            .returning(regions.c.dong_code)
+        ).scalars()
+        return sorted(gone)
+
+
+def read_boundaries(engine: Engine) -> Boundaries | None:
+    """DB의 경계(비활성 포함)를 좌표 결합용으로 읽는다. 경계가 없으면 None."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            select(regions.c.dong_code, regions.c.is_active, func.ST_AsBinary(regions.c.boundary))
+        ).all()
+    if not result:
+        return None
+    frame = pd.DataFrame(
+        {
+            "dong_code": [r[0].strip() for r in result],
+            "is_active": [r[1] for r in result],
+            "boundary": shapely.from_wkb([bytes(r[2]) for r in result]),
+        }
+    )
+    return Boundaries.from_frame(frame)
 
 
 def _db_value(v):

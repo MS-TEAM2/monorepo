@@ -5,11 +5,14 @@ from fastapi import APIRouter
 from app.contracts import service
 from app.contracts.schemas import (
     ContractAcceptedResponse,
+    ContractApplication,
+    ContractApplyRequest,
     ContractDetailResponse,
     ContractTermsUpdateRequest,
 )
 from app.deps import BearerToken
 from app.errors import error_responses
+from app.schemas import DELETING_RESPONSE
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 
@@ -101,3 +104,41 @@ async def update_terms(
     token: BearerToken, contract_id: UUID, body: ContractTermsUpdateRequest
 ) -> ContractDetailResponse:
     return await service.update_terms()
+
+
+@router.post(
+    "/{contract_id}/apply",
+    status_code=201,
+    response_model=ContractApplication,
+    responses=error_responses(401, 404, 409, 422, 429, 503),
+    summary="계약 조건 손익 반영 (A18)",
+    description=(
+        "확인을 마친(confirmed) 계약의 조건을 연결된 진단 입력에 반영해 전후 손익과 "
+        "예상 손실을 계산한다. confirmed가 아니면 409 `contract_not_confirmed`, 실패한 계약은 "
+        "409 `contract_failed`, 진단에 연결되지 않았으면 409 `contract_not_linked`다. "
+        "확인값이 없는 조건은 진단 입력을 유지하고, 확인한 위약금은 예상 손실에, 인상률은 "
+        "2년차 월세부터 반영한다. `exit`는 직접 입력한 값이 계약값보다 우선하며, before에는 "
+        "직접 입력한 종료 값만, after에는 확인한 계약값도 적용한다. 여러 번 부르면 계산을 "
+        "새로 만들고 A16에는 가장 최근 것만 준다. 생존확률은 다시 계산하지 않는다. "
+        "다른 사용자의 계약과 취소 중인 계약은 404다."
+    ),
+)
+async def apply_contract(
+    token: BearerToken, contract_id: UUID, body: ContractApplyRequest
+) -> ContractApplication:
+    return await service.apply_contract()
+
+
+@router.delete(
+    "/{contract_id}",
+    status_code=204,
+    responses={**DELETING_RESPONSE, **error_responses(401, 404, 422, 429, 503)},
+    summary="계약 삭제 (A19)",
+    description=(
+        "처리 중이면 취소하고, 원본·OCR 보관분을 지운 뒤 조건·근거·위험 결과와 이 계약으로 만든 "
+        "계산을 삭제한다. 연결된 진단은 지우지 않는다. 바로 끝나면 204, 남으면 202이고 요청 후 "
+        "조회는 404다. 다른 사용자의 계약과 이미 삭제 중인 계약은 404다."
+    ),
+)
+async def delete_contract(token: BearerToken, contract_id: UUID) -> None:
+    await service.delete_contract()

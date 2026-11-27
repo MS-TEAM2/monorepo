@@ -230,7 +230,8 @@ class FakeResponse:
         self._body = body
 
     async def read(self):
-        return b""
+        # send_request 가 이미 본문을 읽었다. 본문이 빈 응답에서 다시 읽으면 StreamConsumedError
+        raise AssertionError("본문을 다시 읽으면 안 된다")
 
     def json(self):
         return self._body

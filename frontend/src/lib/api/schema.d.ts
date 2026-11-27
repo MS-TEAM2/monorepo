@@ -147,6 +147,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 내 데이터 모두 삭제 (A02)
+         * @description 계정과 로그인은 유지한다. 자료 조회를 즉시 막고 처리 중인 분석을 취소한 뒤 원본·OCR 보관분과 진단·계산·계약·저장한 자리를 지운다. 바로 끝나면 204, 삭제가 남으면 202 `{"status": "deleting"}`이며 정리 작업이 재시도한다. 삭제 요청을 기록하지 못했을 때만 503이다.
+         */
+        delete: operations["delete_my_data_api_v1_users_me_data_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/categories": {
         parameters: {
             query?: never;
@@ -262,7 +282,11 @@ export interface paths {
         get: operations["get_diagnosis_api_v1_diagnoses__diagnosis_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 진단 삭제 (A12)
+         * @description 즉시 조회를 막고 진단과 계산(이 진단에 연결된 계약으로 만든 계산 포함)을 지운다. 연결된 계약은 지우지 않고 연결만 푼다(`diagnosis_id` null). 계약은 A19나 계약 만료로 지운다. 바로 끝나면 204, 남으면 202이고 이후 조회는 404다. 다른 사용자의 진단이나 이미 삭제 요청했거나 만료된 진단은 404다.
+         */
+        delete: operations["delete_diagnosis_api_v1_diagnoses__diagnosis_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -322,7 +346,11 @@ export interface paths {
         get: operations["get_contract_api_v1_contracts__contract_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 계약 삭제 (A19)
+         * @description 처리 중이면 취소하고, 원본·OCR 보관분을 지운 뒤 조건·근거·위험 결과와 이 계약으로 만든 계산을 삭제한다. 연결된 진단은 지우지 않는다. 바로 끝나면 204, 남으면 202이고 요청 후 조회는 404다. 다른 사용자의 계약과 이미 삭제 중인 계약은 404다.
+         */
+        delete: operations["delete_contract_api_v1_contracts__contract_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -346,6 +374,46 @@ export interface paths {
          * @description 조건 키에 맞지 않는 값은 422 `invalid_term`이다. `start_date`는 `end_date`보다 빨라야 하고 월세는 1 이상이다. `complete`가 true면 `monthly_rent`, `start_date`, `end_date` 확인이 필수이며 빠지면 422 `terms_incomplete`다. 오류가 있으면 아무것도 저장하지 않는다. true면 confirmed, false면 needs_review가 된다. confirmed 상태에서 부르면 그 계약으로 만든 계산을 지우고 `application`은 null이 된다. 처리 중이면 409 `contract_processing`, 실패한 계약이면 409 `contract_failed`다.
          */
         patch: operations["update_terms_api_v1_contracts__contract_id__terms_patch"];
+        trace?: never;
+    };
+    "/api/v1/contracts/{contract_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 계약 조건 손익 반영 (A18)
+         * @description 확인을 마친(confirmed) 계약의 조건을 연결된 진단 입력에 반영해 전후 손익과 예상 손실을 계산한다. confirmed가 아니면 409 `contract_not_confirmed`, 실패한 계약은 409 `contract_failed`, 진단에 연결되지 않았으면 409 `contract_not_linked`다. 확인값이 없는 조건은 진단 입력을 유지하고, 확인한 위약금은 예상 손실에, 인상률은 2년차 월세부터 반영한다. `exit`는 직접 입력한 값이 계약값보다 우선하며, before에는 직접 입력한 종료 값만, after에는 확인한 계약값도 적용한다. 여러 번 부르면 계산을 새로 만들고 A16에는 가장 최근 것만 준다. 생존확률은 다시 계산하지 않는다. 다른 사용자의 계약과 취소 중인 계약은 404다.
+         */
+        post: operations["apply_contract_api_v1_contracts__contract_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 데이터 수집 상태와 기준일 (A24)
+         * @description 로그인 없이 부른다. `items`는 매장 3종과 분기 자료 3종을 수집 전에도 모두 준다. `base_date`·`base_quarter`는 마지막 성공 기준이며 성공한 적이 없으면 null이고 `stale`은 true다. `model`은 사용 중인 생존모델이 없으면 null이다.
+         */
+        get: operations["get_data_status_api_v1_data_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
 }
@@ -463,6 +531,44 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * ContractApplyExit
+         * @description A18 종료 조건. 규칙은 A13 `exit`와 같고, 직접 입력한 값이 확인한 계약값보다 우선한다.
+         */
+        ContractApplyExit: {
+            /**
+             * Month
+             * @description 종료 시점(개업 후 개월)
+             * @example 12
+             */
+            month: number;
+            /**
+             * Obligation Months
+             * @description 종료 후 남은 의무 개월 수
+             * @example 6
+             */
+            obligation_months: number;
+            /**
+             * Restoration Cost
+             * @description 없으면 확인한 계약값, 그것도 없으면 0과 가정 표시
+             * @example 5000000
+             */
+            restoration_cost?: number | null;
+            /**
+             * Penalty Amount
+             * @description 없으면 확인한 계약값, 그것도 없으면 0과 가정 표시
+             */
+            penalty_amount?: number | null;
+            /**
+             * Penalty Covers Remaining Rent
+             * @description true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을 표시
+             */
+            penalty_covers_remaining_rent?: boolean | null;
+        };
+        /** ContractApplyRequest */
+        ContractApplyRequest: {
+            exit: components["schemas"]["ContractApplyExit"];
         };
         /**
          * ContractDetailResponse
@@ -750,6 +856,88 @@ export interface components {
             /** Population Quarter */
             population_quarter: string | null;
         };
+        /** DataStatusItem */
+        DataStatusItem: {
+            /**
+             * Dataset
+             * @enum {string}
+             */
+            dataset: "stores_general" | "stores_rest" | "stores_bakery" | "region_population" | "region_store_stats" | "region_sales";
+            /**
+             * Base Date
+             * @description 마지막 성공 수집의 기준일. 성공한 적이 없으면 null
+             * @example 2026-11-22
+             */
+            base_date: string | null;
+            /**
+             * Base Quarter
+             * @description 분기 자료의 기준 분기(예: 20262). 성공한 적이 없으면 null
+             * @example null
+             */
+            base_quarter: string | null;
+            /**
+             * Last Run Status
+             * @description 마지막 수집 상태. 수집한 적이 없으면 null
+             */
+            last_run_status: ("running" | "succeeded" | "failed") | null;
+            /** Last Run At */
+            last_run_at: string | null;
+            /** Last Success At */
+            last_success_at: string | null;
+            /**
+             * Stale
+             * @description 인허가는 원천 기준일로 7일, 분기 자료는 기준 분기 종료 후 6개월을 넘으면 true. 성공한 적이 없어도 true
+             */
+            stale: boolean;
+            /**
+             * Missing Location Count
+             * @description 영업 중이고 업종이 매핑된 매장 중 좌표가 없는 수. 매장 자료에만 있다
+             * @example 100
+             */
+            missing_location_count: number | null;
+            /**
+             * Source Url
+             * @example https://data.seoul.go.kr/dataList/OA-16094/S/1/datasetView.do
+             */
+            source_url: string;
+        };
+        /**
+         * DataStatusModel
+         * @description 사용 중인 생존모델과 실측 검증 지표.
+         */
+        DataStatusModel: {
+            /**
+             * Version
+             * @example example-v1
+             */
+            version: string;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "km_baseline" | "logistic" | "lightgbm";
+            /**
+             * Data Until
+             * Format: date
+             * @description 학습 데이터 기준일
+             * @example 2026-11-22
+             */
+            data_until: string;
+            /**
+             * Metrics
+             * @description 실측 검증 지표. 수치는 지어내지 않는다
+             */
+            metrics: {
+                [key: string]: number;
+            };
+        };
+        /** DataStatusResponse */
+        DataStatusResponse: {
+            /** Items */
+            items: components["schemas"]["DataStatusItem"][];
+            /** @description 사용 중인 모델이 없으면 null */
+            model: components["schemas"]["DataStatusModel"] | null;
+        };
         /** DbHealthResponse */
         DbHealthResponse: {
             /**
@@ -758,7 +946,10 @@ export interface components {
              */
             status: string;
         };
-        /** DeletingResponse */
+        /**
+         * DeletingResponse
+         * @description 삭제 요청을 받았지만 원본·OCR 보관분 등이 남아 정리 작업이 이어서 지울 때(202).
+         */
         DeletingResponse: {
             /**
              * Status
@@ -1885,6 +2076,60 @@ export interface operations {
             };
         };
     };
+    delete_my_data_api_v1_users_me_data_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_categories_api_v1_categories_get: {
         parameters: {
             query?: never;
@@ -2312,6 +2557,80 @@ export interface operations {
             };
         };
     };
+    delete_diagnosis_api_v1_diagnoses__diagnosis_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnosis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post: {
         parameters: {
             query?: never;
@@ -2558,6 +2877,80 @@ export interface operations {
             };
         };
     };
+    delete_contract_api_v1_contracts__contract_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     update_terms_api_v1_contracts__contract_id__terms_patch: {
         parameters: {
             query?: never;
@@ -2616,6 +3009,124 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_contract_api_v1_contracts__contract_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractApplication"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_data_status_api_v1_data_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataStatusResponse"];
                 };
             };
             /** @description Too Many Requests */

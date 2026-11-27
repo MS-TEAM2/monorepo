@@ -13,4 +13,5 @@ RUN uv sync --locked --no-dev --package backend --no-editable
 ENV PATH="/app/.venv/bin:$PATH" \
     MODEL_PATH=/app/ai/artifacts/model.joblib
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# 기본 접근 로그는 쿼리(인가 코드, 좌표)까지 남겨 끄고 app.access_log가 대신 기록한다.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

@@ -9,11 +9,19 @@ ID = "00000000-0000-4000-8000-000000000004"
 UPLOAD_PATH = "/api/v1/contracts"
 DETAIL_PATH = "/api/v1/contracts/{contract_id}"
 TERMS_PATH = "/api/v1/contracts/{contract_id}/terms"
+APPLY_PATH = "/api/v1/contracts/{contract_id}/apply"
 UPLOAD = UPLOAD_PATH
 DETAIL = DETAIL_PATH.format(contract_id=ID)
 TERMS = TERMS_PATH.format(contract_id=ID)
+APPLY = APPLY_PATH.format(contract_id=ID)
 AUTH = {"Authorization": "Bearer any"}
-REQUESTS = [("POST", UPLOAD), ("GET", DETAIL), ("PATCH", TERMS)]
+REQUESTS = [
+    ("POST", UPLOAD),
+    ("GET", DETAIL),
+    ("PATCH", TERMS),
+    ("POST", APPLY),
+    ("DELETE", DETAIL),
+]
 
 TERM_KEYS = [
     "deposit",
@@ -170,6 +178,8 @@ def contract_model(name: str):
         (UPLOAD_PATH, "post", {"202", "401", "404", "409", "413", "415", "422", "429", "503"}),
         (DETAIL_PATH, "get", {"200", "401", "404", "422", "429", "503"}),
         (TERMS_PATH, "patch", {"200", "401", "404", "409", "422", "429", "503"}),
+        (APPLY_PATH, "post", {"201", "401", "404", "409", "422", "429", "503"}),
+        (DETAIL_PATH, "delete", {"202", "204", "401", "404", "422", "429", "503"}),
     ],
 )
 def test_spec_lists_status_codes_and_bearer_auth(path, method, statuses):
@@ -183,6 +193,8 @@ def test_spec_lists_status_codes_and_bearer_auth(path, method, statuses):
         (UPLOAD_PATH, "post", "202", "ContractAcceptedResponse"),
         (DETAIL_PATH, "get", "200", "ContractDetailResponse"),
         (TERMS_PATH, "patch", "200", "ContractDetailResponse"),
+        # A16의 application과 같은 형식이다.
+        (APPLY_PATH, "post", "201", "ContractApplication"),
     ],
 )
 def test_success_response_models(path, method, status, model):
@@ -210,6 +222,11 @@ def test_success_response_models(path, method, status, model):
             TERMS_PATH,
             "patch",
             ["contract_processing", "contract_failed", "invalid_term", "terms_incomplete"],
+        ),
+        (
+            APPLY_PATH,
+            "post",
+            ["contract_not_confirmed", "contract_failed", "contract_not_linked"],
         ),
     ],
 )
@@ -515,6 +532,8 @@ def test_invalid_update_is_rejected(client, payload):
     [
         ("GET", DETAIL_PATH.format(contract_id="not-a-uuid")),
         ("PATCH", TERMS_PATH.format(contract_id="not-a-uuid")),
+        ("POST", APPLY_PATH.format(contract_id="not-a-uuid")),
+        ("DELETE", DETAIL_PATH.format(contract_id="not-a-uuid")),
     ],
 )
 def test_invalid_id_is_rejected(client, method, url):
@@ -532,3 +551,97 @@ def test_validation_error_does_not_echo_contract_text(client):
     assert_invalid(response)
     for secret in ("비밀 특약 문장", "secret-token"):
         assert secret not in response.text
+
+
+# A18 계약 조건 손익 반영
+
+EXIT = {"month": 12, "obligation_months": 6, "restoration_cost": 5_000_000}
+
+
+def test_apply_request_schema():
+    request = component("ContractApplyRequest")
+    exit_schema = component("ContractApplyExit")
+
+    assert request["required"] == ["exit"]
+    assert set(exit_schema["properties"]) == {
+        "month",
+        "obligation_months",
+        "restoration_cost",
+        "penalty_amount",
+        "penalty_covers_remaining_rent",
+    }
+    assert set(exit_schema["required"]) == {"month", "obligation_months"}
+    month = exit_schema["properties"]["month"]
+    obligation = exit_schema["properties"]["obligation_months"]
+    assert (month["minimum"], month["maximum"]) == (1, 120)
+    assert (obligation["minimum"], obligation["maximum"]) == (0, 120)
+    for schema in (request, exit_schema):
+        assert schema["additionalProperties"] is False
+
+
+def test_apply_exit_matches_simulation_exit():
+    # A13과 A18의 exit는 같은 규칙이다. 한쪽만 바뀌지 않게 필드를 맞춘다.
+    simulation_exit = app.openapi()["components"]["schemas"]["SimulationExit"]
+    apply_exit = component("ContractApplyExit")
+
+    assert set(simulation_exit["properties"]) == set(apply_exit["properties"])
+    assert set(simulation_exit["required"]) == set(apply_exit["required"])
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"exit": EXIT},
+        {"exit": {"month": 1, "obligation_months": 0}},
+        {"exit": {"month": 120, "obligation_months": 120}},
+        {
+            "exit": {
+                **EXIT,
+                "penalty_amount": 10_000_000,
+                "penalty_covers_remaining_rent": False,
+            }
+        },
+        {"exit": {**EXIT, "restoration_cost": None, "penalty_covers_remaining_rent": None}},
+    ],
+)
+def test_valid_apply_is_not_implemented_yet(client, payload):
+    assert_stub(client.post(APPLY, json=payload, headers=AUTH))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"exit": None},
+        {"exit": {}},
+        {"exit": {"month": 12}},
+        {"exit": {"obligation_months": 6}},
+        {"exit": {"month": 0, "obligation_months": 0}},
+        {"exit": {"month": 121, "obligation_months": 0}},
+        {"exit": {"month": 12, "obligation_months": -1}},
+        {"exit": {"month": 12, "obligation_months": 121}},
+        {"exit": {**EXIT, "restoration_cost": -1}},
+        {"exit": {**EXIT, "penalty_amount": 10_000_000_001}},
+        {"exit": {**EXIT, "unknown": 1}},
+        {"exit": EXIT, "overrides": {"monthly_rent": 1}},
+    ],
+)
+def test_invalid_apply_is_rejected(client, payload):
+    assert_invalid(client.post(APPLY, json=payload, headers=AUTH))
+
+
+def test_apply_validation_error_does_not_echo_input(client):
+    payload = {"exit": {**EXIT, "restoration_cost": 987_654_321_987}}
+
+    response = client.post(APPLY, json=payload, headers={"Authorization": "Bearer secret-token"})
+
+    assert_invalid(response)
+    for secret in ("987654321987", "secret-token"):
+        assert secret not in response.text
+
+
+# A19 계약 삭제
+
+
+def test_delete_contract_is_not_implemented_yet(client):
+    assert_stub(client.delete(DETAIL, headers=AUTH))

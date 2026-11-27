@@ -1,9 +1,19 @@
-"""상권 탐색 API 명세(A03–A05, A07)와 빈 라우트의 동작."""
+"""상권 탐색 API 명세(A03–A05, A07)와 라우트의 동작. 실제 쿼리는 test_service_db.py에서 확인한다."""
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.explore.schemas import AREA_SUMMARY_EXAMPLES, AreaSummaryResponse
+from app.config import settings
+from app.errors import AppError
+from app.explore import service
+from app.explore.schemas import (
+    AREA_SUMMARY_EXAMPLES,
+    AreaSummaryResponse,
+    CategoryItem,
+    CategoryListResponse,
+    RegionResolveResponse,
+    StoreListResponse,
+)
 from app.main import app
 
 CATEGORIES = "/api/v1/categories"
@@ -14,9 +24,12 @@ HERE = "lat=37.5665&lng=126.978"
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # 로컬 backend/.env의 DB 주소와 상관없이 DB 없이 시작한다. 엔진은 시작할 때 만들어진다.
+    monkeypatch.setattr(settings, "database_url", None)
     with TestClient(app) as test_client:
         yield test_client
+    app.dependency_overrides.clear()
 
 
 def operation(url: str) -> dict:
@@ -114,7 +127,8 @@ def test_store_filter_parameters():
         f"{STORES}?{HERE}&radius=150&category=cafe&category=korean&limit=1000",
     ],
 )
-def test_valid_requests_are_not_implemented_yet(client, url):
+def test_valid_requests_without_database_are_503(client, url):
+    # A03·A04는 DB가 없으면, A05는 아직 구현 전이라 503이다.
     response = client.get(url)
 
     assert response.status_code == 503
@@ -134,7 +148,8 @@ def test_valid_requests_are_not_implemented_yet(client, url):
         "lat=abc&lng=126.978",
     ],
 )
-def test_invalid_location_is_rejected(client, base, query):
+def test_invalid_location_is_rejected(db_client, base, query):
+    client = db_client
     suffix = "&category=cafe" if base == SUMMARY else ""
     response = client.get(f"{base}?{query}{suffix}")
 
@@ -143,15 +158,15 @@ def test_invalid_location_is_rejected(client, base, query):
 
 
 @pytest.mark.parametrize("query", ["radius=200", "radius=abc", "limit=0", "limit=1001"])
-def test_invalid_store_filter_is_rejected(client, query):
-    response = client.get(f"{STORES}?{HERE}&{query}")
+def test_invalid_store_filter_is_rejected(db_client, query):
+    response = db_client.get(f"{STORES}?{HERE}&{query}")
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
 
 
-def test_validation_error_does_not_echo_coordinates(client):
-    response = client.get(f"{STORES}?lat=97.123456&lng=126.987654")
+def test_validation_error_does_not_echo_coordinates(db_client):
+    response = db_client.get(f"{STORES}?lat=97.123456&lng=126.987654")
 
     assert response.status_code == 422
     assert "97.123456" not in response.text
@@ -301,3 +316,118 @@ def test_summary_validation_error_does_not_echo_coordinates(client):
     assert response.status_code == 422
     assert "97.123456" not in response.text
     assert "126.987654" not in response.text
+
+
+# A03·A04: service를 바꿔 끼워 라우트가 인자와 응답을 제대로 넘기는지 본다.
+
+
+class FakeSession:
+    pass
+
+
+@pytest.fixture
+def db_client(client):
+    from app.deps import get_db
+
+    async def fake_db():
+        yield FakeSession()
+
+    app.dependency_overrides[get_db] = fake_db
+    return client
+
+
+def test_categories_returns_service_result(db_client, monkeypatch):
+    async def fake(db):
+        assert isinstance(db, FakeSession)
+        return CategoryListResponse(items=[CategoryItem(id="cafe", name="카페")])
+
+    monkeypatch.setattr(service, "list_categories", fake)
+
+    response = db_client.get(CATEGORIES)
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [{"id": "cafe", "name": "카페"}]}
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        RegionResolveResponse(
+            dong_code="11110515", dong_name="청운효자동", gu_name="종로구", supported=True
+        ),
+        RegionResolveResponse(dong_code=None, dong_name=None, gu_name=None, supported=False),
+    ],
+)
+def test_resolve_passes_coordinates_and_returns_result(db_client, monkeypatch, result):
+    calls = []
+
+    async def fake(db, lat, lng):
+        calls.append((lat, lng))
+        return result
+
+    monkeypatch.setattr(service, "resolve_region", fake)
+
+    response = db_client.get(f"{RESOLVE}?lat=37.5665&lng=126.978")
+
+    assert response.status_code == 200
+    assert response.json() == result.model_dump()
+    assert calls == [(37.5665, 126.978)]
+
+
+def test_resolve_rejects_invalid_location_without_querying(db_client):
+    # FakeSession에는 execute가 없어 쿼리를 보내면 500이 난다. 422면 쿼리 전에 막힌 것이다.
+    response = db_client.get(f"{RESOLVE}?lat=91&lng=126.978")
+
+    assert response.status_code == 422
+
+
+# A05: service를 바꿔 끼워 쿼리 값이 그대로 넘어가고 오류가 명세대로 나오는지 본다.
+
+EMPTY_STORES = StoreListResponse(
+    total=0, returned=0, truncated=False, category_counts=[], base_date=None, items=[]
+)
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (HERE, (37.5665, 126.978, 500, None, 1000)),
+        (
+            f"{HERE}&radius=150&category=cafe&category=korean&limit=10",
+            (37.5665, 126.978, 150, ["cafe", "korean"], 10),
+        ),
+    ],
+)
+def test_stores_passes_query_to_service(db_client, monkeypatch, query, expected):
+    calls = []
+
+    async def fake(db, lat, lng, radius, categories, limit):
+        calls.append((lat, lng, radius, categories, limit))
+        return EMPTY_STORES
+
+    monkeypatch.setattr(service, "list_stores", fake)
+
+    response = db_client.get(f"{STORES}?{query}")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert calls == [expected]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        AppError(400, "out_of_service_area", "서비스 지역(서울) 밖입니다"),
+        AppError(422, "validation_error", "지원하지 않는 업종이 있습니다"),
+    ],
+)
+def test_stores_errors_follow_spec(db_client, monkeypatch, error):
+    async def fake(*args):
+        raise error
+
+    monkeypatch.setattr(service, "list_stores", fake)
+
+    response = db_client.get(f"{STORES}?{HERE}")
+
+    assert response.status_code == error.status
+    assert response.json() == {"detail": error.detail, "code": error.code}

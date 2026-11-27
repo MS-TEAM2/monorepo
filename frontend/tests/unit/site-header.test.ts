@@ -19,7 +19,7 @@ describe("SiteHeader", () => {
     const markup = renderToStaticMarkup(createElement(SiteHeader, { navigation: NAV_ITEMS }));
 
     expect(markup).toContain("주요 메뉴");
-    expect(markup).toContain("서울 외식 · 계약서 검토");
+    expect(markup).not.toContain("서울 외식 · 계약서 검토");
     for (const item of NAV_ITEMS) {
       expect(markup).toContain(`href="${item.href}"`);
     }
