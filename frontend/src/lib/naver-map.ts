@@ -9,6 +9,8 @@ export type NPoint = { x: number; y: number };
 
 export type NMap = {
   setCenter(center: NLatLng): void;
+  /** 부드럽게 옮긴다 */
+  panTo(center: NLatLng): void;
   getCenter(): NLatLng;
   setZoom(zoom: number): void;
   getProjection(): { fromCoordToOffset(coord: NLatLng): NPoint };

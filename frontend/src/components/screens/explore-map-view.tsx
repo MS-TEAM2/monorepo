@@ -4,17 +4,9 @@ import { Calculator, ChevronDown, ChevronUp, FileText, List, Lock, LogIn, Rotate
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { NaverMapLayer } from "@/components/screens/naver-map-layer";
-import { formatCount } from "@/lib/mock/startup/calc";
-import { MAP_SCALE, MAP_SIZE } from "@/lib/mock/startup/data";
-import type {
-  Category,
-  DongSummary,
-  Neighborhood,
-  Point,
-  RadiusM,
-  RadiusStats,
-  Store as StoreItem,
-} from "@/lib/mock/startup/types";
+import { buildDongSummary, formatCount } from "@/lib/mock/startup/calc";
+import { CATEGORIES, MAP_SCALE, MAP_SIZE } from "@/lib/mock/startup/data";
+import type { Category, Neighborhood, Point, RadiusM, RadiusStats, Store as StoreItem } from "@/lib/mock/startup/types";
 import type { MapLayers } from "@/lib/entry-draft";
 import { naverMapClientId } from "@/lib/naver-map";
 import { cn } from "@/lib/utils";
@@ -22,6 +14,8 @@ import { cn } from "@/lib/utils";
 /** 이만큼 누르고 있으면 길게 누르기로 본다. 그 사이 이만큼 움직이면 지도 끌기로 보고 취소한다 */
 const LONG_PRESS_MS = 550;
 const LONG_PRESS_SLOP_PX = 10;
+
+const NO_CATEGORIES: Category[] = [];
 
 const ALL_LAYERS: MapLayers = { pin: true, radius: true, stores: true, summary: true };
 const NO_STORES: PlacedStore[] = [];
@@ -48,7 +42,10 @@ type ExploreMapViewProps = {
   /** 고른 조건을 모두 지우고 처음 선택 화면으로 돌아간다 */
   onReset: () => void;
   radiusStats: RadiusStats;
-  dongSummary: DongSummary;
+  /** 지도에서 거르는 업종들 (빈 배열이면 9종 전체). 상권 요약의 행정동 집계는 이 중 1개씩 본다(A07) */
+  categories?: Category[];
+  /** 지도에서 골랐지만 아직 적용하지 않은 관심 상권 위치. 흐린 핀으로만 보여 준다 */
+  draftPin?: Point | null;
   /** 무엇을 그릴지 (lib/entry-draft mapLayers). 생략하면 모두 그린다 */
   layers?: MapLayers;
   /** 지도를 누르면 onMovePin 을 부를지. 조건을 적용하기 전에는 지도에서 위치를 고를 때만 true */
@@ -76,7 +73,8 @@ export function ExploreMapView({
   onMovePin,
   onReset,
   radiusStats,
-  dongSummary,
+  categories = NO_CATEGORIES,
+  draftPin = null,
   layers = ALL_LAYERS,
   pinMovable = true,
   onLongPress,
@@ -104,7 +102,22 @@ export function ExploreMapView({
     const l = Math.min(MAP_SIZE.height - 30, Math.max(30, (clientY - t.top - a) / s));
     return { x: Number(n.toFixed(1)), y: Number(l.toFixed(1)) };
   };
-  const selectionKey = `${neighborhood.dongCode}-${category.id}-${radiusM}`;
+  const selectionKey = `${neighborhood.dongCode}-${categories.map((c) => c.id).join(",")}-${radiusM}`;
+  // 상권 요약의 행정동 집계는 업종 1개씩 본다(A07). 여러 업종이면 칩으로 바꿔 본다
+  const summaryChoices = categories.length > 0 ? categories : CATEGORIES;
+  const [summaryPick, setSummaryPick] = useState<{ key: string; id: string } | null>(null);
+  const summaryCategory =
+    summaryChoices.find((c) => summaryPick?.key === selectionKey && c.id === summaryPick.id) ??
+    (categories.length === 1
+      ? (categories[0] as Category)
+      : (summaryChoices.find((c) => c.id === category.id) ?? (summaryChoices[0] as Category)));
+  const dongSummary = useMemo(() => buildDongSummary(neighborhood, summaryCategory), [neighborhood, summaryCategory]);
+  const categoriesTitle =
+    categories.length === 0
+      ? "전체 업종"
+      : categories.length === 1
+        ? (categories[0]?.label ?? "")
+        : `${categories[0]?.label ?? ""} 외 ${categories.length - 1}`;
   const [selectedState, setSelectedState] = useState<{
     key: string;
     store: ActiveStore;
@@ -176,6 +189,7 @@ export function ExploreMapView({
           radiusM={radiusM}
           showPin={layers.pin}
           showRadius={layers.radius}
+          draftPin={draftPin}
           stores={layers.stores ? storesWithDistance : NO_STORES}
           selectedStoreId={selectedStore?.id ?? null}
           onPressMap={(point) => {
@@ -458,6 +472,23 @@ export function ExploreMapView({
               <circle cx="0" cy="-24" r="4.6" fill="var(--card)" />
             </g>
           )}
+          {draftPin && (
+            // 지도에서 골랐지만 아직 적용하지 않은 위치. 적용하면 이 자리가 중심이 된다
+            <g
+              transform={`translate(${draftPin.x}, ${draftPin.y}) scale(${1.3 / scaleX})`}
+              opacity="0.6"
+              style={{ pointerEvents: "none" }}
+            >
+              <path
+                d="M 0 -2 C -2.2 -8.5 -12 -14.5 -12 -24 A 12 12 0 1 1 12 -24 C 12 -14.5 2.2 -8.5 0 -2 Z"
+                fill="var(--brand-light)"
+                stroke="var(--card)"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              <circle cx="0" cy="-24" r="4.6" fill="var(--card)" />
+            </g>
+          )}
         </svg>
       )}
       {naverFailed && (
@@ -524,32 +555,53 @@ export function ExploreMapView({
             </div>
           )}
           {listOpen && (
-            <div className="absolute top-[136px] md:top-16 right-3 z-20 w-72 max-w-[calc(100%-24px)] max-h-[60%] flex flex-col bg-white/95 backdrop-blur rounded-2xl border border-line-warm shadow-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-muted flex items-center justify-between bg-secondary">
-                <span className="text-xs font-extrabold text-foreground">
-                  반경 내 영업 매장 ({activeInside.length}곳)
+            <div className="absolute top-[136px] md:top-16 right-3 z-20 flex w-80 max-w-[calc(100%-24px)] max-h-[70%] flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-lifted md:w-96">
+              <div className="flex items-center justify-between border-b border-border bg-secondary px-5 py-3.5">
+                <span className="text-base font-extrabold text-foreground">
+                  반경 내 영업 매장 <span className="text-primary tabular-nums">{activeInside.length}곳</span>
                 </span>
-                <button type="button" onClick={() => setListOpen(false)} className="text-ink-400 hover:text-foreground">
-                  <X className="w-4 h-4" />
+                <button
+                  type="button"
+                  onClick={() => setListOpen(false)}
+                  aria-label="매장 목록 닫기"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-ink-500 hover:bg-card"
+                >
+                  <X className="size-5" aria-hidden="true" />
                 </button>
               </div>
-              <div className="overflow-y-auto divide-y divide-muted">
+              <ul className="divide-y divide-border overflow-y-auto">
                 {0 === activeInside.length ? (
-                  <p className="p-4 text-xs text-center text-muted-foreground">선택 반경 내 매장이 없습니다.</p>
+                  <li className="p-5 text-center text-sm text-ink-500">선택 반경 내 매장이 없습니다.</li>
                 ) : (
-                  activeInside.map((e) => (
-                    <div className="px-4 py-2.5 flex items-center justify-between text-xs" key={e.id}>
-                      <div>
-                        <div className="font-bold text-foreground">{e.name}</div>
-                        <div className="text-[13px] text-ink-400 tabular-nums">{e.licenseYear}년 인허가</div>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-background text-brand font-bold tabular-nums">
-                        {e.distM}m
-                      </span>
-                    </div>
-                  ))
+                  activeInside.map((e) => {
+                    const active = selectedStore?.id === e.id;
+                    return (
+                      <li key={e.id}>
+                        {/* 누르면 그 매장을 고르고 지도를 매장 위치로 옮긴다 */}
+                        <button
+                          type="button"
+                          aria-current={active || undefined}
+                          onClick={() => selectStore(e)}
+                          className={cn(
+                            "flex w-full min-h-16 items-center justify-between gap-3 px-5 py-3 text-left transition-colors",
+                            active ? "bg-primary-soft" : "hover:bg-secondary",
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-base font-bold text-foreground">{e.name}</span>
+                            <span className="block text-sm text-ink-500 tabular-nums">
+                              {e.categoryLabel} · {e.licenseYear}년 인허가
+                            </span>
+                          </span>
+                          <span className="shrink-0 rounded-full bg-primary-soft px-2.5 py-1 text-sm font-bold text-primary tabular-nums">
+                            {e.distM}m
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })
                 )}
-              </div>
+              </ul>
             </div>
           )}
           {layers.summary && (
@@ -563,7 +615,7 @@ export function ExploreMapView({
                 >
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-baseline gap-x-2 text-lg font-extrabold text-foreground">
-                      {neighborhood.shortName} · {category.label} 상권 요약
+                      {neighborhood.shortName} · {categoriesTitle} 상권 요약
                       <span className="text-sm font-bold text-primary tabular-nums">
                         영업 {formatCount(radiusStats.activeCount)}
                       </span>
@@ -587,7 +639,9 @@ export function ExploreMapView({
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="rounded-2xl border border-border bg-secondary px-1 py-3">
-                          <div className="text-sm text-ink-600">영업 동일업종</div>
+                          <div className="text-sm text-ink-600">
+                            {categories.length === 1 ? "영업 동일업종" : "영업 매장"}
+                          </div>
                           <div className="mt-0.5 text-lg font-extrabold text-foreground tabular-nums">
                             {formatCount(radiusStats.activeCount)}
                           </div>
@@ -631,12 +685,35 @@ export function ExploreMapView({
                       <div className="space-y-3 rounded-2xl border border-border bg-secondary p-4">
                         <div className="flex items-center justify-between gap-2">
                           <span className="rounded-full bg-foreground px-2.5 py-1 text-xs font-bold text-white">
-                            행정동 집계 · {dongSummary.quarter}
+                            행정동 집계 · {dongSummary.quarter} · {summaryCategory.label}
                           </span>
                           <span className="text-sm font-bold text-primary tabular-nums">
                             추정매출 {dongSummary.avgSalesMan.toLocaleString("ko-KR")}만
                           </span>
                         </div>
+                        {summaryChoices.length > 1 && (
+                          <div className="flex flex-wrap gap-1.5" role="group" aria-label="행정동 집계 업종">
+                            {summaryChoices.map((c) => {
+                              const on = c.id === summaryCategory.id;
+                              return (
+                                <button
+                                  type="button"
+                                  key={c.id}
+                                  aria-pressed={on}
+                                  onClick={() => setSummaryPick({ key: selectionKey, id: c.id })}
+                                  className={cn(
+                                    "min-h-11 rounded-full border px-3.5 text-sm font-bold transition-colors",
+                                    on
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-input bg-card text-ink-600 hover:border-brand-light",
+                                  )}
+                                >
+                                  {c.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between text-sm text-ink-600 tabular-nums">
                           <span>일평균 유동 {dongSummary.floatingPopDaily.toLocaleString("ko-KR")}명</span>
                           <span>

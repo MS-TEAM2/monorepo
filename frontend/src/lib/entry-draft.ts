@@ -23,11 +23,6 @@ export function isCompleteDraft(draft: EntryDraft): draft is CompleteEntryDraft 
   return draft.neighborhood !== null && draft.pin !== null;
 }
 
-/** 상권 요약(A07)은 업종 1개만 받으므로 업종을 1개 골랐을 때만 분석할 수 있다 */
-export function canAnalyzeDraft(draft: EntryDraft): boolean {
-  return isCompleteDraft(draft) && draft.categories.length === 1;
-}
-
 export type MapLayers = {
   /** 관심 상권의 위치(핀·역 이름) */
   pin: boolean;
@@ -40,22 +35,14 @@ export type MapLayers = {
 };
 
 /**
- * 지도에 무엇을 그릴지 정한다.
- * 위치와 반경은 고르는 즉시 미리 보여 주고, 매장은 `적용`한 조건 그대로일 때만, 요약은 `분석하기`까지 눌렀을 때만 보여 준다.
- * pending 은 적용한 뒤 패널에서 조건을 또 바꿨는지다. 바꿨으면 이전 조건의 매장·요약을 숨긴다.
+ * 지도에 무엇을 그릴지 정한다. 지도는 `적용`한 조건만 그린다. 패널에서 고르는 중인 값으로는 지도를 옮기지 않는다.
+ * 적용하면 위치·반경·매장을, `분석하기`까지 누르면 상권 요약도 보여 준다.
  */
-export function mapLayers(input: {
-  draft: EntryDraft;
-  applied: boolean;
-  pending: boolean;
-  analyzed: boolean;
-}): MapLayers {
-  const pin = input.draft.neighborhood !== null && input.draft.pin !== null;
-  const stores = input.applied && !input.pending;
+export function mapLayers(input: { applied: boolean; analyzed: boolean }): MapLayers {
   return {
-    pin,
-    radius: pin,
-    stores,
-    summary: stores && input.analyzed,
+    pin: input.applied,
+    radius: input.applied,
+    stores: input.applied,
+    summary: input.applied && input.analyzed,
   };
 }
