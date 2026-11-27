@@ -147,10 +147,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 업종 목록 (A03) */
+        get: operations["list_categories_api_v1_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/regions/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 좌표의 행정동 판정 (A04)
+         * @description 서울 밖이면 200과 `supported: false`이고 나머지 값은 null이다.
+         */
+        get: operations["resolve_region_api_v1_regions_resolve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 주변 매장 조회 (A05)
+         * @description 영업 중이고 업종이 매핑됐으며 좌표가 있는 매장만 가까운 순(같으면 ID 순)으로 준다. 중심이 서울 밖이면 400 `out_of_service_area`, 결과가 없으면 200과 빈 배열이다.
+         */
+        get: operations["list_stores_api_v1_stores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CategoryCount */
+        CategoryCount: {
+            /**
+             * Category Id
+             * @example cafe
+             */
+            category_id: string;
+            /**
+             * Count
+             * @example 320
+             */
+            count: number;
+        };
+        /** CategoryItem */
+        CategoryItem: {
+            /**
+             * Id
+             * @example cafe
+             */
+            id: string;
+            /**
+             * Name
+             * @example 카페
+             */
+            name: string;
+        };
+        /** CategoryListResponse */
+        CategoryListResponse: {
+            /** Items */
+            items: components["schemas"]["CategoryItem"][];
+        };
         /** DbHealthResponse */
         DbHealthResponse: {
             /**
@@ -227,6 +315,106 @@ export interface components {
         PredictResponse: {
             /** Predictions */
             predictions: number[];
+        };
+        /**
+         * Radius
+         * @description A05 조회 반경(m). Literal은 쿼리 문자열을 숫자로 바꾸지 않아 IntEnum을 쓴다.
+         * @enum {integer}
+         */
+        Radius: 150 | 300 | 500 | 1000;
+        /**
+         * RegionResolveResponse
+         * @description 서울 밖이면 supported는 false이고 나머지는 null이다.
+         */
+        RegionResolveResponse: {
+            /**
+             * Dong Code
+             * @example 11110515
+             */
+            dong_code: string | null;
+            /**
+             * Dong Name
+             * @example 청운효자동
+             */
+            dong_name: string | null;
+            /**
+             * Gu Name
+             * @example 종로구
+             */
+            gu_name: string | null;
+            /** Supported */
+            supported: boolean;
+        };
+        /** StoreItem */
+        StoreItem: {
+            /**
+             * Id
+             * @description `source:관리번호`
+             * @example general:example-001
+             */
+            id: string;
+            /**
+             * Name
+             * @example 예시 매장
+             */
+            name: string | null;
+            /**
+             * Category Id
+             * @example cafe
+             */
+            category_id: string;
+            /**
+             * Licensed Year
+             * @example 2023
+             */
+            licensed_year: number | null;
+            /**
+             * Lat
+             * @example 37.5665
+             */
+            lat: number;
+            /**
+             * Lng
+             * @example 126.978
+             */
+            lng: number;
+            /**
+             * Distance M
+             * @example 120
+             */
+            distance_m: number;
+        };
+        /** StoreListResponse */
+        StoreListResponse: {
+            /**
+             * Total
+             * @description 잘리기 전 전체 건수
+             * @example 1280
+             */
+            total: number;
+            /**
+             * Returned
+             * @example 1000
+             */
+            returned: number;
+            /** Truncated */
+            truncated: boolean;
+            /**
+             * Category Counts
+             * @description 잘리기 전 전체 건수. 조회한 업종은 0건도 넣는다
+             */
+            category_counts: components["schemas"]["CategoryCount"][];
+            /**
+             * Base Date
+             * @description 조회 업종의 인허가 자료 기준일 중 가장 이른 날. 성공한 수집이 없으면 null
+             * @example 2026-11-22
+             */
+            base_date: string | null;
+            /**
+             * Items
+             * @description 가까운 순, 같으면 ID 순
+             */
+            items: components["schemas"]["StoreItem"][];
         };
         /** TokenRequest */
         TokenRequest: {
@@ -670,6 +858,163 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_categories_api_v1_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryListResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolve_region_api_v1_regions_resolve_get: {
+        parameters: {
+            query: {
+                /** @description 중심 위도 (WGS84) */
+                lat: number;
+                /** @description 중심 경도 (WGS84) */
+                lng: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionResolveResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_stores_api_v1_stores_get: {
+        parameters: {
+            query: {
+                /** @description 중심 위도 (WGS84) */
+                lat: number;
+                /** @description 중심 경도 (WGS84) */
+                lng: number;
+                /** @description 반경(m) */
+                radius?: components["schemas"]["Radius"];
+                /** @description 업종 ID. 여러 번 보낸다. 없으면 외식 9종 전체 */
+                category?: string[] | null;
+                /** @description 이 API만 기본·최대 1000 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

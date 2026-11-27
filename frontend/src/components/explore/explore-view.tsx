@@ -154,7 +154,7 @@ export function ExploreView({ initial = null }: { initial?: ExploreSelection | n
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-6xl flex-1 content-start md:grid-cols-[24rem_1fr] md:gap-x-6 md:px-6 md:py-6">
+    <main className="mx-auto grid w-full max-w-[1240px] flex-1 content-start md:grid-cols-[24rem_1fr] md:gap-x-6 md:px-6 md:py-6">
       <section
         aria-label="탐색 조건"
         className="order-2 flex flex-col gap-5 px-4 py-5 md:order-none md:col-start-1 md:row-span-2 md:row-start-1 md:px-0 md:py-0"
