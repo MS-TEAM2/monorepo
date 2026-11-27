@@ -1,0 +1,187 @@
+{
+  "description": "월세 손익 계산 공통 시험 사례. 백엔드(app/diagnoses/calculations.py)와 프론트(lib/profit.ts)가 같은 결과를 내야 한다. 입력 필드는 A09 costs, 출력은 A11 simulation과 같다. 금액은 원 단위 정수, 변동비율은 0–1이다. 규칙은 API 명세서 A09의 '손익 계산 공통 규칙'을 따른다.",
+  "cases": [
+    {
+      "name": "기획서 예시: 고정비 700만, 변동비율 40% → 손익분기 약 1,167만",
+      "input": {
+        "monthly_rent": 2500000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": null
+      },
+      "expected": { "break_even_sales": 11666667, "monthly_profit": null, "affordable_rent": null }
+    },
+    {
+      "name": "기획서 예시: 월세만 270만으로 바꾸면 손익분기 1,200만",
+      "input": {
+        "monthly_rent": 2700000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": null
+      },
+      "expected": { "break_even_sales": 12000000, "monthly_profit": null, "affordable_rent": null }
+    },
+    {
+      "name": "A11 예시: 예상 월매출 1,300만 → 월손익 80만, 감당 가능한 월세 330만",
+      "input": {
+        "monthly_rent": 2500000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": 13000000
+      },
+      "expected": { "break_even_sales": 11666667, "monthly_profit": 800000, "affordable_rent": 3300000 }
+    },
+    {
+      "name": "A13 예시: 월세 220만 → 손익분기 11,166,667, 월손익 110만",
+      "input": {
+        "monthly_rent": 2200000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": 13000000
+      },
+      "expected": { "break_even_sales": 11166667, "monthly_profit": 1100000, "affordable_rent": 3300000 }
+    },
+    {
+      "name": "부가세 포함 월세 275만은 공급가 250만으로 계산",
+      "input": {
+        "monthly_rent": 2750000,
+        "rent_vat_included": true,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": 13000000
+      },
+      "expected": { "break_even_sales": 11666667, "monthly_profit": 800000, "affordable_rent": 3300000 }
+    },
+    {
+      "name": "부가세 포함 월세 200만 → 공급가 1,818,182원(반올림) 후 계산",
+      "input": {
+        "monthly_rent": 2000000,
+        "rent_vat_included": true,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": null
+      },
+      "expected": { "break_even_sales": 10530303, "monthly_profit": null, "affordable_rent": null }
+    },
+    {
+      "name": "매출이 적어 감당 가능한 월세가 음수면 0으로 바꾸지 않음 (월세가 없어도 적자)",
+      "input": {
+        "monthly_rent": 2500000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.4,
+        "expected_monthly_sales": 6000000
+      },
+      "expected": { "break_even_sales": 11666667, "monthly_profit": -3400000, "affordable_rent": -900000 }
+    },
+    {
+      "name": "변동비율 0%면 손익분기 매출 = 월 고정비, 관리비 0",
+      "input": {
+        "monthly_rent": 1000000,
+        "rent_vat_included": false,
+        "management_fee": 0,
+        "labor_cost": 2000000,
+        "other_fixed_cost": 500000,
+        "variable_cost_rate": 0,
+        "expected_monthly_sales": 5000000
+      },
+      "expected": { "break_even_sales": 3500000, "monthly_profit": 1500000, "affordable_rent": 2500000 }
+    },
+    {
+      "name": "변동비율 상한 95%",
+      "input": {
+        "monthly_rent": 2500000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.95,
+        "expected_monthly_sales": 13000000
+      },
+      "expected": { "break_even_sales": 140000000, "monthly_profit": -6350000, "affordable_rent": -3850000 }
+    },
+    {
+      "name": "변동비율 소수 넷째 자리 33.33%",
+      "input": {
+        "monthly_rent": 2500000,
+        "rent_vat_included": false,
+        "management_fee": 300000,
+        "labor_cost": 3000000,
+        "other_fixed_cost": 1200000,
+        "variable_cost_rate": 0.3333,
+        "expected_monthly_sales": 13000000
+      },
+      "expected": { "break_even_sales": 10499475, "monthly_profit": 1667100, "affordable_rent": 4167100 }
+    },
+    {
+      "name": "반올림 경계: 손익분기 7.5 → 8",
+      "input": {
+        "monthly_rent": 1,
+        "rent_vat_included": false,
+        "management_fee": 0,
+        "labor_cost": 1,
+        "other_fixed_cost": 1,
+        "variable_cost_rate": 0.6,
+        "expected_monthly_sales": null
+      },
+      "expected": { "break_even_sales": 8, "monthly_profit": null, "affordable_rent": null }
+    },
+    {
+      "name": "반올림 경계: 월손익 0.5 → 1, 감당 가능한 월세 1.5 → 2",
+      "input": {
+        "monthly_rent": 1,
+        "rent_vat_included": false,
+        "management_fee": 0,
+        "labor_cost": 1,
+        "other_fixed_cost": 1,
+        "variable_cost_rate": 0.5,
+        "expected_monthly_sales": 7
+      },
+      "expected": { "break_even_sales": 6, "monthly_profit": 1, "affordable_rent": 2 }
+    },
+    {
+      "name": "반올림 경계: 음수 -1.5 → -2, -0.5 → -1 (0에서 먼 쪽)",
+      "input": {
+        "monthly_rent": 1,
+        "rent_vat_included": false,
+        "management_fee": 0,
+        "labor_cost": 1,
+        "other_fixed_cost": 1,
+        "variable_cost_rate": 0.5,
+        "expected_monthly_sales": 3
+      },
+      "expected": { "break_even_sales": 6, "monthly_profit": -2, "affordable_rent": -1 }
+    },
+    {
+      "name": "반올림 경계: 음수 -2.5 → -3 (짝수 반올림이면 -2)",
+      "input": {
+        "monthly_rent": 1,
+        "rent_vat_included": false,
+        "management_fee": 0,
+        "labor_cost": 1,
+        "other_fixed_cost": 1,
+        "variable_cost_rate": 0.5,
+        "expected_monthly_sales": 1
+      },
+      "expected": { "break_even_sales": 6, "monthly_profit": -3, "affordable_rent": -2 }
+    }
+  ]
+}
