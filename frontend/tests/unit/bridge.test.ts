@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { BRIDGE_VERSION, parseWebToAppMessage } from "@ax/bridge";
 
 import { callApp, getAppInfo, isInApp } from "@/lib/bridge";
 
@@ -29,4 +30,26 @@ test("앱에 요청을 보내고 앱의 응답으로 끝난다", async () => {
   vi.stubGlobal("window", fakeWindow);
 
   await expect(callApp("share", { message: "a" })).resolves.toEqual({ shared: true });
+});
+
+test("브리지 v2는 제한된 로그인 브라우저 요청을 검증한다", () => {
+  expect(BRIDGE_VERSION).toBe(2);
+  expect(
+    parseWebToAppMessage(
+      JSON.stringify({
+        id: "login-1",
+        type: "openAuthSession",
+        payload: { url: "https://api.example.com", returnUrl: "axservice://auth/callback", timeoutMs: 180_000 },
+      }),
+    ),
+  ).not.toBeNull();
+  expect(
+    parseWebToAppMessage(
+      JSON.stringify({
+        id: "login-2",
+        type: "openAuthSession",
+        payload: { url: "https://api.example.com", returnUrl: "axservice://auth/callback", timeoutMs: 0 },
+      }),
+    ),
+  ).toBeNull();
 });
