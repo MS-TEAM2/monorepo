@@ -222,12 +222,15 @@ export function NaverMapLayer({
 
   useEffect(() => drawStores(), [stores, selectedStoreId, origin, drawStores]);
 
+  // 네이버지도가 지도 요소의 position 을 relative 로 바꾸므로 위치는 바깥 요소가 잡는다
   return (
-    <div
-      ref={element}
-      className="absolute inset-0"
-      role="application"
-      aria-label="네이버지도. 지도를 누르면 그 위치로 중심 핀을 옮깁니다"
-    />
+    <div className="absolute inset-0">
+      <div
+        ref={element}
+        className="size-full"
+        role="application"
+        aria-label="네이버지도. 지도를 누르면 그 위치로 중심 핀을 옮깁니다"
+      />
+    </div>
   );
 }
