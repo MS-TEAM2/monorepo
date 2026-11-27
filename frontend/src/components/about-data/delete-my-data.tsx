@@ -1,26 +1,14 @@
 "use client";
 
-import { CircleCheck, Hourglass, Trash2 } from "lucide-react";
+import { CircleCheck, Hourglass, Trash } from "lucide-react";
 import { useState } from "react";
 
 import { ErrorNotice } from "@/components/feedback/error-notice";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { toErrorKind, type ApiErrorKind } from "@/lib/api/errors";
 import { deleteMyData, type DeletionOutcome } from "@/lib/api/users";
 import { useSessionStatus } from "@/lib/use-session";
 
-/** 지우는 자료 (스펙 specs/session-privacy R3). 확인 창과 화면에 같은 목록을 쓴다 */
+/** 지우는 자료 (스펙 specs/session-privacy R3). 확인 문구와 화면에 같은 목록을 쓴다 */
 export const DELETION_TARGETS = [
   "진단과 손익 계산",
   "계약서 분석 결과(조건·근거·위험 특약)",
@@ -30,6 +18,7 @@ export const DELETION_TARGETS = [
 
 type State =
   | { kind: "idle" }
+  | { kind: "confirming" }
   | { kind: "pending" }
   | { kind: "result"; outcome: DeletionOutcome }
   | { kind: "error"; error: ApiErrorKind };
@@ -39,11 +28,11 @@ export function DeletionResult({ outcome }: { outcome: DeletionOutcome }) {
   const done = outcome === "done";
   const Icon = done ? CircleCheck : Hourglass;
   return (
-    <div role="status" className="flex gap-2 rounded-xl bg-secondary p-3">
-      <Icon className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
-      <div className="flex flex-col gap-0.5">
-        <p className="font-bold text-foreground">{done ? "내 데이터를 모두 삭제했어요" : "삭제 처리 중"}</p>
-        <p className="text-sm text-muted-foreground">
+    <div role="status" className="flex gap-2 p-3 rounded-xl bg-secondary border border-border">
+      <Icon className="w-4 h-4 mt-0.5 shrink-0 text-success-500" aria-hidden="true" />
+      <div className="space-y-0.5">
+        <p className="text-xs font-bold text-success-500">{done ? "내 데이터를 모두 삭제했어요" : "삭제 처리 중"}</p>
+        <p className="text-xs text-ink-500">
           {done
             ? "이제 이전 자료는 볼 수 없어요. 로그인은 그대로예요."
             : "지금부터 이전 자료는 볼 수 없어요. 남은 원본 정리는 자동으로 이어서 해요. 로그인은 그대로예요."}
@@ -53,8 +42,11 @@ export function DeletionResult({ outcome }: { outcome: DeletionOutcome }) {
   );
 }
 
-/** S11 내 데이터 모두 삭제 (SCRUM-161). 로그인한 사용자에게만 보인다 */
-export function DeleteMyData() {
+/**
+ * S11 내 데이터 모두 삭제 (SCRUM-161, A02). 로그인한 사용자에게만 보인다.
+ * 화면 시안(SCRUM-191)의 초기화 카드 모양을 따르고, 삭제하면 이 브라우저의 화면 상태도 onCleared 로 비운다.
+ */
+export function DeleteMyData({ onCleared }: { onCleared?: () => void }) {
   const session = useSessionStatus();
   const [state, setState] = useState<State>({ kind: "idle" });
 
@@ -63,23 +55,55 @@ export function DeleteMyData() {
   async function run() {
     setState({ kind: "pending" });
     try {
-      setState({ kind: "result", outcome: await deleteMyData() });
+      const outcome = await deleteMyData();
+      onCleared?.();
+      setState({ kind: "result", outcome });
     } catch (error) {
       setState({ kind: "error", error: toErrorKind(error) });
     }
   }
 
   return (
-    <section aria-labelledby="delete-my-data" className="flex flex-col gap-3 rounded-2xl border bg-card p-4">
-      <h2 id="delete-my-data" className="text-lg font-extrabold text-foreground">
+    <section
+      aria-labelledby="delete-my-data"
+      className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-3"
+    >
+      <h3 id="delete-my-data" className="text-base font-extrabold text-foreground">
         내 데이터 모두 삭제
-      </h2>
-      <p className="text-sm text-muted-foreground">
+      </h3>
+      <p className="text-xs text-ink-500">
         계정과 로그인은 그대로 두고 저장된 자료만 지워요. 창업 가이드 체크 표시는 이 브라우저에 남아요.
       </p>
 
       {state.kind === "result" ? (
         <DeletionResult outcome={state.outcome} />
+      ) : state.kind === "confirming" ? (
+        <div className="space-y-2 p-3 rounded-xl bg-destructive-soft border border-destructive-line">
+          <p className="text-xs font-bold text-destructive-700">
+            내 데이터를 모두 삭제할까요? 되돌릴 수 없어요. 아래 자료가 모두 지워져요.
+          </p>
+          <ul className="list-disc pl-4 text-xs text-destructive-700">
+            {DELETION_TARGETS.map((target) => (
+              <li key={target}>{target}</li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void run()}
+              className="min-h-11 px-3 py-1.5 rounded-lg bg-destructive text-white text-xs font-bold"
+            >
+              예, 모두 삭제
+            </button>
+            <button
+              type="button"
+              onClick={() => setState({ kind: "idle" })}
+              className="min-h-11 px-3 py-1.5 rounded-lg bg-white border border-line-strong text-xs font-bold text-ink-600"
+            >
+              취소
+            </button>
+          </div>
+        </div>
       ) : (
         <>
           {state.kind === "error" && (
@@ -89,36 +113,15 @@ export function DeleteMyData() {
               onRetry={() => void run()}
             />
           )}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11 self-start"
-                disabled={state.kind === "pending"}
-              >
-                <Trash2 aria-hidden="true" />
-                {state.kind === "pending" ? "삭제하는 중…" : "내 데이터 모두 삭제"}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>내 데이터를 모두 삭제할까요?</AlertDialogTitle>
-                <AlertDialogDescription>삭제하면 되돌릴 수 없어요. 아래 자료가 모두 지워져요.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <ul className="list-disc pl-5 text-sm text-foreground">
-                {DELETION_TARGETS.map((target) => (
-                  <li key={target}>{target}</li>
-                ))}
-              </ul>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="min-h-11">취소</AlertDialogCancel>
-                <AlertDialogAction className="min-h-11" onClick={() => void run()}>
-                  모두 삭제
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <button
+            type="button"
+            disabled={state.kind === "pending"}
+            onClick={() => setState({ kind: "confirming" })}
+            className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-xl border border-destructive-line bg-destructive-soft text-xs font-extrabold text-destructive disabled:opacity-50"
+          >
+            <Trash className="w-3.5 h-3.5" aria-hidden="true" />
+            {state.kind === "pending" ? "삭제하는 중…" : "내 데이터 모두 삭제"}
+          </button>
         </>
       )}
     </section>

@@ -1,6 +1,18 @@
 "use client";
 
-import { Calculator, ChevronDown, ChevronUp, FileText, List, Lock, MapPin, RotateCcw, Store, X } from "lucide-react";
+import {
+  Calculator,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  List,
+  Lock,
+  LogIn,
+  MapPin,
+  RotateCcw,
+  Store,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatCount } from "@/lib/mock/startup/calc";
 import { MAP_SCALE, MAP_SIZE, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
@@ -39,6 +51,10 @@ type ExploreMapViewProps = {
   onOpenModal: () => void;
   onGoDiagnose: () => void;
   onGoContract: () => void;
+  /** 로그인 전에는 행정동 지표를 잠근다 (Notion 기획서 S03, specs/social-login R4) */
+  dongLocked?: boolean;
+  /** 잠긴 행정동 지표를 보려고 로그인하러 간다. 로그인 후 지금 선택값으로 돌아온다 */
+  onLogin?: () => void;
 };
 
 /** S02·S03 상권 지도와 상권 요약 화면 시안. 지도는 예시 그림이고 매장은 예시 데이터다 */
@@ -56,6 +72,8 @@ export function ExploreMapView({
   onOpenModal,
   onGoDiagnose,
   onGoContract,
+  dongLocked = false,
+  onLogin,
 }: ExploreMapViewProps) {
   const containerRef = useRef<SVGSVGElement>(null);
   const selectionKey = `${neighborhood.dongCode}-${category.id}-${radiusM}`;
@@ -511,45 +529,70 @@ export function ExploreMapView({
                   </div>
                 </div>
               </div>
-              <div className="p-2.5 rounded-2xl bg-muted border border-line space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded-full bg-foreground text-white text-[12px] font-bold">
-                    행정동 집계 · {dongSummary.quarter}
-                  </span>
-                  <span className="text-[13px] font-bold text-brand tabular-nums">
-                    추정매출 {dongSummary.avgSalesMan.toLocaleString("ko-KR")}만
-                  </span>
+              {dongLocked ? (
+                <div className="p-2.5 rounded-2xl bg-muted border border-line space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full bg-foreground text-white text-[12px] font-bold">
+                      행정동 집계 · {dongSummary.quarter}
+                    </span>
+                  </div>
+                  <p className="flex gap-1.5 text-[13px] text-ink-600">
+                    <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+                    유동인구·추정매출·개업·폐업률은 로그인하면 볼 수 있어요. 로그인하면 지금 고른 동네·반경·업종으로
+                    돌아와요.
+                  </p>
+                  {onLogin && (
+                    <button
+                      type="button"
+                      onClick={onLogin}
+                      className="w-full min-h-11 py-2.5 px-3 rounded-xl bg-foreground hover:bg-ink-hover text-white font-extrabold text-xs shadow-md flex items-center justify-center gap-1 transition"
+                    >
+                      <LogIn className="w-3.5 h-3.5" aria-hidden="true" />
+                      로그인하고 보기
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-[13px] text-ink-600 tabular-nums">
-                  <span>일평균 유동 {dongSummary.floatingPopDaily.toLocaleString("ko-KR")}명</span>
-                  <span>
-                    개업 {dongSummary.openRate}% · 폐업 {dongSummary.closeRate}%
-                  </span>
-                </div>
-                <div className="grid grid-cols-6 gap-1.5 items-end h-11 pt-1">
-                  {dongSummary.timeSlots.map((e) => {
-                    const s = e.pct === peakPct;
-                    const r = Math.max(22, Math.round((e.pct / peakPct) * 100));
-                    return (
-                      <div className="flex flex-col items-center h-full justify-end" key={e.slot}>
-                        <div className="w-full bg-line rounded-t h-7 flex items-end overflow-hidden">
-                          <div
-                            style={{
-                              height: `${r}%`,
-                            }}
-                            className={`w-full rounded-t ${s ? "bg-brand-light" : "bg-ink-200"}`}
-                          />
+              ) : (
+                <div className="p-2.5 rounded-2xl bg-muted border border-line space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full bg-foreground text-white text-[12px] font-bold">
+                      행정동 집계 · {dongSummary.quarter}
+                    </span>
+                    <span className="text-[13px] font-bold text-brand tabular-nums">
+                      추정매출 {dongSummary.avgSalesMan.toLocaleString("ko-KR")}만
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[13px] text-ink-600 tabular-nums">
+                    <span>일평균 유동 {dongSummary.floatingPopDaily.toLocaleString("ko-KR")}명</span>
+                    <span>
+                      개업 {dongSummary.openRate}% · 폐업 {dongSummary.closeRate}%
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-6 gap-1.5 items-end h-11 pt-1">
+                    {dongSummary.timeSlots.map((e) => {
+                      const s = e.pct === peakPct;
+                      const r = Math.max(22, Math.round((e.pct / peakPct) * 100));
+                      return (
+                        <div className="flex flex-col items-center h-full justify-end" key={e.slot}>
+                          <div className="w-full bg-line rounded-t h-7 flex items-end overflow-hidden">
+                            <div
+                              style={{
+                                height: `${r}%`,
+                              }}
+                              className={`w-full rounded-t ${s ? "bg-brand-light" : "bg-ink-200"}`}
+                            />
+                          </div>
+                          <span
+                            className={`text-[11px] tabular-nums mt-0.5 ${s ? "font-bold text-brand" : "text-ink-400"}`}
+                          >
+                            {e.slot.slice(0, 2)}시
+                          </span>
                         </div>
-                        <span
-                          className={`text-[11px] tabular-nums mt-0.5 ${s ? "font-bold text-brand" : "text-ink-400"}`}
-                        >
-                          {e.slot.slice(0, 2)}시
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
