@@ -35,24 +35,19 @@ describe("로그인 필요 화면 (Notion 기획서 2·3장)", () => {
     "/contract/result",
     "/saved",
     "/compare",
+    // SCRUM-193: 창업 가이드·지원정책도 로그인 필요
+    "/guide",
+    "/policy",
   ])("%s 는 보호한다", (path) => {
     expect(isProtectedPath(path)).toBe(true);
   });
 
-  it.each([
-    "/",
-    "/explore",
-    "/guide",
-    "/about-data",
-    "/policy",
-    "/terms",
-    "/privacy",
-    "/login",
-    "/auth/callback",
-    "/diagnoses-intro",
-  ])("%s 는 공개한다", (path) => {
-    expect(isProtectedPath(path)).toBe(false);
-  });
+  it.each(["/", "/explore", "/about-data", "/terms", "/privacy", "/login", "/auth/callback", "/diagnoses-intro"])(
+    "%s 는 공개한다",
+    (path) => {
+      expect(isProtectedPath(path)).toBe(false);
+    },
+  );
 });
 
 describe("복귀 주소 검사", () => {

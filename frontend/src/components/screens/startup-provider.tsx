@@ -270,3 +270,8 @@ export function useStartup(): StartupState {
   if (!context) throw new Error("useStartup 은 StartupProvider 안에서만 쓸 수 있습니다.");
   return context;
 }
+
+/** 프로바이더 밖(헤더 단위 테스트 등)에서도 쓸 수 있는 버전. 없으면 null */
+export function useOptionalStartup(): StartupState | null {
+  return useContext(StartupContext);
+}

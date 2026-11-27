@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { HeaderAccount } from "@/components/layout/header-account";
 import { NavLinks } from "@/components/layout/nav-links";
 
 export type NavigationItem = {
@@ -14,7 +15,7 @@ type SiteHeaderProps = {
 
 /**
  * 공통 헤더. 넓은 화면(768px 이상)에서는 주 메뉴를 함께 보여 준다.
- * 모바일에서는 하단 탭바가 같은 메뉴를 맡으므로 헤더에는 로고만 둔다.
+ * 모바일에서는 하단 탭바가 같은 메뉴를 맡으므로 헤더에는 로고와 로그인·계정 메뉴만 둔다.
  */
 export function SiteHeader({ navigation = [] }: SiteHeaderProps) {
   return (
@@ -28,11 +29,15 @@ export function SiteHeader({ navigation = [] }: SiteHeaderProps) {
           </span>
         </Link>
 
-        {navigation.length > 0 && (
-          <nav className="hidden items-center gap-1 md:flex" aria-label="주요 메뉴">
-            <NavLinks items={navigation} />
-          </nav>
-        )}
+        <div className="flex items-center gap-1">
+          {navigation.length > 0 && (
+            <nav className="hidden items-center gap-1 md:flex" aria-label="주요 메뉴">
+              <NavLinks items={navigation} />
+            </nav>
+          )}
+          {/* 데이터·한계 옆(모바일은 오른쪽 끝)에 로그인·계정 메뉴 (SCRUM-193) */}
+          <HeaderAccount />
+        </div>
       </div>
     </header>
   );
