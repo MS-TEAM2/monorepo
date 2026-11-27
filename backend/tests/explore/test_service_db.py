@@ -1,4 +1,4 @@
-"""실제 PostGIS에서 A03 업종 목록, A04 행정동 판정, A05 주변 매장 쿼리를 확인한다.
+"""실제 PostGIS에서 A03 업종 목록, A04 행정동 판정, A05 주변 매장, A07 반경 지표 쿼리를 확인한다.
 
 TEST_DATABASE_URL이 없으면 건너뛴다. 그 서버에 임시 DB를 새로 만들어 마이그레이션을 적용하고
 끝나면 지운다. 주소에 있는 DB의 내용은 바꾸지 않는다.
@@ -71,6 +71,31 @@ STORES = [
     ("general", "X2", "기타", "korean", "other", "2019-01-01", 0.0003, 0, "general"),
     ("general", "X3", "미분류", None, "open", "2019-01-01", 0.0003, 0, "general"),
     ("general", "X4", "좌표 없음", "korean", "open", "2019-01-01", None, None, "general"),
+]
+
+# A07 반경 지표용 자리. A05 중심에서 약 2.6km 떨어져 서로 영향을 주지 않는다.
+# 중식(휴게음식점)의 기준일은 2026-11-23이므로 최근 1년은 2025-11-24 ~ 2026-11-23이다.
+FAR = (37.585, 126.995)
+# (원천, 관리번호, 업종, 상태, 인허가일, 폐업일, 경도 차이, 수집)
+FAR_STORES = [
+    # 약 88m
+    ("rest", "I1", "chinese", "open", "2026-01-10", None, 0.001, "rest"),
+    ("rest", "I2", "chinese", "open", "2026-11-23", None, 0.001, "rest"),  # 기준일 당일: 포함
+    ("rest", "I3", "chinese", "closed", "2026-03-01", "2026-06-01", 0.001, "rest"),
+    ("rest", "I4", "chinese", "open", "2025-11-23", None, 0.001, "rest"),  # 1년 전 같은 날: 제외
+    ("rest", "I5", "chinese", "closed", "2020-01-01", "2025-11-23", 0.001, "rest"),  # 제외
+    ("general", "K1", "korean", "open", "2026-05-05", None, 0.001, "general"),  # 다른 업종
+    # 약 265m
+    ("rest", "O1", "chinese", "open", "2026-02-01", None, 0.003, "rest"),
+    ("rest", "O2", "chinese", "open", "2026-04-01", None, 0.003, "rest"),
+    ("rest", "O3", "chinese", "closed", "2019-01-01", "2026-02-01", 0.003, "rest"),
+    ("rest", "O4", "chinese", "closed", "2019-01-01", "2026-03-01", 0.003, "rest"),
+    ("rest", "O5", "chinese", "closed", "2019-01-01", "2026-10-01", 0.003, "rest"),
+    ("rest", "O6", "chinese", "closed", "2019-01-01", "2026-11-23", 0.003, "rest"),
+    # 약 615m: 반경 500m 밖
+    ("rest", "Z1", "chinese", "open", "2026-06-01", None, 0.007, "rest"),
+    # 제과점은 성공한 수집이 없다
+    ("bakery", "B1", "bakery", "open", "2026-06-01", None, 0.001, "bakery"),
 ]
 
 
@@ -161,6 +186,27 @@ def seed(url: str) -> None:
                     "has_location": dx is not None,
                     "lng": lng + (dx or 0),
                     "lat": lat + (dy or 0),
+                    "run": run_ids[run_key],
+                },
+            )
+        far_lat, far_lng = FAR
+        for source, no, category, status, licensed, closed, dx, run_key in FAR_STORES:
+            connection.execute(
+                text(
+                    "INSERT INTO stores (source, management_no, category_id, status, "
+                    "licensed_on, closed_on, location, ingest_run_id) VALUES (:source, :no, "
+                    ":category, :status, :licensed, :closed, "
+                    "ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), :run)"
+                ),
+                {
+                    "source": source,
+                    "no": no,
+                    "category": category,
+                    "status": status,
+                    "licensed": licensed,
+                    "closed": closed,
+                    "lng": far_lng + dx,
+                    "lat": far_lat,
                     "run": run_ids[run_key],
                 },
             )
@@ -354,5 +400,71 @@ def test_center_outside_seoul_is_400(database_url):
 def test_unknown_or_inactive_category_is_422(database_url, categories):
     with pytest.raises(AppError) as raised:
         stores(database_url, categories=categories)
+
+    assert (raised.value.status, raised.value.code) == (422, "validation_error")
+
+
+# --- A07 반경 지표 ---
+
+
+def radius(url, radius_m, category="chinese"):
+    lat, lng = FAR
+    return run(url, lambda db: service.radius_stats(db, lat, lng, radius_m, category))
+
+
+def test_small_counts_are_masked_without_exact_value(database_url):
+    # 150m: 영업 중 I1·I2·I4, 개업 I1·I2·I3(3건), 폐업 I3(1건)
+    result = radius(database_url, 150)
+
+    assert result.same_category_count == 3
+    assert result.opened_1y.model_dump() == {
+        "status": "masked",
+        "count": None,
+        "display": "5건 미만",
+    }
+    assert result.closed_1y.model_dump() == {
+        "status": "masked",
+        "count": None,
+        "display": "5건 미만",
+    }
+    # 응답 어디에도 정확한 개업·폐업 수(3, 1)가 들어가지 않는다.
+    dumped = result.model_dump(mode="json")
+    assert dumped["opened_1y"]["count"] is None and dumped["closed_1y"]["count"] is None
+    assert "3" not in dumped["opened_1y"]["display"]
+
+
+def test_counts_of_five_or_more_are_exact(database_url):
+    # 300m: 영업 중 I1·I2·I4·O1·O2, 개업 I1·I2·I3·O1·O2, 폐업 I3·O3·O4·O5·O6
+    result = radius(database_url, 300)
+
+    assert result.radius_m == 300
+    assert result.same_category_count == 5
+    assert result.opened_1y.model_dump() == {"status": "exact", "count": 5, "display": "5"}
+    assert result.closed_1y.model_dump() == {"status": "exact", "count": 5, "display": "5"}
+    assert result.base_date.isoformat() == "2026-11-23"
+
+
+def test_radius_excludes_other_categories_and_far_stores(database_url):
+    # 1km로 넓히면 615m의 Z1만 더해진다. 다른 업종 K1은 세지 않는다.
+    assert radius(database_url, 1000).same_category_count == 6
+    assert radius(database_url, 150, category="korean").same_category_count == 1
+
+
+def test_counts_are_unavailable_without_base_date(database_url):
+    result = radius(database_url, 150, category="bakery")
+
+    assert result.base_date is None
+    assert result.same_category_count == 1
+    for value in (result.opened_1y, result.closed_1y):
+        assert value.model_dump() == {
+            "status": "unavailable",
+            "count": None,
+            "display": "자료 없음",
+        }
+
+
+def test_unknown_category_is_422(database_url):
+    with pytest.raises(AppError) as raised:
+        radius(database_url, 150, category="unknown")
 
     assert (raised.value.status, raised.value.code) == (422, "validation_error")

@@ -1,6 +1,8 @@
-"""상권 탐색 업무 규칙. A03·A04는 SCRUM-100, A05는 SCRUM-102에서 구현했다. A07은 SCRUM-111·113."""
+"""상권 탐색 업무 규칙. A03·A04는 SCRUM-100, A05는 SCRUM-102, A07 반경 지표는 SCRUM-111에서
+구현했다. A07 행정동 지표와 라우트 연결은 SCRUM-113."""
 
 from dataclasses import dataclass
+from datetime import date
 from typing import NoReturn
 
 from sqlalchemy import Integer, Numeric, cast, extract, func, select
@@ -14,6 +16,8 @@ from app.explore.schemas import (
     CategoryCount,
     CategoryItem,
     CategoryListResponse,
+    CountValue,
+    RadiusStats,
     RegionResolveResponse,
     StoreItem,
     StoreListResponse,
@@ -89,6 +93,15 @@ def _point(lat: float, lng: float):
     return func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326)
 
 
+def _within_radius(lat: float, lng: float, radius: int):
+    """좌표가 있고 반경 안인 매장 조건과 거리 식. A05와 A07이 같은 기준을 쓴다."""
+    center = cast(_point(lat, lng), Geography())
+    # ix_stores_location_geography(GIST)를 타도록 인덱스와 같은 식으로 쓴다.
+    location = cast(Store.location, Geography())
+    conditions = (Store.location.is_not(None), func.ST_DWithin(location, center, radius))
+    return conditions, func.ST_Distance(location, center)
+
+
 async def _requested_categories(db: AsyncSession, requested: list[str] | None) -> list[str]:
     """요청한 업종을 순서대로 중복 없이. 없으면 사용 중인 업종 전체. 모르는 업종은 422."""
     active = list(
@@ -150,16 +163,8 @@ async def list_stores(
 
     try:
         requested = await _requested_categories(db, categories)
-        center = cast(_point(lat, lng), Geography())
-        # ix_stores_location_geography(GIST)를 타도록 인덱스와 같은 식으로 쓴다.
-        location = cast(Store.location, Geography())
-        distance = func.ST_Distance(location, center)
-        conditions = (
-            Store.status == "open",
-            Store.category_id.in_(requested),
-            Store.location.is_not(None),
-            func.ST_DWithin(location, center, radius),
-        )
+        in_radius, distance = _within_radius(lat, lng, radius)
+        conditions = (Store.status == "open", Store.category_id.in_(requested), *in_radius)
 
         counted = dict(
             (
@@ -215,6 +220,74 @@ async def list_stores(
         ],
         base_date=base_date,
         items=items,
+    )
+
+
+# 5건 미만은 정확한 값을 내려보내지 않는다(기획서 S03, API 명세서 A07).
+MIN_EXACT_COUNT = 5
+
+
+def count_value(count: int, base_date: date | None) -> CountValue:
+    """최근 1년 개업·폐업 수의 표시. 기준일이 없으면 최근 1년을 확인할 수 없어 숨긴다."""
+    if base_date is None:
+        return CountValue(status="unavailable", count=None, display="자료 없음")
+    if count < MIN_EXACT_COUNT:
+        return CountValue(status="masked", count=None, display="5건 미만")
+    return CountValue(status="exact", count=count, display=f"{count:,}")
+
+
+def one_year_before(day: date) -> date:
+    """1년 전 같은 날. 2월 29일은 2월 28일로 본다."""
+    try:
+        return day.replace(year=day.year - 1)
+    except ValueError:
+        return day.replace(year=day.year - 1, day=28)
+
+
+async def radius_stats(
+    db: AsyncSession, lat: float, lng: float, radius: int, category: str
+) -> RadiusStats:
+    """A07 `radius_stats`. 같은 업종의 반경 안 매장 수와 최근 1년 개업·폐업 수.
+
+    최근 1년은 `base_date`를 포함해 거슬러 센다(1년 전 같은 날은 포함하지 않는다). 개업 수는
+    지금 폐업했어도 세고, 폐업 수는 폐업일로 센다. 서울 밖 판정은 요약 API(SCRUM-113)가 한다.
+    """
+    try:
+        (category,) = await _requested_categories(db, [category])
+        in_radius, _ = _within_radius(lat, lng, radius)
+        same_category = (Store.category_id == category, *in_radius)
+        base_date = await _stores_base_date(db, [category])
+
+        open_count = func.count().filter(Store.status == "open")
+        if base_date is None:
+            opened = closed = 0
+            same_count = (await db.execute(select(open_count).where(*same_category))).scalar_one()
+        else:
+            start = one_year_before(base_date)
+            opened_filter = (Store.licensed_on > start) & (Store.licensed_on <= base_date)
+            closed_filter = (
+                (Store.status == "closed")
+                & (Store.closed_on > start)
+                & (Store.closed_on <= base_date)
+            )
+            same_count, opened, closed = (
+                await db.execute(
+                    select(
+                        open_count,
+                        func.count().filter(opened_filter),
+                        func.count().filter(closed_filter),
+                    ).where(*same_category)
+                )
+            ).one()
+    except SQLAlchemyError:
+        raise _database_error() from None
+
+    return RadiusStats(
+        radius_m=radius,
+        same_category_count=same_count,
+        opened_1y=count_value(opened, base_date),
+        closed_1y=count_value(closed, base_date),
+        base_date=base_date,
     )
 
 
