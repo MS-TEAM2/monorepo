@@ -2,6 +2,8 @@
 
 import { Calculator, ChevronDown, ChevronUp, FileText, List, Lock, MapPin, RotateCcw, Store, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+import { NaverMapLayer } from "@/components/screens/naver-map-layer";
 import { formatCount } from "@/lib/mock/startup/calc";
 import { MAP_SCALE, MAP_SIZE, RADIUS_OPTIONS } from "@/lib/mock/startup/data";
 import type {
@@ -13,6 +15,7 @@ import type {
   RadiusStats,
   Store as StoreItem,
 } from "@/lib/mock/startup/types";
+import { naverMapClientId } from "@/lib/naver-map";
 type Placed = {
   distM: number;
   inside: boolean;
@@ -41,7 +44,10 @@ type ExploreMapViewProps = {
   onGoContract: () => void;
 };
 
-/** S02·S03 상권 지도와 상권 요약 화면 시안. 지도는 예시 그림이고 매장은 예시 데이터다 */
+/**
+ * S02·S03 상권 지도와 상권 요약 화면 시안. 매장은 예시 데이터다.
+ * 네이버지도 Client ID 가 있으면 네이버지도 위에 그리고, 없거나 불러오지 못하면 예시 그림 지도를 쓴다.
+ */
 export function ExploreMapView({
   neighborhood,
   category,
@@ -76,6 +82,13 @@ export function ExploreMapView({
   const [listOpen, setListOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(true);
   const radiusPx = radiusM * MAP_SCALE;
+  const clientId = naverMapClientId();
+  const [naverFailed, setNaverFailed] = useState(false);
+  const showNaver = clientId !== null && !naverFailed;
+  const origin = useMemo(
+    () => ({ lat: neighborhood.lat, lng: neighborhood.lng }),
+    [neighborhood.lat, neighborhood.lng],
+  );
   const [scaleX, setScaleX] = useState(1);
   useEffect(() => {
     const e = containerRef.current;
@@ -90,7 +103,7 @@ export function ExploreMapView({
     const s = new ResizeObserver(t);
     s.observe(e);
     return () => s.disconnect();
-  }, []);
+  }, [showNaver]);
   const storesWithDistance = useMemo(
     () =>
       stores.map((e): PlacedStore => {
@@ -116,234 +129,251 @@ export function ExploreMapView({
   const peakPct = Math.max(...dongSummary.timeSlots.map((e) => e.pct));
   return (
     <div className="relative w-full overflow-hidden bg-map-bg select-none h-[calc(100dvh-7.5rem-env(safe-area-inset-bottom))] min-h-[520px] md:h-[calc(100dvh-4rem)] md:min-h-[600px]">
-      <svg
-        ref={containerRef}
-        viewBox={`0 0 ${MAP_SIZE.width} ${MAP_SIZE.height}`}
-        preserveAspectRatio="xMidYMid slice"
-        onClick={(e) => {
-          if (!containerRef.current) return;
-          const t = containerRef.current.getBoundingClientRect();
-          const s = Math.max(t.width / MAP_SIZE.width, t.height / MAP_SIZE.height);
-          const r = (t.width - MAP_SIZE.width * s) / 2;
-          const a = (t.height - MAP_SIZE.height * s) / 2;
-          const n = Math.min(MAP_SIZE.width - 30, Math.max(30, (e.clientX - t.left - r) / s));
-          const l = Math.min(MAP_SIZE.height - 30, Math.max(30, (e.clientY - t.top - a) / s));
-          selectStore(null);
-          onMovePin({
-            x: Number(n.toFixed(1)),
-            y: Number(l.toFixed(1)),
-          });
-        }}
-        className="w-full h-full block cursor-crosshair"
-        role="application"
-        aria-label={`${neighborhood.name} ${category.label} 전체 화면 반경 탐색 지도`}
-      >
-        <defs>
-          <radialGradient id="fullRadiusGrad" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--brand-light)" stopOpacity="0.22" />
-            <stop offset="78%" stopColor="var(--brand-light)" stopOpacity="0.11" />
-            <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.24" />
-          </radialGradient>
-          <filter id="fullPinShadow" x="-40%" y="-40%" width="180%" height="180%">
-            <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="var(--foreground)" floodOpacity="0.26" />
-          </filter>
-        </defs>
-        <rect x="0" y="0" width={MAP_SIZE.width} height={MAP_SIZE.height} fill="var(--map-bg)" />
-        <g fill="var(--map-block)" stroke="var(--map-block-line)" strokeWidth="1">
-          <rect x="28" y="28" width="125" height="82" rx="10" />
-          <rect x="172" y="28" width="142" height="82" rx="10" />
-          <rect x="338" y="28" width="145" height="82" rx="10" />
-          <rect x="505" y="28" width="128" height="82" rx="10" />
-          <rect x="652" y="28" width="120" height="82" rx="10" />
-          <rect x="28" y="132" width="125" height="92" rx="10" />
-          <rect x="172" y="132" width="142" height="92" rx="10" />
-          <rect x="448" y="132" width="140" height="92" rx="10" />
-          <rect x="610" y="132" width="160" height="92" rx="10" />
-          <rect x="28" y="268" width="132" height="96" rx="10" />
-          <rect x="180" y="268" width="148" height="96" rx="10" />
-          <rect x="458" y="268" width="140" height="96" rx="10" />
-          <rect x="618" y="268" width="152" height="96" rx="10" />
-          <rect x="180" y="384" width="148" height="88" rx="10" />
-          <rect x="458" y="384" width="140" height="88" rx="10" />
-        </g>
-        <g>
-          {neighborhood.mapStyle.parkPolys.map((e, s) => (
-            <polygon
-              points={e}
-              fill="var(--map-park)"
-              stroke="var(--map-park-line)"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-              key={s}
-            />
-          ))}
-        </g>
-        <path
-          d={neighborhood.mapStyle.riverPath}
-          fill="none"
-          stroke="var(--map-water)"
-          strokeWidth="26"
-          strokeLinecap="round"
-        />
-        <path
-          d={neighborhood.mapStyle.riverPath}
-          fill="none"
-          stroke="var(--map-water-line)"
-          strokeWidth="4"
-          strokeDasharray="16 14"
-          strokeLinecap="round"
-        />
-        <g stroke="var(--card)" strokeWidth="6" opacity="0.82">
-          <line x1="0" y1="120" x2="800" y2="120" />
-          <line x1="0" y1="374" x2="800" y2="374" />
-          <line x1="162" y1="0" x2="162" y2="500" />
-          <line x1="600" y1="0" x2="600" y2="500" />
-        </g>
-        <g stroke="var(--card)" strokeWidth="14" strokeLinecap="round">
-          <path d={neighborhood.mapStyle.mainRoadA} fill="none" />
-          <path d={neighborhood.mapStyle.mainRoadB} fill="none" />
-        </g>
-        <g stroke="var(--map-road-dash)" strokeWidth="2.2" strokeDasharray="10 8">
-          <path d={neighborhood.mapStyle.mainRoadA} fill="none" />
-          <path d={neighborhood.mapStyle.mainRoadB} fill="none" />
-        </g>
-        <g
-          transform={`translate(${neighborhood.mapStyle.station.x}, ${neighborhood.mapStyle.station.y})`}
-          style={{
-            pointerEvents: "none",
+      {clientId !== null && showNaver ? (
+        <NaverMapLayer
+          clientId={clientId}
+          origin={origin}
+          pinCenter={pinCenter}
+          radiusM={radiusM}
+          stores={storesWithDistance}
+          selectedStoreId={selectedStore?.id ?? null}
+          onPressMap={(point) => {
+            selectStore(null);
+            onMovePin(point);
           }}
-        >
-          <circle cx="0" cy="0" r="8" fill="var(--card)" stroke="var(--foreground)" strokeWidth="2.5" />
-          <text x="12" y="4" fill="var(--foreground)" fontSize="11.5" fontWeight="800">
-            {neighborhood.mapStyle.station.name}
-          </text>
-        </g>
-        <g
-          style={{
-            pointerEvents: "none",
+          onSelectStore={(id) => selectStore(activeInside.find((store) => store.id === id) ?? null)}
+          onLoadError={() => setNaverFailed(true)}
+        />
+      ) : (
+        <svg
+          ref={containerRef}
+          viewBox={`0 0 ${MAP_SIZE.width} ${MAP_SIZE.height}`}
+          preserveAspectRatio="xMidYMid slice"
+          onClick={(e) => {
+            if (!containerRef.current) return;
+            const t = containerRef.current.getBoundingClientRect();
+            const s = Math.max(t.width / MAP_SIZE.width, t.height / MAP_SIZE.height);
+            const r = (t.width - MAP_SIZE.width * s) / 2;
+            const a = (t.height - MAP_SIZE.height * s) / 2;
+            const n = Math.min(MAP_SIZE.width - 30, Math.max(30, (e.clientX - t.left - r) / s));
+            const l = Math.min(MAP_SIZE.height - 30, Math.max(30, (e.clientY - t.top - a) / s));
+            selectStore(null);
+            onMovePin({
+              x: Number(n.toFixed(1)),
+              y: Number(l.toFixed(1)),
+            });
           }}
+          className="w-full h-full block cursor-crosshair"
+          role="application"
+          aria-label={`${neighborhood.name} ${category.label} 전체 화면 반경 탐색 지도`}
         >
-          <circle
-            cx={pinCenter.x}
-            cy={pinCenter.y}
-            r={radiusPx}
-            fill="url(#fullRadiusGrad)"
-            stroke="none"
-            style={{
-              transition: "all 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          />
-          <circle
-            cx={pinCenter.x}
-            cy={pinCenter.y}
-            r={radiusPx}
-            fill="none"
-            stroke="var(--card)"
-            strokeOpacity="0.75"
-            strokeWidth="5"
-            vectorEffect="non-scaling-stroke"
-            style={{
-              transition: "all 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          />
-          <circle
-            cx={pinCenter.x}
-            cy={pinCenter.y}
-            r={radiusPx}
-            fill="none"
-            stroke="var(--brand)"
-            strokeOpacity="0.9"
-            strokeWidth="1.8"
-            strokeDasharray="10 7"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-            style={{
-              transition: "all 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          />
-          <g
-            transform={`translate(${pinCenter.x}, ${Math.max(26, pinCenter.y - radiusPx - 10)})`}
-            style={{
-              transition: "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
-            }}
-          >
-            <rect x="-36" y="-11" width="72" height="21" rx="10.5" fill="var(--brand)" />
-            <text x="0" y="3.5" textAnchor="middle" fill="var(--card)" fontSize="10.5" fontWeight="800">
-              반경 {radiusM >= 1000 ? "1km" : `${radiusM}m`}
-            </text>
+          <defs>
+            <radialGradient id="fullRadiusGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="var(--brand-light)" stopOpacity="0.22" />
+              <stop offset="78%" stopColor="var(--brand-light)" stopOpacity="0.11" />
+              <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.24" />
+            </radialGradient>
+            <filter id="fullPinShadow" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="var(--foreground)" floodOpacity="0.26" />
+            </filter>
+          </defs>
+          <rect x="0" y="0" width={MAP_SIZE.width} height={MAP_SIZE.height} fill="var(--map-bg)" />
+          <g fill="var(--map-block)" stroke="var(--map-block-line)" strokeWidth="1">
+            <rect x="28" y="28" width="125" height="82" rx="10" />
+            <rect x="172" y="28" width="142" height="82" rx="10" />
+            <rect x="338" y="28" width="145" height="82" rx="10" />
+            <rect x="505" y="28" width="128" height="82" rx="10" />
+            <rect x="652" y="28" width="120" height="82" rx="10" />
+            <rect x="28" y="132" width="125" height="92" rx="10" />
+            <rect x="172" y="132" width="142" height="92" rx="10" />
+            <rect x="448" y="132" width="140" height="92" rx="10" />
+            <rect x="610" y="132" width="160" height="92" rx="10" />
+            <rect x="28" y="268" width="132" height="96" rx="10" />
+            <rect x="180" y="268" width="148" height="96" rx="10" />
+            <rect x="458" y="268" width="140" height="96" rx="10" />
+            <rect x="618" y="268" width="152" height="96" rx="10" />
+            <rect x="180" y="384" width="148" height="88" rx="10" />
+            <rect x="458" y="384" width="140" height="88" rx="10" />
           </g>
-        </g>
-        <g
-          style={{
-            pointerEvents: "none",
-          }}
-        >
-          {storesWithDistance
-            .filter((e) => "closed_1y" === e.status)
-            .map((e) => (
-              <circle
-                cx={e.x}
-                cy={e.y}
-                r={e.inside ? 4.2 : 3}
-                fill={e.inside ? "var(--map-closed)" : "var(--map-closed-light)"}
-                stroke={e.inside ? "var(--map-closed-stroke)" : "none"}
-                strokeWidth="1"
-                opacity={e.inside ? 0.85 : 0.45}
-                key={e.id}
+          <g>
+            {neighborhood.mapStyle.parkPolys.map((e, s) => (
+              <polygon
+                points={e}
+                fill="var(--map-park)"
+                stroke="var(--map-park-line)"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                key={s}
               />
             ))}
-        </g>
-        <g>
-          {storesWithDistance
-            .filter((e) => "active" === e.status)
-            .map((e) => {
-              const s = selectedStore?.id === e.id;
-              return (
-                <g
-                  onClick={(t) => {
-                    t.stopPropagation();
-                    if (e.inside) {
-                      selectStore(e);
-                    }
-                  }}
-                  className={e.inside ? "cursor-pointer" : ""}
-                  key={e.id}
-                >
-                  {s && <circle cx={e.x} cy={e.y} r="14" fill="var(--brand-light)" opacity="0.25" />}
-                  <circle
-                    cx={e.x}
-                    cy={e.y}
-                    r={s ? 8 : e.inside ? 6.2 : 4.2}
-                    fill={e.inside ? (s ? "var(--primary)" : "var(--brand-light)") : "var(--map-store-out)"}
-                    stroke="var(--card)"
-                    strokeWidth={e.inside ? 2 : 1.2}
-                    opacity={e.inside ? 1 : 0.52}
-                  />
-                </g>
-              );
-            })}
-        </g>
-        <g
-          transform={`translate(${pinCenter.x}, ${pinCenter.y}) scale(${1.3 / scaleX})`}
-          style={{
-            transition: "transform 250ms cubic-bezier(0.22, 1, 0.36, 1)",
-            pointerEvents: "none",
-          }}
-        >
-          <ellipse cx="0" cy="0" rx="7" ry="2.6" fill="var(--foreground)" opacity="0.22" />
-          <circle cx="0" cy="0" r="2.4" fill="var(--brand)" stroke="var(--card)" strokeWidth="1.2" />
-          <g filter="url(#fullPinShadow)">
-            <path
-              d="M 0 -2 C -2.2 -8.5 -12 -14.5 -12 -24 A 12 12 0 1 1 12 -24 C 12 -14.5 2.2 -8.5 0 -2 Z"
-              fill="var(--brand)"
-              stroke="var(--card)"
-              strokeWidth="2"
-              strokeLinejoin="round"
-            />
           </g>
-          <circle cx="0" cy="-24" r="4.6" fill="var(--card)" />
-        </g>
-      </svg>
+          <path
+            d={neighborhood.mapStyle.riverPath}
+            fill="none"
+            stroke="var(--map-water)"
+            strokeWidth="26"
+            strokeLinecap="round"
+          />
+          <path
+            d={neighborhood.mapStyle.riverPath}
+            fill="none"
+            stroke="var(--map-water-line)"
+            strokeWidth="4"
+            strokeDasharray="16 14"
+            strokeLinecap="round"
+          />
+          <g stroke="var(--card)" strokeWidth="6" opacity="0.82">
+            <line x1="0" y1="120" x2="800" y2="120" />
+            <line x1="0" y1="374" x2="800" y2="374" />
+            <line x1="162" y1="0" x2="162" y2="500" />
+            <line x1="600" y1="0" x2="600" y2="500" />
+          </g>
+          <g stroke="var(--card)" strokeWidth="14" strokeLinecap="round">
+            <path d={neighborhood.mapStyle.mainRoadA} fill="none" />
+            <path d={neighborhood.mapStyle.mainRoadB} fill="none" />
+          </g>
+          <g stroke="var(--map-road-dash)" strokeWidth="2.2" strokeDasharray="10 8">
+            <path d={neighborhood.mapStyle.mainRoadA} fill="none" />
+            <path d={neighborhood.mapStyle.mainRoadB} fill="none" />
+          </g>
+          <g
+            transform={`translate(${neighborhood.mapStyle.station.x}, ${neighborhood.mapStyle.station.y})`}
+            style={{
+              pointerEvents: "none",
+            }}
+          >
+            <circle cx="0" cy="0" r="8" fill="var(--card)" stroke="var(--foreground)" strokeWidth="2.5" />
+            <text x="12" y="4" fill="var(--foreground)" fontSize="11.5" fontWeight="800">
+              {neighborhood.mapStyle.station.name}
+            </text>
+          </g>
+          <g
+            style={{
+              pointerEvents: "none",
+            }}
+          >
+            <circle
+              cx={pinCenter.x}
+              cy={pinCenter.y}
+              r={radiusPx}
+              fill="url(#fullRadiusGrad)"
+              stroke="none"
+              style={{
+                transition: "all 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            />
+            <circle
+              cx={pinCenter.x}
+              cy={pinCenter.y}
+              r={radiusPx}
+              fill="none"
+              stroke="var(--card)"
+              strokeOpacity="0.75"
+              strokeWidth="5"
+              vectorEffect="non-scaling-stroke"
+              style={{
+                transition: "all 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            />
+            <circle
+              cx={pinCenter.x}
+              cy={pinCenter.y}
+              r={radiusPx}
+              fill="none"
+              stroke="var(--brand)"
+              strokeOpacity="0.9"
+              strokeWidth="1.8"
+              strokeDasharray="10 7"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              style={{
+                transition: "all 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            />
+            <g
+              transform={`translate(${pinCenter.x}, ${Math.max(26, pinCenter.y - radiusPx - 10)})`}
+              style={{
+                transition: "transform 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
+            >
+              <rect x="-36" y="-11" width="72" height="21" rx="10.5" fill="var(--brand)" />
+              <text x="0" y="3.5" textAnchor="middle" fill="var(--card)" fontSize="10.5" fontWeight="800">
+                반경 {radiusM >= 1000 ? "1km" : `${radiusM}m`}
+              </text>
+            </g>
+          </g>
+          <g
+            style={{
+              pointerEvents: "none",
+            }}
+          >
+            {storesWithDistance
+              .filter((e) => "closed_1y" === e.status)
+              .map((e) => (
+                <circle
+                  cx={e.x}
+                  cy={e.y}
+                  r={e.inside ? 4.2 : 3}
+                  fill={e.inside ? "var(--map-closed)" : "var(--map-closed-light)"}
+                  stroke={e.inside ? "var(--map-closed-stroke)" : "none"}
+                  strokeWidth="1"
+                  opacity={e.inside ? 0.85 : 0.45}
+                  key={e.id}
+                />
+              ))}
+          </g>
+          <g>
+            {storesWithDistance
+              .filter((e) => "active" === e.status)
+              .map((e) => {
+                const s = selectedStore?.id === e.id;
+                return (
+                  <g
+                    onClick={(t) => {
+                      t.stopPropagation();
+                      if (e.inside) {
+                        selectStore(e);
+                      }
+                    }}
+                    className={e.inside ? "cursor-pointer" : ""}
+                    key={e.id}
+                  >
+                    {s && <circle cx={e.x} cy={e.y} r="14" fill="var(--brand-light)" opacity="0.25" />}
+                    <circle
+                      cx={e.x}
+                      cy={e.y}
+                      r={s ? 8 : e.inside ? 6.2 : 4.2}
+                      fill={e.inside ? (s ? "var(--primary)" : "var(--brand-light)") : "var(--map-store-out)"}
+                      stroke="var(--card)"
+                      strokeWidth={e.inside ? 2 : 1.2}
+                      opacity={e.inside ? 1 : 0.52}
+                    />
+                  </g>
+                );
+              })}
+          </g>
+          <g
+            transform={`translate(${pinCenter.x}, ${pinCenter.y}) scale(${1.3 / scaleX})`}
+            style={{
+              transition: "transform 250ms cubic-bezier(0.22, 1, 0.36, 1)",
+              pointerEvents: "none",
+            }}
+          >
+            <ellipse cx="0" cy="0" rx="7" ry="2.6" fill="var(--foreground)" opacity="0.22" />
+            <circle cx="0" cy="0" r="2.4" fill="var(--brand)" stroke="var(--card)" strokeWidth="1.2" />
+            <g filter="url(#fullPinShadow)">
+              <path
+                d="M 0 -2 C -2.2 -8.5 -12 -14.5 -12 -24 A 12 12 0 1 1 12 -24 C 12 -14.5 2.2 -8.5 0 -2 Z"
+                fill="var(--brand)"
+                stroke="var(--card)"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+            </g>
+            <circle cx="0" cy="-24" r="4.6" fill="var(--card)" />
+          </g>
+        </svg>
+      )}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
           <button
@@ -371,6 +401,14 @@ export function ExploreMapView({
               </button>
             ))}
           </div>
+          {naverFailed && (
+            <span
+              role="status"
+              className="px-3 py-1.5 rounded-full bg-white/95 backdrop-blur border border-input shadow-md text-[13px] font-bold text-muted-foreground"
+            >
+              네이버지도를 불러오지 못해 예시 지도를 보여 줘요
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 pointer-events-auto">
           {pinMoved && (
