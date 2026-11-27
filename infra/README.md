@@ -81,6 +81,44 @@ az role assignment create --assignee $APP_PRINCIPAL --role "Key Vault Secrets Us
 
 비밀 값은 Key Vault 참조로 Container Apps에 연결한다(`az containerapp secret set ... keyvaultref:<비밀 URL>,identityref:system`).
 
+## 4-1. 소셜 로그인 앱·비밀 값 (구글·카카오)
+
+SCRUM-172. 테스트 용도의 개발자 앱을 등록하고 비밀 값은 Key Vault(`kv-jjcs`)에만 둔다. 콘솔 등록은 사람이 직접 하고, Key Vault 값 추가는 AX 담당 승인 후 한다.
+
+**돌아올 주소(콜백).** API의 A27 경로다. 공급자 콘솔에 정확히 이 값을 넣는다.
+
+| 공급자 | 등록할 주소 |
+| --- | --- |
+| 구글 | `https://<API 호스트>/api/v1/auth/google/callback` |
+| 카카오 | `https://<API 호스트>/api/v1/auth/kakao/callback` |
+
+`<API 호스트>`는 `az containerapp show -n ${PREFIX}-api -g $RG --query properties.configuration.ingress.fqdn -o tsv` 값이다. 호스트가 바뀌면 두 콘솔의 주소도 함께 고친다.
+
+**콘솔 설정.**
+- 구글: OAuth 클라이언트(웹 애플리케이션)를 만들고 위 주소를 승인된 리디렉션 URI에 넣는다. 동의 화면은 테스트 상태로 두고 팀원을 테스트 사용자로 추가한다. 요청 범위는 `openid`만 쓴다.
+- 카카오: 앱을 만들고 카카오 로그인과 OpenID Connect를 켠다. 위 주소를 Redirect URI에 넣고 동의 항목은 `openid`만 쓴다. 팀원을 테스트 사용자로 추가한다.
+
+**설정 이름.** 값은 문서·레포·대화에 적지 않는다. Key Vault 비밀 이름과 Container Apps 환경 변수 이름은 다음과 같다.
+
+| Key Vault 비밀 | 환경 변수 | 내용 |
+| --- | --- | --- |
+| `google-client-id` | `GOOGLE_CLIENT_ID` | 구글 OAuth 클라이언트 ID |
+| `google-client-secret` | `GOOGLE_CLIENT_SECRET` | 구글 OAuth 클라이언트 시크릿 |
+| `kakao-client-id` | `KAKAO_CLIENT_ID` | 카카오 REST API 키 |
+| `kakao-client-secret` | `KAKAO_CLIENT_SECRET` | 카카오 클라이언트 시크릿 |
+
+```bash
+# 값은 터미널에서 직접 입력한다 (명령 기록에 남기지 않도록 프롬프트로 받는다)
+read -rs -p "google client secret: " V; echo
+az keyvault secret set --vault-name kv-jjcs -n google-client-secret --value "$V"; unset V
+az containerapp secret set -n ${PREFIX}-api -g $RG \
+  --secrets google-client-secret=keyvaultref:<비밀 URL>,identityref:system
+az containerapp update -n ${PREFIX}-api -g $RG \
+  --set-env-vars GOOGLE_CLIENT_SECRET=secretref:google-client-secret
+```
+
+앱이 이 값을 읽는 설정 항목(`backend/app/config.py`)은 SCRUM-178에서 위 환경 변수 이름으로 추가한다. 로그인 후 돌아갈 허용 주소 목록은 비밀이 아니므로 178에서 정한다.
+
 ## 5. 학습 — Azure ML (최소 노드 0)
 
 ```bash
