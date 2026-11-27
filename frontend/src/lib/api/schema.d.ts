@@ -204,6 +204,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/diagnoses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 진단 목록 (A10)
+         * @description `created_at` 내림차순, 같으면 `id` 내림차순. 잘못된 커서는 422다.
+         */
+        get: operations["list_diagnoses_api_v1_diagnoses_get"];
+        put?: never;
+        /**
+         * 진단 생성 (A09)
+         * @description 행정동은 서버가 좌표로 판정한다. 서울 밖이면 400 `out_of_service_area`다.
+         */
+        post: operations["create_diagnosis_api_v1_diagnoses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnoses/{diagnosis_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 진단 상세 (A11)
+         * @description 다른 사용자의 진단이나 삭제 요청했거나 만료된 진단은 404다.
+         */
+        get: operations["get_diagnosis_api_v1_diagnoses__diagnosis_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -239,6 +283,18 @@ export interface components {
             /** Items */
             items: components["schemas"]["CategoryItem"][];
         };
+        /**
+         * DataBasis
+         * @description 쓰지 않았거나 없는 자료는 null이다.
+         */
+        DataBasis: {
+            /** Stores */
+            stores: string | null;
+            /** Commercial Quarter */
+            commercial_quarter: string | null;
+            /** Population Quarter */
+            population_quarter: string | null;
+        };
         /** DbHealthResponse */
         DbHealthResponse: {
             /**
@@ -255,6 +311,205 @@ export interface components {
              */
             status: "deleting";
         };
+        /** DiagnosisContractSummary */
+        DiagnosisContractSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "needs_review" | "confirmed" | "failed";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * DiagnosisCosts
+         * @description 저장한 원래 입력. 월세 슬라이더를 다시 계산할 때 쓴다.
+         */
+        DiagnosisCosts: {
+            /** Deposit */
+            deposit: number;
+            /** Monthly Rent */
+            monthly_rent: number;
+            /** Rent Vat Included */
+            rent_vat_included: boolean;
+            /** Management Fee */
+            management_fee: number;
+            /** Labor Cost */
+            labor_cost: number;
+            /** Other Fixed Cost */
+            other_fixed_cost: number;
+            /** Variable Cost Rate */
+            variable_cost_rate: number;
+            /** Expected Monthly Sales */
+            expected_monthly_sales: number | null;
+            /** Key Money */
+            key_money: number;
+            /** Facility Cost */
+            facility_cost: number;
+        };
+        /** DiagnosisCostsInput */
+        DiagnosisCostsInput: {
+            /**
+             * Deposit
+             * @default 0
+             */
+            deposit: number;
+            /**
+             * Monthly Rent
+             * @example 2500000
+             */
+            monthly_rent: number;
+            /** Rent Vat Included */
+            rent_vat_included: boolean;
+            /**
+             * Management Fee
+             * @default 0
+             */
+            management_fee: number;
+            /** Labor Cost */
+            labor_cost: number;
+            /** Other Fixed Cost */
+            other_fixed_cost: number;
+            /**
+             * Variable Cost Rate
+             * @description 0–0.95, 소수 넷째 자리까지
+             * @example 0.4
+             */
+            variable_cost_rate: number;
+            /**
+             * Expected Monthly Sales
+             * @description 사용자 입력만 쓴다. 없으면 월손익·감당 가능한 월세·예상 손실은 null
+             */
+            expected_monthly_sales?: number | null;
+            /**
+             * Key Money
+             * @default 0
+             */
+            key_money: number;
+            /**
+             * Facility Cost
+             * @default 0
+             */
+            facility_cost: number;
+        };
+        /** DiagnosisCreateRequest */
+        DiagnosisCreateRequest: {
+            /**
+             * Address
+             * @example 예시 주소
+             */
+            address: string;
+            /**
+             * Lat
+             * @example 37.5665
+             */
+            lat: number;
+            /**
+             * Lng
+             * @example 126.978
+             */
+            lng: number;
+            /**
+             * Category Id
+             * @example cafe
+             */
+            category_id: string;
+            /**
+             * Area Sqm
+             * @description 1년 모델의 입력. 없으면 1년은 km_baseline
+             * @example 33
+             */
+            area_sqm?: number | null;
+            costs: components["schemas"]["DiagnosisCostsInput"];
+        };
+        /** DiagnosisDetailResponse */
+        DiagnosisDetailResponse: {
+            /**
+             * Id
+             * Format: uuid
+             * @example 00000000-0000-4000-8000-000000000001
+             */
+            id: string;
+            /** Address */
+            address: string;
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Category Id */
+            category_id: string;
+            /** Dong Code */
+            dong_code: string;
+            /** Dong Name */
+            dong_name: string;
+            /** Gu Name */
+            gu_name: string;
+            /** Area Sqm */
+            area_sqm: number | null;
+            costs: components["schemas"]["DiagnosisCosts"];
+            survival: components["schemas"]["SurvivalResponse"];
+            /** Factors */
+            factors: components["schemas"]["FactorResponse"][];
+            simulation: components["schemas"]["SimulationResponse"];
+            /**
+             * Contracts
+             * @description 최신순. 없으면 빈 배열
+             */
+            contracts: components["schemas"]["DiagnosisContractSummary"][];
+            data_basis: components["schemas"]["DataBasis"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** DiagnosisListItem */
+        DiagnosisListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Address */
+            address: string;
+            /** Category Id */
+            category_id: string;
+            /** Dong Name */
+            dong_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** DiagnosisListResponse */
+        DiagnosisListResponse: {
+            /** Items */
+            items: components["schemas"]["DiagnosisListItem"][];
+            /**
+             * Next Cursor
+             * @description 마지막 쪽은 null
+             */
+            next_cursor: string | null;
+        };
         /** ErrorResponse */
         ErrorResponse: {
             /** Detail */
@@ -263,6 +518,24 @@ export interface components {
             }[];
             /** Code */
             code: string;
+        };
+        /**
+         * FactorResponse
+         * @description 인과관계가 아니다. risk, positive 각각 최대 3개다.
+         */
+        FactorResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "risk" | "positive";
+            /**
+             * Contribution
+             * @description 확률이 아닌 로그 오즈 단위의 크기
+             */
+            contribution: number;
         };
         /** HealthResponse */
         HealthResponse: {
@@ -345,6 +618,36 @@ export interface components {
             /** Supported */
             supported: boolean;
         };
+        /** SimulationResponse */
+        SimulationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Source
+             * @description 진단 상세에는 항상 initial 계산을 준다
+             * @enum {string}
+             */
+            source: "initial" | "user";
+            /** Break Even Sales */
+            break_even_sales: number;
+            /** Monthly Profit */
+            monthly_profit: number | null;
+            /**
+             * Affordable Rent
+             * @description 부가세를 뺀 공급가. 음수도 그대로 준다
+             */
+            affordable_rent: number | null;
+            /**
+             * Estimated Loss
+             * @description 종료 조건이 없으면 null
+             */
+            estimated_loss: number | null;
+            /** Assumptions */
+            assumptions: string[];
+        };
         /** StoreItem */
         StoreItem: {
             /**
@@ -415,6 +718,53 @@ export interface components {
              * @description 가까운 순, 같으면 ID 순
              */
             items: components["schemas"]["StoreItem"][];
+        };
+        /** SurvivalPointResponse */
+        SurvivalPointResponse: {
+            /**
+             * Month
+             * @enum {integer}
+             */
+            month: 12 | 24 | 36;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "km_baseline" | "logistic" | "lightgbm";
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "location_category" | "dong_category" | "seoul_category";
+            /** Probability */
+            probability: number;
+            /** Lower */
+            lower: number | null;
+            /** Upper */
+            upper: number | null;
+            /**
+             * Baseline
+             * @description 서울 같은 업종 기준선
+             */
+            baseline: number | null;
+        };
+        /**
+         * SurvivalResponse
+         * @description 자료가 부족하면 available은 false이고 points는 빈 배열이며 reason에 사유를 넣는다.
+         */
+        SurvivalResponse: {
+            /** Available */
+            available: boolean;
+            /** Model Version */
+            model_version: string | null;
+            /** Points */
+            points: components["schemas"]["SurvivalPointResponse"][];
+            /** Interval Level */
+            interval_level: number | null;
+            /** Sample Size */
+            sample_size: number | null;
+            /** Reason */
+            reason: string | null;
         };
         /** TokenRequest */
         TokenRequest: {
@@ -1006,6 +1356,202 @@ export interface operations {
             };
             /** @description Bad Request */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_diagnoses_api_v1_diagnoses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description 이전 응답의 `next_cursor` */
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosisListResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_diagnosis_api_v1_diagnoses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiagnosisCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosisDetailResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_diagnosis_api_v1_diagnoses__diagnosis_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnosis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiagnosisDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
