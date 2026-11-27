@@ -1,6 +1,6 @@
-"""로그인 업무 규칙. A26·A27은 여기서 처리하고 A01·A29는 SCRUM-181에서 채운다.
+"""로그인 업무 규칙 (A01, A26, A27, A29)과 세션 토큰 확인.
 
-state와 1회용 코드는 SHA-256 해시만 저장한다. 공급자 토큰은 저장하지 않고,
+state, 1회용 코드, 세션 토큰은 SHA-256 해시만 저장한다. 공급자 토큰은 저장하지 않고,
 ID 토큰에서는 사용자 식별값(sub)만 쓴다.
 """
 
@@ -14,7 +14,6 @@ import uuid
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import NoReturn
 from urllib.parse import urlencode
 
 import httpx2
@@ -29,10 +28,12 @@ from app.auth.constants import (
     CODE_TTL,
     ID_TOKEN_ALGORITHM,
     PROVIDERS,
+    SESSION_TTL,
     STATE_TTL,
     Provider,
 )
-from app.auth.models import LoginAttempt
+from app.auth.models import LoginAttempt, UserSession
+from app.auth.schemas import TokenResponse
 from app.config import settings
 from app.errors import AppError
 from app.users.models import User
@@ -62,18 +63,6 @@ class Claim:
 
 class ProviderError(Exception):
     """공급자 호출이나 ID 토큰 검증에 실패했다. 메시지에는 입력값을 넣지 않는다."""
-
-
-def _not_implemented() -> NoReturn:
-    raise AppError(503, "service_unavailable", "로그인 기능을 아직 사용할 수 없습니다")
-
-
-async def issue_token() -> NoReturn:
-    _not_implemented()
-
-
-async def logout() -> NoReturn:
-    _not_implemented()
 
 
 # 공통
@@ -391,3 +380,109 @@ async def finish_login(
     if not completed:
         return _return_url(claim.client, error="account_deleting")
     return _return_url(claim.client, code=exchange_code)
+
+
+# A01
+
+
+def _invalid_code() -> AppError:
+    # 없는 코드, 재사용, 만료, verifier 불일치를 구분해 알려 주지 않는다.
+    return AppError(400, "invalid_login_code", "로그인 코드가 올바르지 않거나 만료됐습니다")
+
+
+async def consume_code(
+    db: AsyncSession, code_hash: str, code_challenge: str, token_hash: str, now: datetime
+) -> datetime:
+    """1회용 코드를 한 번만 사용 처리하고 세션을 만든다. 세션 만료 시각을 돌려준다."""
+    user_id = await db.scalar(
+        update(LoginAttempt)
+        .where(
+            LoginAttempt.exchange_code_hash == code_hash,
+            # verifier가 틀린 요청은 코드를 소비하지 않도록 같은 조건에서 비교한다.
+            LoginAttempt.code_challenge == code_challenge,
+            LoginAttempt.consumed_at.is_(None),
+            LoginAttempt.code_expires_at > now,
+            LoginAttempt.user_id.is_not(None),
+        )
+        .values(consumed_at=now)
+        .returning(LoginAttempt.user_id)
+    )
+    if user_id is None:
+        await db.rollback()
+        raise _invalid_code()
+    # 커밋할 때까지 사용자 행을 잠가, 동시에 온 탈퇴 요청이 새 세션까지 폐기하게 한다.
+    user = (
+        await db.execute(
+            select(User.deletion_requested_at).where(User.id == user_id).with_for_update(read=True)
+        )
+    ).one_or_none()
+    if user is None:
+        await db.rollback()
+        raise _invalid_code()
+    if user.deletion_requested_at is not None:
+        # 코드는 사용한 것으로 남긴다.
+        await db.commit()
+        raise AppError(409, "account_deleting", "탈퇴 처리 중인 계정입니다")
+    expires_at = now + SESSION_TTL
+    db.add(
+        UserSession(user_id=user_id, token_hash=token_hash, created_at=now, expires_at=expires_at)
+    )
+    await db.commit()
+    return expires_at
+
+
+async def exchange_code(
+    db: AsyncSession, code: str, code_verifier: str, now: datetime
+) -> TokenResponse:
+    """세션 토큰 원본은 이 응답에만 담고 DB에는 해시만 저장한다."""
+    try:
+        code_hash, code_challenge = _hash(code), _s256(code_verifier)
+    except UnicodeEncodeError:
+        # 짝이 없는 서로게이트 문자는 해시할 수 없다. 원래 예외에는 입력값이 들어 있다.
+        raise _invalid_code() from None
+    token = secrets.token_urlsafe(32)
+    expires_at = await _db(consume_code(db, code_hash, code_challenge, _hash(token), now))
+    return TokenResponse(token=token, expires_at=expires_at)
+
+
+# 세션 확인과 A29
+
+
+async def _find_session(db: AsyncSession, token_hash: str, now: datetime):
+    row = (
+        await db.execute(
+            select(UserSession.user_id, UserSession.id.label("session_id"))
+            .join(User, User.id == UserSession.user_id)
+            .where(
+                UserSession.token_hash == token_hash,
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > now,
+                User.deletion_requested_at.is_(None),
+            )
+        )
+    ).one_or_none()
+    # 라우트가 외부 응답을 기다리는 동안 DB 연결을 잡지 않도록 조회 트랜잭션을 끝낸다.
+    await db.rollback()
+    return row
+
+
+async def find_login(
+    db: AsyncSession, token: str, now: datetime
+) -> tuple[uuid.UUID, uuid.UUID] | None:
+    """쓸 수 있는 세션이면 (user_id, session_id), 아니면 None."""
+    row = await _db(_find_session(db, _hash(token), now))
+    return None if row is None else (row.user_id, row.session_id)
+
+
+async def _revoke(db: AsyncSession, session_id: uuid.UUID, now: datetime) -> None:
+    await db.execute(
+        update(UserSession)
+        .where(UserSession.id == session_id, UserSession.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    await db.commit()
+
+
+async def revoke_session(db: AsyncSession, session_id: uuid.UUID, now: datetime) -> None:
+    """이 세션만 폐기한다. 이미 폐기했으면 처음 시각을 그대로 둔다."""
+    await _db(_revoke(db, session_id, now))

@@ -44,6 +44,7 @@ CLOCK_SKEW = timedelta(seconds=30)
 
 STATE_TTL = timedelta(minutes=10)
 CODE_TTL = timedelta(seconds=60)
+SESSION_TTL = timedelta(days=30)
 
 # 공급자 호출 한 번의 제한 시간(초)
 PROVIDER_TIMEOUT_SECONDS = 10.0

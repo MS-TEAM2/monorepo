@@ -1,11 +1,18 @@
-"""내 계정 API 명세(A02, A28, A30)와 빈 라우트의 동작."""
+"""내 계정 API 명세(A02, A28, A30), A28의 응답, A02·A30 빈 라우트의 동작."""
+
+import uuid
+from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.deps import get_db
 from app.main import app
 
 URL = "/api/v1/users/me"
+USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000010")
 
 
 @pytest.fixture
@@ -51,9 +58,8 @@ def test_requires_bearer_token(client, method, header):
     assert response.headers["WWW-Authenticate"] == "Bearer"
 
 
-@pytest.mark.parametrize("method", ["GET", "DELETE"])
-def test_stub_never_succeeds(client, method):
-    response = client.request(method, URL, headers={"Authorization": "Bearer any"})
+def test_delete_stub_never_succeeds(client):
+    response = client.delete(URL, headers={"Authorization": "Bearer any"})
 
     assert response.status_code == 503
     assert response.json()["code"] == "service_unavailable"
@@ -106,3 +112,84 @@ def test_deleting_response_is_shared_by_all_delete_apis():
     }
 
     assert refs == {"#/components/schemas/DeletingResponse"}
+
+
+# A28 응답
+
+
+class FakeResult:
+    def __init__(self, row):
+        self.row = row
+
+    def one_or_none(self):
+        return self.row
+
+
+class FakeDb:
+    def __init__(self, *results):
+        self.results = list(results)
+
+    async def execute(self, statement):
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return FakeResult(result)
+
+    async def rollback(self):
+        pass
+
+
+@pytest.fixture
+def use_db():
+    def use(*results):
+        async def fake_db():
+            yield FakeDb(*results)
+
+        app.dependency_overrides[get_db] = fake_db
+
+    yield use
+    app.dependency_overrides.clear()
+
+
+def login_row():
+    return SimpleNamespace(user_id=USER_ID, session_id=uuid.uuid4())
+
+
+def get_me(client):
+    return client.get(URL, headers={"Authorization": "Bearer any-token"})
+
+
+def test_me_returns_only_public_fields(client, use_db):
+    created_at = datetime(2026, 11, 25, tzinfo=UTC)
+    use_db(
+        login_row(),
+        SimpleNamespace(provider="kakao", created_at=created_at, provider_subject="subject-1"),
+    )
+
+    response = get_me(client)
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json() == {
+        "id": str(USER_ID),
+        "provider": "kakao",
+        "created_at": "2026-11-25T00:00:00Z",
+    }
+
+
+def test_me_is_401_when_user_disappears_after_authentication(client, use_db):
+    use_db(login_row(), None)
+
+    response = get_me(client)
+
+    assert (response.status_code, response.json()["code"]) == (401, "unauthorized")
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_me_database_error_is_503(client, use_db):
+    use_db(login_row(), SQLAlchemyError("secret-database-detail"))
+
+    response = get_me(client)
+
+    assert (response.status_code, response.json()["code"]) == (503, "service_unavailable")
+    assert "secret-database-detail" not in response.text

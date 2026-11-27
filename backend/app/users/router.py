@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.deps import BearerToken
+from app.deps import BearerToken, CurrentUser, DbSession
 from app.errors import error_responses
 from app.schemas import DELETING_RESPONSE
 from app.users import service
@@ -15,8 +15,8 @@ router = APIRouter(prefix="/users", tags=["users"])
     responses=error_responses(401, 429, 503),
     summary="내 정보 (A28)",
 )
-async def get_me(token: BearerToken) -> MeResponse:
-    return await service.get_me()
+async def get_me(user: CurrentUser, db: DbSession) -> MeResponse:
+    return await service.get_me(db, user.user_id)
 
 
 @router.delete(
