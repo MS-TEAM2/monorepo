@@ -147,6 +147,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/me/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 내 데이터 모두 삭제 (A02)
+         * @description 계정과 로그인은 유지한다. 자료 조회를 즉시 막고 처리 중인 분석을 취소한 뒤 원본·OCR 보관분과 진단·계산·계약·저장한 자리를 지운다. 바로 끝나면 204, 삭제가 남으면 202 `{"status": "deleting"}`이며 정리 작업이 재시도한다. 삭제 요청을 기록하지 못했을 때만 503이다.
+         */
+        delete: operations["delete_my_data_api_v1_users_me_data_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/categories": {
         parameters: {
             query?: never;
@@ -262,7 +282,11 @@ export interface paths {
         get: operations["get_diagnosis_api_v1_diagnoses__diagnosis_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 진단 삭제 (A12)
+         * @description 즉시 조회를 막고 진단과 계산(이 진단에 연결된 계약으로 만든 계산 포함)을 지운다. 연결된 계약은 지우지 않고 연결만 푼다(`diagnosis_id` null). 계약은 A19나 계약 만료로 지운다. 바로 끝나면 204, 남으면 202이고 이후 조회는 404다. 다른 사용자의 진단이나 이미 삭제 요청했거나 만료된 진단은 404다.
+         */
+        delete: operations["delete_diagnosis_api_v1_diagnoses__diagnosis_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -322,7 +346,11 @@ export interface paths {
         get: operations["get_contract_api_v1_contracts__contract_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * 계약 삭제 (A19)
+         * @description 처리 중이면 취소하고, 원본·OCR 보관분을 지운 뒤 조건·근거·위험 결과와 이 계약으로 만든 계산을 삭제한다. 연결된 진단은 지우지 않는다. 바로 끝나면 204, 남으면 202이고 요청 후 조회는 404다. 다른 사용자의 계약과 이미 삭제 중인 계약은 404다.
+         */
+        delete: operations["delete_contract_api_v1_contracts__contract_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -918,7 +946,10 @@ export interface components {
              */
             status: string;
         };
-        /** DeletingResponse */
+        /**
+         * DeletingResponse
+         * @description 삭제 요청을 받았지만 원본·OCR 보관분 등이 남아 정리 작업이 이어서 지울 때(202).
+         */
         DeletingResponse: {
             /**
              * Status
@@ -2045,6 +2076,60 @@ export interface operations {
             };
         };
     };
+    delete_my_data_api_v1_users_me_data_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_categories_api_v1_categories_get: {
         parameters: {
             query?: never;
@@ -2472,6 +2557,80 @@ export interface operations {
             };
         };
     };
+    delete_diagnosis_api_v1_diagnoses__diagnosis_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                diagnosis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post: {
         parameters: {
             query?: never;
@@ -2670,6 +2829,80 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ContractDetailResponse"];
                 };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_contract_api_v1_contracts__contract_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 삭제가 남아 정리 작업이 이어서 한다 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletingResponse"];
+                };
+            };
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Unauthorized */
             401: {

@@ -6,9 +6,9 @@ import { clearSession } from "@/lib/session";
 /**
  * A02 DELETE /api/v1/users/me/data (Notion API 명세서 3장). 로그인 필요.
  * 계정과 로그인은 유지하고 진단·계산·계약·저장한 자리·원본과 OCR 보관분을 지운다.
- * openapi.yaml 에 아직 없어(SCRUM-89) 명세서대로 적었다. BE 명세가 올라오면 생성 타입으로 바꾼다.
+ * 202 응답 타입은 docs/api/openapi.yaml 에서 생성한 것이다.
  */
-export type DeletingResponse = { status: "deleting" };
+export type DeletingResponse = components["schemas"]["DeletingResponse"];
 
 /** 204 는 본문이 없다(undefined). 예시 응답은 204 를 null 로 흉내 낸다 */
 export type DeletionResponse = DeletingResponse | null | undefined;
