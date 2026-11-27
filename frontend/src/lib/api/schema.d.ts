@@ -348,6 +348,26 @@ export interface paths {
         patch: operations["update_terms_api_v1_contracts__contract_id__terms_patch"];
         trace?: never;
     };
+    "/api/v1/contracts/{contract_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 계약 조건 손익 반영 (A18)
+         * @description 확인을 마친(confirmed) 계약의 조건을 연결된 진단 입력에 반영해 전후 손익과 예상 손실을 계산한다. confirmed가 아니면 409 `contract_not_confirmed`, 실패한 계약은 409 `contract_failed`, 진단에 연결되지 않았으면 409 `contract_not_linked`다. 확인값이 없는 조건은 진단 입력을 유지하고, 확인한 위약금은 예상 손실에, 인상률은 2년차 월세부터 반영한다. `exit`는 직접 입력한 값이 계약값보다 우선하며, before에는 직접 입력한 종료 값만, after에는 확인한 계약값도 적용한다. 여러 번 부르면 계산을 새로 만들고 A16에는 가장 최근 것만 준다. 생존확률은 다시 계산하지 않는다. 다른 사용자의 계약과 취소 중인 계약은 404다.
+         */
+        post: operations["apply_contract_api_v1_contracts__contract_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data-status": {
         parameters: {
             query?: never;
@@ -483,6 +503,44 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * ContractApplyExit
+         * @description A18 종료 조건. 규칙은 A13 `exit`와 같고, 직접 입력한 값이 확인한 계약값보다 우선한다.
+         */
+        ContractApplyExit: {
+            /**
+             * Month
+             * @description 종료 시점(개업 후 개월)
+             * @example 12
+             */
+            month: number;
+            /**
+             * Obligation Months
+             * @description 종료 후 남은 의무 개월 수
+             * @example 6
+             */
+            obligation_months: number;
+            /**
+             * Restoration Cost
+             * @description 없으면 확인한 계약값, 그것도 없으면 0과 가정 표시
+             * @example 5000000
+             */
+            restoration_cost?: number | null;
+            /**
+             * Penalty Amount
+             * @description 없으면 확인한 계약값, 그것도 없으면 0과 가정 표시
+             */
+            penalty_amount?: number | null;
+            /**
+             * Penalty Covers Remaining Rent
+             * @description true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을 표시
+             */
+            penalty_covers_remaining_rent?: boolean | null;
+        };
+        /** ContractApplyRequest */
+        ContractApplyRequest: {
+            exit: components["schemas"]["ContractApplyExit"];
         };
         /**
          * ContractDetailResponse
@@ -2682,6 +2740,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContractDetailResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_contract_api_v1_contracts__contract_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractApplication"];
                 };
             };
             /** @description Unauthorized */
