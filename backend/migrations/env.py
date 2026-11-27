@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, pool
 
 from app.auth import models as _auth_models  # noqa: F401
 from app.config import settings
+from app.contracts import models as _contracts_models  # noqa: F401
 from app.data_status import models as _data_status_models  # noqa: F401
 from app.db import normalize_database_url
 from app.diagnoses import models as _diagnoses_models  # noqa: F401

@@ -1,6 +1,7 @@
 """진단·계산·모델 버전 테이블. 컬럼과 제약은 Notion 테이블 정의서 6·7·9·11장을 따른다.
 
-`simulations.contract_id`는 contracts 테이블이 생기는 SCRUM-133에서 외래 키를 붙인다.
+`simulations.contract_id`는 contracts(app/contracts/models.py)를 가리킨다. 서로 import하면
+순환하므로 문자열로 가리키고, 두 모듈을 모두 불러온 뒤(migrations/env.py) 연결된다.
 """
 
 import uuid
@@ -114,8 +115,10 @@ class Simulation(Base):
     diagnosis_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("diagnoses.id", ondelete="CASCADE"), index=True
     )
-    # 계약 반영 계산일 때만 값이 있다. 외래 키(contracts, CASCADE)는 SCRUM-133에서 붙인다.
-    contract_id: Mapped[uuid.UUID | None]
+    # 계약 반영 계산일 때만 값이 있다. 계약을 지우면 그 계약으로 만든 계산도 지워진다.
+    contract_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("contracts.id", ondelete="CASCADE")
+    )
     source: Mapped[str] = mapped_column(Text)
     # costs(덮어쓴 뒤의 전체 비용), exit(없으면 null), applied_terms(반영한 조건 키)
     inputs: Mapped[dict[str, Any]] = mapped_column(JSONB)
