@@ -47,6 +47,12 @@ az containerapp show -n ${PREFIX}-api -g $RG --query properties.configuration.in
 - **개발 중에는 `--min-replicas 0`.** 발표일에만 `az containerapp update -n ${PREFIX}-api -g $RG --min-replicas 1`, 끝나면 다시 0.
 - 이미지는 GHCR(public)에서 받으므로 레지스트리 자격 증명이 필요 없다. 첫 배포 후 GitHub의 패키지 설정에서 `backend` 패키지를 Public으로 바꾼다.
 - 환경 변수: `az containerapp update -n ${PREFIX}-api -g $RG --set-env-vars 'CORS_ORIGINS=["https://<SWA 호스트>"]'`
+- 계약서 분석의 Azure AI 서비스 엔드포인트도 같은 방법으로 넣는다. 비밀 값이 아니다. 인증은 앱의 관리 ID(`AZURE_CLIENT_ID`)로 하므로 키는 넣지 않는다. 관리 ID에는 `Cognitive Services User` 역할이 있어야 한다.
+
+  | 이름 | 값 (팀 리소스) | 쓰는 곳 |
+  | --- | --- | --- |
+  | `AZURE_DOCINTEL_ENDPOINT` | `https://di-jjcs.cognitiveservices.azure.com/` | OCR (`ai_core.contract.ocr_azure`) |
+  | `AZURE_LANGUAGE_ENDPOINT` | `https://lang-jjcs.cognitiveservices.azure.com/` | 개인정보 탐지 (`ai_core.contract.pii_detect`) |
 
 ## 3. DB — PostgreSQL Flexible Server (B1MS, 32GB)
 
