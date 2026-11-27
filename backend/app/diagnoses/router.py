@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.deps import BearerToken
+from app.deps import BearerToken, CurrentUser, DbSession
 from app.diagnoses import service
 from app.diagnoses.schemas import (
     DiagnosisCreateRequest,
@@ -71,9 +71,9 @@ async def get_diagnosis(token: BearerToken, diagnosis_id: UUID) -> DiagnosisDeta
     ),
 )
 async def create_simulation(
-    token: BearerToken, diagnosis_id: UUID, body: SimulationCreateRequest
+    user: CurrentUser, db: DbSession, diagnosis_id: UUID, body: SimulationCreateRequest
 ) -> SimulationResponse:
-    return await service.create_simulation()
+    return await service.create_user_simulation(db, user.user_id, diagnosis_id, body)
 
 
 @router.delete(
