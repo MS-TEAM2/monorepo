@@ -18,7 +18,7 @@ export const UNLINK_GUIDE: readonly { provider: string; steps: string }[] = [
 
 export function UnlinkGuide() {
   return (
-    <div className="p-3 rounded-xl bg-secondary border border-border space-y-1 text-xs">
+    <div className="space-y-1 rounded-2xl border border-border bg-secondary p-4 text-sm">
       <p className="font-bold text-foreground">구글·카카오 연결 해제</p>
       <p className="text-ink-500">탈퇴해도 구글·카카오 쪽 연결은 남아요. 아래에서 직접 해제할 수 있어요.</p>
       <ul className="list-disc pl-4 text-foreground space-y-0.5">
@@ -38,11 +38,11 @@ export function WithdrawResult({ outcome }: { outcome: DeletionOutcome }) {
   const Icon = done ? CircleCheck : Hourglass;
   return (
     <div className="space-y-3">
-      <div role="status" className="flex gap-2 p-3 rounded-xl bg-secondary border border-border">
-        <Icon className="w-4 h-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+      <div role="status" className="flex gap-2 rounded-2xl border border-border bg-secondary p-4">
+        <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
         <div className="space-y-0.5">
-          <p className="text-xs font-bold text-foreground">{done ? "탈퇴했어요" : "탈퇴 처리 중"}</p>
-          <p className="text-xs text-ink-500">
+          <p className="text-sm font-bold text-foreground">{done ? "탈퇴했어요" : "탈퇴 처리 중"}</p>
+          <p className="text-sm text-ink-500">
             {done
               ? "모든 로그인이 끝났고 계정과 자료를 삭제했어요."
               : "모든 로그인이 끝났어요. 남은 자료는 자동으로 이어서 지워요. 처리가 끝나기 전에는 다시 가입할 수 없어요."}
@@ -58,7 +58,7 @@ export function WithdrawResult({ outcome }: { outcome: DeletionOutcome }) {
 export function SignedInAs({ me }: { me: Me }) {
   const joined = me.created_at ? me.created_at.slice(0, 10) : null;
   return (
-    <p className="text-xs text-foreground">
+    <p className="text-sm text-foreground">
       <strong>{PROVIDER_LABEL[me.provider]}</strong>로 로그인했어요{joined ? ` · 가입 ${joined}` : ""}
     </p>
   );
@@ -70,7 +70,14 @@ type Done = { kind: "logged_out"; serverConfirmed: boolean } | { kind: "withdraw
  * S11 계정 영역 (SCRUM-177): 로그인 수단, 로그아웃, 회원 탈퇴. 로그인 전에는 로그인 버튼만 보인다.
  * onCleared: 로그아웃·탈퇴 뒤 이 브라우저의 화면 상태(진단 입력·계약서 단계)를 비운다.
  */
-export function AccountSection({ onCleared }: { onCleared?: () => void }) {
+export function AccountSection({
+  onCleared,
+  onWithdrawn,
+}: {
+  onCleared?: () => void;
+  /** 탈퇴를 접수한 뒤에만 부른다. 이 브라우저에 남은 기록을 지울 때 쓴다 */
+  onWithdrawn?: () => void;
+}) {
   const session = useSessionStatus();
   const [me, setMe] = useState<Me | null>(null);
   const [meError, setMeError] = useState<ApiErrorKind | null>(null);
@@ -109,6 +116,7 @@ export function AccountSection({ onCleared }: { onCleared?: () => void }) {
     try {
       setDone({ kind: "withdrawn", outcome: await withdraw() });
       onCleared?.();
+      onWithdrawn?.();
     } catch (error) {
       setActionError(toErrorKind(error));
     } finally {
@@ -117,8 +125,8 @@ export function AccountSection({ onCleared }: { onCleared?: () => void }) {
   }
 
   return (
-    <section aria-labelledby="account" className="bg-white rounded-[24px] border border-border shadow-sm p-5 space-y-3">
-      <h3 id="account" className="text-base font-extrabold text-foreground">
+    <section aria-labelledby="account" className="space-y-3 rounded-3xl border border-border bg-card p-5 shadow-sm">
+      <h3 id="account" className="text-lg font-extrabold text-foreground">
         내 계정
       </h3>
 
@@ -127,19 +135,19 @@ export function AccountSection({ onCleared }: { onCleared?: () => void }) {
       ) : session !== "logged_in" ? (
         <>
           {done?.kind === "logged_out" && (
-            <p role="status" className="text-xs font-bold text-success-500">
+            <p role="status" className="text-sm font-bold text-success-500">
               로그아웃했어요.
               {!done.serverConfirmed && " 서버 확인은 못 했지만 이 기기에서는 로그아웃됐어요."}
             </p>
           )}
-          <p className="text-xs text-ink-500">
+          <p className="text-sm text-ink-500">
             로그인하면 진단·계약 자료를 계정에 보관하고 로그아웃·데이터 삭제·회원 탈퇴를 할 수 있어요.
           </p>
           <Link
             href="/login"
-            className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-xl bg-foreground hover:bg-ink-hover text-white text-xs font-extrabold transition"
+            className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-2xl bg-primary px-5 font-extrabold text-primary-foreground transition-colors hover:bg-primary-hover"
           >
-            <LogIn className="w-3.5 h-3.5" aria-hidden="true" />
+            <LogIn className="size-4" aria-hidden="true" />
             로그인
           </Link>
         </>
@@ -166,8 +174,8 @@ export function AccountSection({ onCleared }: { onCleared?: () => void }) {
           )}
 
           {confirming ? (
-            <div className="space-y-2 p-3 rounded-xl bg-destructive-soft border border-destructive-line">
-              <p className="text-xs font-bold text-destructive-700">
+            <div className="space-y-3 rounded-2xl border border-destructive-line bg-destructive-soft p-4">
+              <p className="text-sm font-bold text-destructive-700">
                 회원 탈퇴할까요? 모든 기기의 로그인이 바로 끝나고, 계정과 진단·계약·저장한 자리 자료를 모두 삭제해요.
                 되돌릴 수 없어요.
               </p>
@@ -176,14 +184,14 @@ export function AccountSection({ onCleared }: { onCleared?: () => void }) {
                 <button
                   type="button"
                   onClick={() => void onWithdraw()}
-                  className="min-h-11 px-3 py-1.5 rounded-lg bg-destructive text-white text-xs font-bold"
+                  className="min-h-11 rounded-xl bg-destructive px-4 text-sm font-bold text-white"
                 >
                   예, 탈퇴
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirming(false)}
-                  className="min-h-11 px-3 py-1.5 rounded-lg bg-white border border-line-strong text-xs font-bold text-ink-600"
+                  className="min-h-11 rounded-xl border border-input bg-card px-4 text-sm font-bold text-ink-600"
                 >
                   취소
                 </button>
@@ -195,18 +203,18 @@ export function AccountSection({ onCleared }: { onCleared?: () => void }) {
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void onLogout()}
-                className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-line-strong text-xs font-extrabold text-ink-600 disabled:opacity-50"
+                className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-2xl border border-input bg-card px-4 font-bold text-ink-600 transition-colors hover:border-brand-light disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
+                <LogOut className="size-4" aria-hidden="true" />
                 {busy === "logout" ? "로그아웃하는 중…" : "로그아웃"}
               </button>
               <button
                 type="button"
                 disabled={busy !== null}
                 onClick={() => setConfirming(true)}
-                className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-xl border border-destructive-line bg-destructive-soft text-xs font-extrabold text-destructive disabled:opacity-50"
+                className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-2xl border border-destructive-line bg-destructive-soft px-4 font-bold text-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <UserX className="w-3.5 h-3.5" aria-hidden="true" />
+                <UserX className="size-4" aria-hidden="true" />
                 {busy === "withdraw" ? "탈퇴하는 중…" : "회원 탈퇴"}
               </button>
             </div>
