@@ -33,7 +33,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, insert
 
-from ai_core.ingest.categories import CATEGORIES, UPTAE_TO_CATEGORY, mapping_status
+from ai_core.ingest.categories import CATEGORIES, mapping_status, uptae_category
 from ai_core.ingest.licenses import STORE_COLUMNS, CleanResult, Source
 
 BATCH_SIZE = 5000
@@ -169,7 +169,7 @@ def _upsert_category_mappings(conn, source: Source, source_types: pd.Series) -> 
             {
                 "source": source.name,
                 "source_type": t,
-                "category_id": UPTAE_TO_CATEGORY.get(t),
+                "category_id": uptae_category(t),
                 "mapping_status": mapping_status(t),
             }
         )
