@@ -11,7 +11,7 @@ type NavLinksProps = {
   items: readonly Pick<NavItem, "href" | "label">[];
 };
 
-/** 헤더 메뉴 링크. 현재 화면은 채운 알약 모양으로 강조하고 aria-current="page"를 붙인다. */
+/** 헤더 메뉴 링크. 글자만 두고 현재 화면은 주황 글자로 강조하며 aria-current="page"를 붙인다. */
 export function NavLinks({ items }: NavLinksProps) {
   const pathname = usePathname() ?? "/";
   const { prompt } = useRequireLogin();
@@ -30,10 +30,8 @@ export function NavLinks({ items }: NavLinksProps) {
               if (prompt(item.href)) event.preventDefault();
             }}
             className={cn(
-              "inline-flex min-h-11 items-center rounded-full px-4 text-[15px] font-bold whitespace-nowrap transition-colors",
-              active
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-primary-soft hover:text-primary-hover",
+              "inline-flex min-h-11 items-center px-2 text-[17px] font-bold whitespace-nowrap transition-colors",
+              active ? "text-primary" : "text-foreground hover:text-primary",
             )}
           >
             {item.label}
