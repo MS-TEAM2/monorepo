@@ -1,4 +1,4 @@
-"""내 계정 API 명세(A28, A30)와 빈 라우트의 동작."""
+"""내 계정 API 명세(A02, A28, A30)와 빈 라우트의 동작."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -57,3 +57,52 @@ def test_stub_never_succeeds(client, method):
 
     assert response.status_code == 503
     assert response.json()["code"] == "service_unavailable"
+
+
+# A02 내 데이터 모두 삭제
+
+DATA_URL = "/api/v1/users/me/data"
+
+
+def test_delete_my_data_spec():
+    operation = app.openapi()["paths"][DATA_URL]["delete"]
+
+    assert set(operation["responses"]) == {"202", "204", "401", "429", "503"}
+    assert operation["security"] == [{"HTTPBearer": []}]
+    schema = operation["responses"]["202"]["content"]["application/json"]["schema"]
+    assert schema == {"$ref": "#/components/schemas/DeletingResponse"}
+    # 계정은 유지한다(A30 회원 탈퇴와 다름).
+    assert "계정과 로그인은 유지" in operation["description"]
+
+
+@pytest.mark.parametrize("header", [None, "Basic abc", "Bearer"])
+def test_delete_my_data_requires_bearer_token(client, header):
+    headers = {"Authorization": header} if header else {}
+
+    response = client.delete(DATA_URL, headers=headers)
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "unauthorized"
+
+
+def test_delete_my_data_is_not_implemented_yet(client):
+    response = client.delete(DATA_URL, headers={"Authorization": "Bearer any"})
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "service_unavailable"
+
+
+def test_deleting_response_is_shared_by_all_delete_apis():
+    # 도메인마다 따로 만들지 않고 app/schemas.py의 한 모델을 쓴다.
+    paths = app.openapi()["paths"]
+    deletes = [
+        paths["/api/v1/users/me"]["delete"],
+        paths[DATA_URL]["delete"],
+        paths["/api/v1/diagnoses/{diagnosis_id}"]["delete"],
+        paths["/api/v1/contracts/{contract_id}"]["delete"],
+    ]
+    refs = {
+        op["responses"]["202"]["content"]["application/json"]["schema"]["$ref"] for op in deletes
+    }
+
+    assert refs == {"#/components/schemas/DeletingResponse"}

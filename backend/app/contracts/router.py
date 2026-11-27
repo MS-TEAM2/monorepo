@@ -12,6 +12,7 @@ from app.contracts.schemas import (
 )
 from app.deps import BearerToken
 from app.errors import error_responses
+from app.schemas import DELETING_RESPONSE
 
 router = APIRouter(prefix="/contracts", tags=["contracts"])
 
@@ -126,3 +127,18 @@ async def apply_contract(
     token: BearerToken, contract_id: UUID, body: ContractApplyRequest
 ) -> ContractApplication:
     return await service.apply_contract()
+
+
+@router.delete(
+    "/{contract_id}",
+    status_code=204,
+    responses={**DELETING_RESPONSE, **error_responses(401, 404, 422, 429, 503)},
+    summary="계약 삭제 (A19)",
+    description=(
+        "처리 중이면 취소하고, 원본·OCR 보관분을 지운 뒤 조건·근거·위험 결과와 이 계약으로 만든 "
+        "계산을 삭제한다. 연결된 진단은 지우지 않는다. 바로 끝나면 204, 남으면 202이고 요청 후 "
+        "조회는 404다. 다른 사용자의 계약과 이미 삭제 중인 계약은 404다."
+    ),
+)
+async def delete_contract(token: BearerToken, contract_id: UUID) -> None:
+    await service.delete_contract()

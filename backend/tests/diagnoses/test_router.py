@@ -1,4 +1,4 @@
-"""진단 API 명세(A09–A11, A13)와 빈 라우트의 동작."""
+"""진단 API 명세(A09–A13)와 빈 라우트의 동작."""
 
 import copy
 
@@ -52,7 +52,13 @@ MONEY_FIELDS = (
 MAX_AMOUNT = 10_000_000_000
 SIMULATIONS_PATH = f"{DETAIL_PATH}/simulations"
 SIMULATIONS = f"{DETAIL}/simulations"
-REQUESTS = [("POST", LIST), ("GET", LIST), ("GET", DETAIL), ("POST", SIMULATIONS)]
+REQUESTS = [
+    ("POST", LIST),
+    ("GET", LIST),
+    ("GET", DETAIL),
+    ("POST", SIMULATIONS),
+    ("DELETE", DETAIL),
+]
 
 
 @pytest.fixture
@@ -93,6 +99,7 @@ def response_model(name: str):
         (LIST, "get", {"200", "401", "422", "429", "503"}),
         (DETAIL_PATH, "get", {"200", "401", "404", "422", "429", "503"}),
         (SIMULATIONS_PATH, "post", {"201", "401", "404", "422", "429", "503"}),
+        (DETAIL_PATH, "delete", {"202", "204", "401", "404", "422", "429", "503"}),
     ],
 )
 def test_spec_lists_status_codes_and_bearer_auth(url, method, statuses):
@@ -434,3 +441,21 @@ def test_simulation_validation_error_does_not_echo_input(client):
     assert_invalid(response)
     for secret in ("987654321987", "secret-token"):
         assert secret not in response.text
+
+
+# A12 진단 삭제
+
+
+def test_delete_diagnosis_keeps_linked_contracts_in_spec():
+    description = operation(DETAIL_PATH, "delete")["description"]
+
+    # 11/27 변경: 진단을 지워도 연결된 계약은 남고 연결만 풀린다.
+    assert "연결된 계약은 지우지 않고 연결만 푼다" in description
+
+
+def test_delete_diagnosis_is_not_implemented_yet(client):
+    assert_stub(client.delete(DETAIL, headers=AUTH))
+
+
+def test_delete_diagnosis_rejects_invalid_id(client):
+    assert_invalid(client.delete(f"{LIST}/not-a-uuid", headers=AUTH))

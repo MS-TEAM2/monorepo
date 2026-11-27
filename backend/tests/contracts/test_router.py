@@ -15,7 +15,13 @@ DETAIL = DETAIL_PATH.format(contract_id=ID)
 TERMS = TERMS_PATH.format(contract_id=ID)
 APPLY = APPLY_PATH.format(contract_id=ID)
 AUTH = {"Authorization": "Bearer any"}
-REQUESTS = [("POST", UPLOAD), ("GET", DETAIL), ("PATCH", TERMS), ("POST", APPLY)]
+REQUESTS = [
+    ("POST", UPLOAD),
+    ("GET", DETAIL),
+    ("PATCH", TERMS),
+    ("POST", APPLY),
+    ("DELETE", DETAIL),
+]
 
 TERM_KEYS = [
     "deposit",
@@ -173,6 +179,7 @@ def contract_model(name: str):
         (DETAIL_PATH, "get", {"200", "401", "404", "422", "429", "503"}),
         (TERMS_PATH, "patch", {"200", "401", "404", "409", "422", "429", "503"}),
         (APPLY_PATH, "post", {"201", "401", "404", "409", "422", "429", "503"}),
+        (DETAIL_PATH, "delete", {"202", "204", "401", "404", "422", "429", "503"}),
     ],
 )
 def test_spec_lists_status_codes_and_bearer_auth(path, method, statuses):
@@ -526,6 +533,7 @@ def test_invalid_update_is_rejected(client, payload):
         ("GET", DETAIL_PATH.format(contract_id="not-a-uuid")),
         ("PATCH", TERMS_PATH.format(contract_id="not-a-uuid")),
         ("POST", APPLY_PATH.format(contract_id="not-a-uuid")),
+        ("DELETE", DETAIL_PATH.format(contract_id="not-a-uuid")),
     ],
 )
 def test_invalid_id_is_rejected(client, method, url):
@@ -630,3 +638,10 @@ def test_apply_validation_error_does_not_echo_input(client):
     assert_invalid(response)
     for secret in ("987654321987", "secret-token"):
         assert secret not in response.text
+
+
+# A19 계약 삭제
+
+
+def test_delete_contract_is_not_implemented_yet(client):
+    assert_stub(client.delete(DETAIL, headers=AUTH))
