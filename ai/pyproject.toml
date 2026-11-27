@@ -11,6 +11,9 @@ dependencies = [
     # 수집 결과를 DB에 반영한다(SCRUM-98). 백엔드와 같은 라이브러리·버전 범위
     "sqlalchemy>=2.1.9",
     "psycopg[binary]>=3.3.9",
+    # 계약서 마스킹의 Azure PII detection 호출(SCRUM-198). 백엔드가 이미 쓰는 라이브러리
+    "azure-core[aio]>=1.38.0",
+    "azure-identity>=1.27.0",
 ]
 
 [build-system]

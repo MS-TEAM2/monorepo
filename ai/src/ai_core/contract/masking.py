@@ -11,8 +11,9 @@ LLM 에는 `MaskedContract` 의 글만 보낸다. 마스킹 뒤에 번호 형식
 - 항목명(임대인·성명 등) 없이 문장 속에만 나오는 이름
 - 항목명이 없고 광역 지명(서울·경기 등)으로 시작하지 않는 주소
 - 글자 사이에 공백이 들어간 이름
-다시 검사는 번호 형식만 잡으므로 이름·주소의 누락은 실행 중에 막지 못한다. 누락률은
-`ai_core.contract.mask_eval` 로 측정해 보고한다.
+다시 검사는 번호 형식만 잡으므로 이름·주소의 누락은 실행 중에 막지 못한다. 그래서 운영에서는
+`mask_pages_with_detector` 로 Azure PII detection(`pii_detect`)의 결과를 더한다. 그래도 놓치는
+경우(예: 광역 지명 없는 주소)가 있다. 누락률은 `ai_core.contract.mask_eval` 로 측정해 보고한다.
 스펙: specs/contract-analysis/spec.md
 """
 
@@ -22,6 +23,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 
 from ai_core.contract.ocr import OcrDocument
+from ai_core.contract.pii_detect import DetectedSpan, PiiDetectionError, PiiDetector
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +209,21 @@ def _select(spans: Iterator[_Span]) -> list[_Span]:
     return sorted(chosen, key=lambda s: s.start)
 
 
+def _merge(chosen: list[_Span], detected: Sequence[DetectedSpan]) -> list[_Span]:
+    """규칙이 고른 곳을 먼저 두고, 탐지기 결과는 겹치지 않는 곳만 더한다.
+
+    탐지기는 계좌번호를 전화번호로 분류하는 등 종류를 틀리기도 한다.
+    규칙이 찾은 번호는 규칙의 종류를 쓴다.
+    """
+    extra = _select(_Span(span.start, span.end, span.kind) for span in detected)
+    kept = [
+        span
+        for span in extra
+        if all(span.end <= other.start or other.end <= span.start for other in chosen)
+    ]
+    return sorted([*chosen, *kept], key=lambda span: span.start)
+
+
 def _normalize(value: str) -> str:
     return re.sub(rf"[\s{_DASH}.()]", "", value)
 
@@ -241,14 +258,54 @@ def _residual_kinds(texts: Sequence[str]) -> list[str]:
     return kinds
 
 
-def _mask(pages: Sequence[Sequence[str]]) -> MaskedContract:
+def _prepare(pages: Sequence[Sequence[str]]) -> tuple[list[list[str]], list[str]]:
     # 줄 안의 줄바꿈은 줄 구조를 깨므로 공백으로 바꾼다
     page_lines = [[line.replace("\r", " ").replace("\n", " ") for line in page] for page in pages]
-    texts = ["\n".join(lines) for lines in page_lines]
-    names = _collect_names(texts)
+    return page_lines, ["\n".join(lines) for lines in page_lines]
+
+
+_HANGUL_NAME = re.compile(r"[가-힣]{2,4}")
+
+
+def _detected_names(texts: Sequence[str], detected: Sequence[Sequence[DetectedSpan]]) -> set[str]:
+    """탐지기가 찾은 이름. 띄어 쓴 이름은 붙여 쓴 꼴도 넣어 다른 곳의 같은 이름도 가린다."""
+    names: set[str] = set()
+    for text, spans in zip(texts, detected, strict=True):
+        for span in spans:
+            if span.kind != NAME:
+                continue
+            value = text[span.start : span.end]
+            compact = re.sub(r"\s", "", value)
+            if _HANGUL_NAME.fullmatch(compact) and compact not in _NOT_NAMES:
+                names.add(compact)
+    return names
+
+
+def _check_detected(texts: Sequence[str], detected: Sequence[Sequence[DetectedSpan]]) -> None:
+    if len(detected) != len(texts):
+        raise ValueError("탐지 결과 수가 글 수와 다릅니다")
+    for text, spans in zip(texts, detected, strict=True):
+        for span in spans:
+            if span.kind not in PII_KINDS or not 0 <= span.start < span.end <= len(text):
+                raise ValueError("탐지 위치가 잘못되었습니다")
+
+
+def _mask(
+    pages: Sequence[Sequence[str]],
+    detected: Sequence[Sequence[DetectedSpan]] | None = None,
+) -> MaskedContract:
+    page_lines, texts = _prepare(pages)
+    if detected is None:
+        detected = [[] for _ in texts]
+    _check_detected(texts, detected)
+    names = _collect_names(texts) | _detected_names(texts, detected)
     numbers: dict[str, dict[str, int]] = {kind: {} for kind in PII_KINDS}
     counts = dict.fromkeys(PII_KINDS, 0)
-    masked = [_replace(text, _select(_candidates(text, names)), numbers, counts) for text in texts]
+    masked = []
+    for text, spans in zip(texts, detected, strict=True):
+        masked.append(
+            _replace(text, _merge(_select(_candidates(text, names)), spans), numbers, counts)
+        )
 
     residual = _residual_kinds(masked)
     if residual:
@@ -275,6 +332,32 @@ def mask_pages(pages: Sequence[Sequence[str]]) -> MaskedContract:
     except MaskingError:
         raise
     except Exception as error:  # 오류 메시지에 원문이 섞일 수 있어 종류만 남기고 원인은 끊는다
+        logger.error("마스킹 처리 오류 error=%s", type(error).__name__)
+        raise MaskingError(ERROR_FAILED) from None
+
+
+async def mask_pages_with_detector(
+    pages: Sequence[Sequence[str]], detector: PiiDetector
+) -> MaskedContract:
+    """규칙에 탐지기(Azure PII detection)가 찾은 위치를 더해 마스킹한다.
+
+    탐지기는 규칙과 같은 글(쪽마다 줄을 이은 것)을 받는다. 탐지가 실패하면 규칙만으로 넘어가지 않고
+    MaskingError 를 낸다 (분석 중단).
+    """
+    try:
+        _, texts = _prepare(pages)
+        detected = await detector.detect(texts)
+    except PiiDetectionError as error:
+        logger.error("PII 탐지 실패 reason=%s", error)
+        raise MaskingError(ERROR_FAILED) from None
+    except Exception as error:
+        logger.error("PII 탐지 처리 오류 error=%s", type(error).__name__)
+        raise MaskingError(ERROR_FAILED) from None
+    try:
+        return _mask(pages, detected)
+    except MaskingError:
+        raise
+    except Exception as error:
         logger.error("마스킹 처리 오류 error=%s", type(error).__name__)
         raise MaskingError(ERROR_FAILED) from None
 

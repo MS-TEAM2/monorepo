@@ -22,6 +22,8 @@ name = "ai-core"
 version = "0.1.0"
 source = { editable = "ai" }
 dependencies = [
+    { name = "azure-core", extra = ["aio"] },
+    { name = "azure-identity" },
     { name = "joblib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -32,6 +34,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "azure-core", extras = ["aio"], specifier = ">=1.38.0" },
+    { name = "azure-identity", specifier = ">=1.27.0" },
     { name = "joblib" },
     { name = "numpy" },
     { name = "pandas" },
