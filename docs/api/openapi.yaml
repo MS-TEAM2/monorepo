@@ -16,6 +16,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /health/db:
+    get:
+      tags:
+      - system
+      summary: Health Db
+      operationId: health_db_health_db_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DbHealthResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/predict:
     post:
       tags:
@@ -36,22 +55,2613 @@ paths:
               schema:
                 $ref: '#/components/schemas/PredictResponse'
         '422':
-          description: Validation Error
+          description: Unprocessable Content
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/token:
+    post:
+      tags:
+      - auth
+      summary: 1회용 코드를 세션 토큰으로 교환 (A01)
+      operationId: issue_token_api_v1_auth_token_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/auth/{provider}/start:
+    get:
+      tags:
+      - auth
+      summary: 소셜 로그인 시작 (A26)
+      description: 브라우저가 직접 여는 주소다. 성공하면 공급자 로그인 화면으로 이동한다. `client`가 올바르면 입력 오류도
+        JSON 대신 돌아갈 주소의 `error=terms_outdated` 또는 `error=invalid_request`로 302 이동한다.
+        `client`가 잘못되면 422, 지원하지 않는 공급자는 404다.
+      operationId: start_login_api_v1_auth__provider__start_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - google
+          - kakao
+          title: Provider
+      - name: client
+        in: query
+        required: true
+        schema:
+          enum:
+          - web
+          - app
+          type: string
+          title: Client
+      - name: code_challenge
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 필수. S256, base64url 43자
+          title: Code Challenge
+        description: 필수. S256, base64url 43자
+      - name: terms_version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 필수. 동의한 약관 버전
+          title: Terms Version
+        description: 필수. 동의한 약관 버전
+      responses:
+        '302':
+          description: Successful Response
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/auth/{provider}/callback:
+    get:
+      tags:
+      - auth
+      summary: 소셜 로그인 콜백 (A27)
+      description: 공급자가 부른다. 성공하면 1회용 `code`를, 실패하면 `error`(`cancelled`, `provider_error`,
+        `expired`, `account_deleting`)를 쿼리에 붙여 돌아갈 주소로 302 이동한다.
+      operationId: finish_login_api_v1_auth__provider__callback_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - google
+          - kakao
+          title: Provider
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State
+      - name: code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 공급자가 준 인가 코드
+          title: Code
+        description: 공급자가 준 인가 코드
+      - name: error
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 공급자가 알려 준 오류
+          title: Error
+        description: 공급자가 알려 준 오류
+      responses:
+        '302':
+          description: Successful Response
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - auth
+      summary: 로그아웃 (A29)
+      operationId: logout_api_v1_auth_logout_post
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/users/me:
+    get:
+      tags:
+      - users
+      summary: 내 정보 (A28)
+      operationId: get_me_api_v1_users_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+    delete:
+      tags:
+      - users
+      summary: 회원 탈퇴 (A30)
+      operationId: delete_me_api_v1_users_me_delete
+      responses:
+        '204':
+          description: Successful Response
+        '202':
+          description: 삭제가 남아 정리 작업이 이어서 한다
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletingResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/categories:
+    get:
+      tags:
+      - explore
+      summary: 업종 목록 (A03)
+      operationId: list_categories_api_v1_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryListResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/regions/resolve:
+    get:
+      tags:
+      - explore
+      summary: 좌표의 행정동 판정 (A04)
+      description: '서울 밖이면 200과 `supported: false`이고 나머지 값은 null이다.'
+      operationId: resolve_region_api_v1_regions_resolve_get
+      parameters:
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 90
+          minimum: -90
+          description: 중심 위도 (WGS84)
+          title: Lat
+        description: 중심 위도 (WGS84)
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 180
+          minimum: -180
+          description: 중심 경도 (WGS84)
+          title: Lng
+        description: 중심 경도 (WGS84)
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionResolveResponse'
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/stores:
+    get:
+      tags:
+      - explore
+      summary: 주변 매장 조회 (A05)
+      description: 영업 중이고 업종이 매핑됐으며 좌표가 있는 매장만 가까운 순(같으면 ID 순)으로 준다. 중심이 서울 밖이면 400
+        `out_of_service_area`, 결과가 없으면 200과 빈 배열이다.
+      operationId: list_stores_api_v1_stores_get
+      parameters:
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 90
+          minimum: -90
+          description: 중심 위도 (WGS84)
+          title: Lat
+        description: 중심 위도 (WGS84)
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 180
+          minimum: -180
+          description: 중심 경도 (WGS84)
+          title: Lng
+        description: 중심 경도 (WGS84)
+      - name: radius
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Radius'
+          description: 반경(m)
+          default: 500
+        description: 반경(m)
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          description: 업종 ID. 여러 번 보낸다. 없으면 외식 9종 전체
+          title: Category
+        description: 업종 ID. 여러 번 보낸다. 없으면 외식 9종 전체
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          description: 이 API만 기본·최대 1000
+          default: 1000
+          title: Limit
+        description: 이 API만 기본·최대 1000
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreListResponse'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/areas/summary:
+    get:
+      tags:
+      - explore
+      summary: 상권 요약 (A07)
+      description: 인증 선택. 로그인하지 않으면 `dong_stats`는 null, `locked`는 `["dong_stats"]`이고
+        `missing`에는 넣지 않는다. 로그인하면 `locked`는 빈 배열이다. 형식이 잘못된 토큰은 401, 중심이 서울 밖이면 400
+        `out_of_service_area`다. 개업·폐업 수가 5건 미만이면 정확한 값을 주지 않는다.
+      operationId: get_area_summary_api_v1_areas_summary_get
+      security:
+      - HTTPBearer: []
+      - {}
+      parameters:
+      - name: lat
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 90
+          minimum: -90
+          description: 중심 위도 (WGS84)
+          title: Lat
+        description: 중심 위도 (WGS84)
+      - name: lng
+        in: query
+        required: true
+        schema:
+          type: number
+          maximum: 180
+          minimum: -180
+          description: 중심 경도 (WGS84)
+          title: Lng
+        description: 중심 경도 (WGS84)
+      - name: category
+        in: query
+        required: true
+        schema:
+          type: string
+          description: 업종 ID 1개
+          title: Category
+        description: 업종 ID 1개
+      - name: radius
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/Radius'
+          description: 반경(m)
+          default: 500
+        description: 반경(m)
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AreaSummaryResponse'
+              examples:
+                logged_in:
+                  summary: 로그인 후
+                  value:
+                    region:
+                      dong_code: '11110515'
+                      dong_name: 청운효자동
+                      gu_name: 종로구
+                    radius_stats:
+                      radius_m: 500
+                      same_category_count: 24
+                      opened_1y:
+                        status: exact
+                        count: 6
+                        display: '6'
+                      closed_1y:
+                        status: masked
+                        display: 5건 미만
+                      base_date: '2026-11-22'
+                    dong_stats:
+                      source_regions:
+                      - code: '11110515'
+                        name: 청운효자동
+                      relation: same
+                      quarter: '20262'
+                      population_quarter: '20262'
+                      population_reference_only: false
+                      floating_population: 100000
+                      population_by_time:
+                        '11_14': 18000
+                      population_by_age:
+                        '30': 20000
+                      population_per_store: 420
+                      sales_unit_verified: false
+                      open_rate: 0.04
+                      close_rate: 0.03
+                      franchise_ratio: 0.2
+                    missing:
+                    - avg_sales_per_store
+                    locked: []
+                logged_out:
+                  summary: '로그인 전: 반경 지표만 준다'
+                  value:
+                    region:
+                      dong_code: '11110515'
+                      dong_name: 청운효자동
+                      gu_name: 종로구
+                    radius_stats:
+                      radius_m: 500
+                      same_category_count: 24
+                      opened_1y:
+                        status: exact
+                        count: 6
+                        display: '6'
+                      closed_1y:
+                        status: masked
+                        display: 5건 미만
+                      base_date: '2026-11-22'
+                    missing: []
+                    locked:
+                    - dong_stats
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/diagnoses:
+    post:
+      tags:
+      - diagnoses
+      summary: 진단 생성 (A09)
+      description: 행정동은 서버가 좌표로 판정한다. 서울 밖이면 400 `out_of_service_area`다.
+      operationId: create_diagnosis_api_v1_diagnoses_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosisCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisDetailResponse'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+    get:
+      tags:
+      - diagnoses
+      summary: 진단 목록 (A10)
+      description: '`created_at` 내림차순, 같으면 `id` 내림차순. 잘못된 커서는 422다.'
+      operationId: list_diagnoses_api_v1_diagnoses_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 이전 응답의 `next_cursor`
+          title: Cursor
+        description: 이전 응답의 `next_cursor`
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisListResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/diagnoses/{diagnosis_id}:
+    get:
+      tags:
+      - diagnoses
+      summary: 진단 상세 (A11)
+      description: 다른 사용자의 진단이나 삭제 요청했거나 만료된 진단은 404다.
+      operationId: get_diagnosis_api_v1_diagnoses__diagnosis_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: diagnosis_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Diagnosis Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisDetailResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/diagnoses/{diagnosis_id}/simulations:
+    post:
+      tags:
+      - diagnoses
+      summary: 손익 다시 계산 (A13)
+      description: '`overrides`는 보낸 비용만 진단 입력에 덮어쓰고, `exit`가 있으면 예상 손실도 계산한다. 둘 다
+        없으면 422다. 생존확률은 다시 계산하지 않는다. 결과의 `source`는 user다. 다른 사용자의 진단이나 삭제 요청했거나 만료된
+        진단은 404다.'
+      operationId: create_simulation_api_v1_diagnoses__diagnosis_id__simulations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: diagnosis_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Diagnosis Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/contracts:
+    post:
+      tags:
+      - contracts
+      summary: 계약서 업로드 (A15)
+      description: 파일 확장자가 아니라 실제 형식을 검사하고 이미지 1장은 1쪽으로 센다. 크기 초과는 413 `file_too_large`,
+        형식 오류는 415 `unsupported_file`이다. 10쪽 초과는 422 `too_many_pages`, 암호 PDF는 422
+        `encrypted_file`, 동의가 없거나 허용하지 않는 동의 버전은 422 `consent_required`다. `diagnosis_id`를
+        보내면 만든 계약을 그 진단에 연결한다. 다른 사용자의 진단, 만료·삭제 요청한 진단이면 404다. 사용자당 처리 중인 계약은 1개이며,
+        이미 있으면 409 `contract_processing`이다. 실패·확인한 계약이 있어도 새로 올릴 수 있다.
+      operationId: create_contract_api_v1_contracts_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              properties:
+                files:
+                  items:
+                    type: string
+                    format: binary
+                  type: array
+                  minItems: 1
+                  description: JPG·PNG·PDF, 파일당 10MB, 합계 20MB, 최대 10쪽. 여러 번 보내며 보낸
+                    순서가 쪽 순서다
+                consent_version:
+                  type: string
+                  description: 동의한 문구 버전
+                consented:
+                  type: boolean
+                  description: true여야 한다
+                diagnosis_id:
+                  type: string
+                  format: uuid
+                  description: 선택. 진단 결과에서 올리면 그 진단 ID. 없으면 진단 연결 없이 만든다
+              type: object
+              required:
+              - files
+              - consent_version
+              - consented
+        required: true
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractAcceptedResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Content Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported Media Type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/contracts/{contract_id}:
+    get:
+      tags:
+      - contracts
+      summary: 계약서 분석 상태와 결과 (A16)
+      description: 처리 중에는 2초 간격으로 조회하고 오래 걸리면 간격을 늘린다. 다른 사용자의 계약과 취소 중인 계약은 404다.
+      operationId: get_contract_api_v1_contracts__contract_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Contract Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractDetailResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/contracts/{contract_id}/terms:
+    patch:
+      tags:
+      - contracts
+      summary: 계약 조건 확인·수정 (A17)
+      description: 조건 키에 맞지 않는 값은 422 `invalid_term`이다. `start_date`는 `end_date`보다
+        빨라야 하고 월세는 1 이상이다. `complete`가 true면 `monthly_rent`, `start_date`, `end_date`
+        확인이 필수이며 빠지면 422 `terms_incomplete`다. 오류가 있으면 아무것도 저장하지 않는다. true면 confirmed,
+        false면 needs_review가 된다. confirmed 상태에서 부르면 그 계약으로 만든 계산을 지우고 `application`은
+        null이 된다. 처리 중이면 409 `contract_processing`, 실패한 계약이면 409 `contract_failed`다.
+      operationId: update_terms_api_v1_contracts__contract_id__terms_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Contract Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractTermsUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractDetailResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/contracts/{contract_id}/apply:
+    post:
+      tags:
+      - contracts
+      summary: 계약 조건 손익 반영 (A18)
+      description: 확인을 마친(confirmed) 계약의 조건을 연결된 진단 입력에 반영해 전후 손익과 예상 손실을 계산한다. confirmed가
+        아니면 409 `contract_not_confirmed`, 실패한 계약은 409 `contract_failed`, 진단에 연결되지
+        않았으면 409 `contract_not_linked`다. 확인값이 없는 조건은 진단 입력을 유지하고, 확인한 위약금은 예상 손실에,
+        인상률은 2년차 월세부터 반영한다. `exit`는 직접 입력한 값이 계약값보다 우선하며, before에는 직접 입력한 종료 값만, after에는
+        확인한 계약값도 적용한다. 여러 번 부르면 계산을 새로 만들고 A16에는 가장 최근 것만 준다. 생존확률은 다시 계산하지 않는다. 다른
+        사용자의 계약과 취소 중인 계약은 404다.
+      operationId: apply_contract_api_v1_contracts__contract_id__apply_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: contract_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Contract Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractApplyRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractApplication'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Conflict
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unprocessable Content
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Service Unavailable
+  /api/v1/data-status:
+    get:
+      tags:
+      - data_status
+      summary: 데이터 수집 상태와 기준일 (A24)
+      description: 로그인 없이 부른다. `items`는 매장 3종과 분기 자료 3종을 수집 전에도 모두 준다. `base_date`·`base_quarter`는
+        마지막 성공 기준이며 성공한 적이 없으면 null이고 `stale`은 true다. `model`은 사용 중인 생존모델이 없으면 null이다.
+      operationId: get_data_status_api_v1_data_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataStatusResponse'
+        '429':
+          description: Too Many Requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
-    HTTPValidationError:
+    AreaRegion:
+      properties:
+        dong_code:
+          type: string
+          title: Dong Code
+          examples:
+          - '11110515'
+        dong_name:
+          type: string
+          title: Dong Name
+          examples:
+          - 청운효자동
+        gu_name:
+          type: string
+          title: Gu Name
+          examples:
+          - 종로구
+      type: object
+      required:
+      - dong_code
+      - dong_name
+      - gu_name
+      title: AreaRegion
+    AreaSummaryResponse:
+      properties:
+        region:
+          $ref: '#/components/schemas/AreaRegion'
+        radius_stats:
+          $ref: '#/components/schemas/RadiusStats'
+        dong_stats:
+          anyOf:
+          - $ref: '#/components/schemas/DongStats'
+          - type: 'null'
+          description: 로그인 전이면 null(`locked`에 들어감). 행정동 자료가 전혀 없어도 null(`missing`에
+            들어감)
+        missing:
+          items:
+            type: string
+          type: array
+          title: Missing
+          description: 값이 없어 null인 필드 이름. 로그인 전 잠긴 값은 넣지 않는다
+          examples:
+          - - avg_sales_per_store
+        locked:
+          items:
+            type: string
+            const: dong_stats
+          type: array
+          title: Locked
+          description: 로그인해야 볼 수 있어 비운 값. 로그인하면 빈 배열
+      type: object
+      required:
+      - region
+      - radius_stats
+      - dong_stats
+      - missing
+      - locked
+      title: AreaSummaryResponse
+      description: 반경 값과 행정동 값은 단위가 달라 한 점수로 섞지 않는다.
+    CategoryCount:
+      properties:
+        category_id:
+          type: string
+          title: Category Id
+          examples:
+          - cafe
+        count:
+          type: integer
+          title: Count
+          examples:
+          - 320
+      type: object
+      required:
+      - category_id
+      - count
+      title: CategoryCount
+    CategoryItem:
+      properties:
+        id:
+          type: string
+          title: Id
+          examples:
+          - cafe
+        name:
+          type: string
+          title: Name
+          examples:
+          - 카페
+      type: object
+      required:
+      - id
+      - name
+      title: CategoryItem
+    CategoryListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CategoryItem'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: CategoryListResponse
+    ContractAcceptedResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          examples:
+          - 00000000-0000-4000-8000-000000000004
+        status:
+          type: string
+          const: processing
+          title: Status
+        step:
+          type: string
+          enum:
+          - ocr
+          - masking
+          - analysis
+          - deletion
+          title: Step
+          examples:
+          - ocr
+      type: object
+      required:
+      - id
+      - status
+      - step
+      title: ContractAcceptedResponse
+    ContractApplication:
+      properties:
+        before:
+          $ref: '#/components/schemas/ContractProfitSnapshot'
+        after:
+          $ref: '#/components/schemas/ContractProfitSnapshot'
+        term_changes:
+          items:
+            $ref: '#/components/schemas/ContractTermChange'
+          type: array
+          title: Term Changes
+        assumptions:
+          items:
+            type: string
+          type: array
+          title: Assumptions
+        simulation_id:
+          type: string
+          format: uuid
+          title: Simulation Id
+        exit:
+          $ref: '#/components/schemas/ContractExit'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - before
+      - after
+      - term_changes
+      - assumptions
+      - simulation_id
+      - exit
+      - created_at
+      title: ContractApplication
+    ContractApplyExit:
+      properties:
+        month:
+          type: integer
+          maximum: 120.0
+          minimum: 1.0
+          title: Month
+          description: 종료 시점(개업 후 개월)
+          examples:
+          - 12
+        obligation_months:
+          type: integer
+          maximum: 120.0
+          minimum: 0.0
+          title: Obligation Months
+          description: 종료 후 남은 의무 개월 수
+          examples:
+          - 6
+        restoration_cost:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Restoration Cost
+          description: 없으면 확인한 계약값, 그것도 없으면 0과 가정 표시
+          examples:
+          - 5000000
+        penalty_amount:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Penalty Amount
+          description: 없으면 확인한 계약값, 그것도 없으면 0과 가정 표시
+        penalty_covers_remaining_rent:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Penalty Covers Remaining Rent
+          description: true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을
+            표시
+      additionalProperties: false
+      type: object
+      required:
+      - month
+      - obligation_months
+      title: ContractApplyExit
+      description: A18 종료 조건. 규칙은 A13 `exit`와 같고, 직접 입력한 값이 확인한 계약값보다 우선한다.
+    ContractApplyRequest:
+      properties:
+        exit:
+          $ref: '#/components/schemas/ContractApplyExit'
+      additionalProperties: false
+      type: object
+      required:
+      - exit
+      title: ContractApplyRequest
+    ContractDetailResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          examples:
+          - 00000000-0000-4000-8000-000000000004
+        diagnosis_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Diagnosis Id
+          description: 연결 전이거나 진단 만료·삭제로 연결이 풀리면 null
+          examples:
+          - 00000000-0000-4000-8000-000000000001
+        status:
+          type: string
+          enum:
+          - processing
+          - needs_review
+          - confirmed
+          - failed
+          title: Status
+        step:
+          anyOf:
+          - type: string
+            enum:
+            - ocr
+            - masking
+            - analysis
+            - deletion
+          - type: 'null'
+          title: Step
+          description: processing일 때만 값이 있다
+        original_deleted:
+          type: boolean
+          title: Original Deleted
+        terms:
+          items:
+            $ref: '#/components/schemas/ContractTerm'
+          type: array
+          title: Terms
+        findings:
+          items:
+            $ref: '#/components/schemas/ContractFinding'
+          type: array
+          title: Findings
+        application:
+          anyOf:
+          - $ref: '#/components/schemas/ContractApplication'
+          - type: 'null'
+          description: 가장 최근 계약 반영 결과
+        error_code:
+          anyOf:
+          - type: string
+            enum:
+            - unreadable
+            - not_contract
+            - masking_failed
+            - analysis_failed
+            - service_unavailable
+            - timeout
+          - type: 'null'
+          title: Error Code
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+          description: 계약 생성 후 30일. 진단 만료와 따로 계산한다
+        notice:
+          type: string
+          title: Notice
+          examples:
+          - 법률 자문이 아닌 검토 보조입니다
+      type: object
+      required:
+      - id
+      - diagnosis_id
+      - status
+      - step
+      - original_deleted
+      - terms
+      - findings
+      - application
+      - error_code
+      - created_at
+      - expires_at
+      - notice
+      title: ContractDetailResponse
+      description: 처리 중과 실패에는 terms, findings가 빈 배열이다. 처리가 끝나면 terms는 9개다.
+    ContractExit:
+      properties:
+        month:
+          type: integer
+          maximum: 120.0
+          minimum: 1.0
+          title: Month
+        obligation_months:
+          type: integer
+          maximum: 120.0
+          minimum: 0.0
+          title: Obligation Months
+        restoration_cost:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Restoration Cost
+        penalty_amount:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Penalty Amount
+        penalty_covers_remaining_rent:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Penalty Covers Remaining Rent
+      type: object
+      required:
+      - month
+      - obligation_months
+      - restoration_cost
+      - penalty_amount
+      - penalty_covers_remaining_rent
+      title: ContractExit
+    ContractFinding:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        rule_id:
+          type: string
+          enum:
+          - R01
+          - R02
+          - R03
+          - R04
+          - R05
+          - R06
+          - R07
+          - R08
+          title: Rule Id
+        severity:
+          type: string
+          enum:
+          - high
+          - medium
+          - low
+          title: Severity
+        evidence_text:
+          type: string
+          title: Evidence Text
+          description: 마스킹한 원문
+        page_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page No
+        reason:
+          type: string
+          title: Reason
+        check_points:
+          items:
+            type: string
+          type: array
+          title: Check Points
+        suggestion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Suggestion
+          description: 법률 확인 전에는 null
+        question:
+          type: string
+          title: Question
+          description: 중개사에게 물을 질문
+        law:
+          anyOf:
+          - $ref: '#/components/schemas/ContractLaw'
+          - type: 'null'
+          description: 원문을 대조하지 않았으면 null
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+      type: object
+      required:
+      - id
+      - rule_id
+      - severity
+      - evidence_text
+      - page_no
+      - reason
+      - check_points
+      - suggestion
+      - question
+      - law
+      - confidence
+      title: ContractFinding
+    ContractLaw:
+      properties:
+        law_name:
+          type: string
+          title: Law Name
+        article_no:
+          type: string
+          title: Article No
+        source_url:
+          type: string
+          title: Source Url
+        effective_on:
+          type: string
+          format: date
+          title: Effective On
+        checked_at:
+          type: string
+          format: date-time
+          title: Checked At
+      type: object
+      required:
+      - law_name
+      - article_no
+      - source_url
+      - effective_on
+      - checked_at
+      title: ContractLaw
+    ContractProfitSnapshot:
+      properties:
+        monthly_rent:
+          type: integer
+          title: Monthly Rent
+          description: 부가세를 뺀 공급가
+        break_even_sales:
+          type: integer
+          title: Break Even Sales
+        monthly_profit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Monthly Profit
+        estimated_loss:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Estimated Loss
+      type: object
+      required:
+      - monthly_rent
+      - break_even_sales
+      - monthly_profit
+      - estimated_loss
+      title: ContractProfitSnapshot
+    ContractTerm:
+      properties:
+        term_key:
+          type: string
+          enum:
+          - deposit
+          - monthly_rent
+          - management_fee
+          - rent_vat_included
+          - start_date
+          - end_date
+          - annual_increase_rate
+          - early_termination
+          - restoration
+          title: Term Key
+        extracted_value:
+          anyOf:
+          - type: boolean
+          - type: integer
+          - type: number
+          - type: string
+            format: date
+          - $ref: '#/components/schemas/EarlyTerminationValue'
+          - $ref: '#/components/schemas/RestorationValue'
+          - type: 'null'
+          title: Extracted Value
+          description: '신뢰도가 낮으면 null. 조건 키별 형식: `deposit`·`monthly_rent`·`management_fee`는
+            원 단위 정수, `rent_vat_included`는 boolean, `start_date`·`end_date`는 날짜, `annual_increase_rate`는
+            0–1, `early_termination`과 `restoration`은 객체'
+        confirmed_value:
+          anyOf:
+          - type: boolean
+          - type: integer
+          - type: number
+          - type: string
+            format: date
+          - $ref: '#/components/schemas/EarlyTerminationValue'
+          - $ref: '#/components/schemas/RestorationValue'
+          - type: 'null'
+          title: Confirmed Value
+          description: '사용자가 확인하기 전에는 null. 조건 키별 형식: `deposit`·`monthly_rent`·`management_fee`는
+            원 단위 정수, `rent_vat_included`는 boolean, `start_date`·`end_date`는 날짜, `annual_increase_rate`는
+            0–1, `early_termination`과 `restoration`은 객체'
+        evidence_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Evidence Text
+          description: 마스킹한 근거 문장
+        page_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Page No
+        confidence:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Confidence
+      type: object
+      required:
+      - term_key
+      - extracted_value
+      - confirmed_value
+      - evidence_text
+      - page_no
+      - confidence
+      title: ContractTerm
+    ContractTermChange:
+      properties:
+        term_key:
+          type: string
+          enum:
+          - deposit
+          - monthly_rent
+          - management_fee
+          - rent_vat_included
+          - start_date
+          - end_date
+          - annual_increase_rate
+          - early_termination
+          - restoration
+          title: Term Key
+        before:
+          anyOf:
+          - type: boolean
+          - type: integer
+          - type: number
+          - type: string
+            format: date
+          - $ref: '#/components/schemas/EarlyTerminationValue'
+          - $ref: '#/components/schemas/RestorationValue'
+          - type: 'null'
+          title: Before
+          description: 진단에 없던 조건은 null
+        after:
+          anyOf:
+          - type: boolean
+          - type: integer
+          - type: number
+          - type: string
+            format: date
+          - $ref: '#/components/schemas/EarlyTerminationValue'
+          - $ref: '#/components/schemas/RestorationValue'
+          title: After
+        affects_profit:
+          type: boolean
+          title: Affects Profit
+      type: object
+      required:
+      - term_key
+      - before
+      - after
+      - affects_profit
+      title: ContractTermChange
+      description: 확인한 조건 중 진단 입력과 다른 것. 값은 입력·확인한 원래 값이다.
+    ContractTermUpdate:
+      properties:
+        term_key:
+          type: string
+          enum:
+          - deposit
+          - monthly_rent
+          - management_fee
+          - rent_vat_included
+          - start_date
+          - end_date
+          - annual_increase_rate
+          - early_termination
+          - restoration
+          title: Term Key
+        confirmed_value:
+          anyOf:
+          - type: boolean
+          - type: integer
+          - type: number
+          - type: string
+            format: date
+          - $ref: '#/components/schemas/EarlyTerminationValue'
+          - $ref: '#/components/schemas/RestorationValue'
+          - type: 'null'
+          title: Confirmed Value
+          description: 'null은 확인 취소. 조건 키별 형식: `deposit`·`monthly_rent`·`management_fee`는
+            원 단위 정수, `rent_vat_included`는 boolean, `start_date`·`end_date`는 날짜, `annual_increase_rate`는
+            0–1, `early_termination`과 `restoration`은 객체'
+      type: object
+      required:
+      - term_key
+      - confirmed_value
+      title: ContractTermUpdate
+    ContractTermsUpdateRequest:
+      properties:
+        terms:
+          items:
+            $ref: '#/components/schemas/ContractTermUpdate'
+          type: array
+          title: Terms
+          description: 보낸 조건만 바꾼다. 빈 배열도 된다
+        complete:
+          type: boolean
+          title: Complete
+          description: true면 확인을 마치고, false면 확인 중으로 둔다
+      type: object
+      required:
+      - terms
+      - complete
+      title: ContractTermsUpdateRequest
+    CostOverrides:
+      properties:
+        deposit:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Deposit
+        monthly_rent:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 1.0
+          title: Monthly Rent
+          examples:
+          - 2200000
+        rent_vat_included:
+          type: boolean
+          title: Rent Vat Included
+        management_fee:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Management Fee
+        labor_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Labor Cost
+        other_fixed_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Other Fixed Cost
+        variable_cost_rate:
+          type: number
+          maximum: 0.95
+          minimum: 0.0
+          title: Variable Cost Rate
+          description: 0–0.95, 소수 넷째 자리까지
+        expected_monthly_sales:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Expected Monthly Sales
+        key_money:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Key Money
+        facility_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Facility Cost
+      additionalProperties: false
+      type: object
+      title: CostOverrides
+      description: 'A13. 보낸 값만 진단 입력에 덮어쓴다. 값은 A09 `costs`와 같은 규칙이고 null은 받지 않는다.
+
+
+        빠진 값은 진단 입력을 쓴다. 예: `monthly_rent`만 보내면 부가세 포함 여부는 진단 입력과 같다.'
+    CountValue:
+      properties:
+        status:
+          type: string
+          enum:
+          - exact
+          - masked
+          - unavailable
+          title: Status
+          description: 'exact: 5건 이상 정확한 값, masked: 0–4건, unavailable: 최근 1년을 확인할
+            수 없어 숨김'
+        count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Count
+          description: exact일 때만 값이 있다
+          examples:
+          - 6
+        display:
+          type: string
+          title: Display
+          description: 화면 표시 문구. masked는 `5건 미만`, unavailable은 `자료 없음`
+          examples:
+          - '6'
+      type: object
+      required:
+      - status
+      - count
+      - display
+      title: CountValue
+      description: 최근 1년 개업·폐업 수. 5건 미만이면 정확한 값을 주지 않는다.
+    DataBasis:
+      properties:
+        stores:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Stores
+        commercial_quarter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Commercial Quarter
+        population_quarter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Population Quarter
+      type: object
+      required:
+      - stores
+      - commercial_quarter
+      - population_quarter
+      title: DataBasis
+      description: 쓰지 않았거나 없는 자료는 null이다.
+    DataStatusItem:
+      properties:
+        dataset:
+          type: string
+          enum:
+          - stores_general
+          - stores_rest
+          - stores_bakery
+          - region_population
+          - region_store_stats
+          - region_sales
+          title: Dataset
+        base_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Base Date
+          description: 마지막 성공 수집의 기준일. 성공한 적이 없으면 null
+          examples:
+          - '2026-11-22'
+        base_quarter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Base Quarter
+          description: '분기 자료의 기준 분기(예: 20262). 성공한 적이 없으면 null'
+          examples:
+          - null
+        last_run_status:
+          anyOf:
+          - type: string
+            enum:
+            - running
+            - succeeded
+            - failed
+          - type: 'null'
+          title: Last Run Status
+          description: 마지막 수집 상태. 수집한 적이 없으면 null
+        last_run_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Run At
+        last_success_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Success At
+        stale:
+          type: boolean
+          title: Stale
+          description: 인허가는 원천 기준일로 7일, 분기 자료는 기준 분기 종료 후 6개월을 넘으면 true. 성공한 적이 없어도
+            true
+        missing_location_count:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Missing Location Count
+          description: 영업 중이고 업종이 매핑된 매장 중 좌표가 없는 수. 매장 자료에만 있다
+          examples:
+          - 100
+        source_url:
+          type: string
+          title: Source Url
+          examples:
+          - https://data.seoul.go.kr/dataList/OA-16094/S/1/datasetView.do
+      type: object
+      required:
+      - dataset
+      - base_date
+      - base_quarter
+      - last_run_status
+      - last_run_at
+      - last_success_at
+      - stale
+      - missing_location_count
+      - source_url
+      title: DataStatusItem
+    DataStatusModel:
+      properties:
+        version:
+          type: string
+          title: Version
+          examples:
+          - example-v1
+        method:
+          type: string
+          enum:
+          - km_baseline
+          - logistic
+          - lightgbm
+          title: Method
+        data_until:
+          type: string
+          format: date
+          title: Data Until
+          description: 학습 데이터 기준일
+          examples:
+          - '2026-11-22'
+        metrics:
+          additionalProperties:
+            type: number
+          type: object
+          title: Metrics
+          description: 실측 검증 지표. 수치는 지어내지 않는다
+      type: object
+      required:
+      - version
+      - method
+      - data_until
+      - metrics
+      title: DataStatusModel
+      description: 사용 중인 생존모델과 실측 검증 지표.
+    DataStatusResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DataStatusItem'
+          type: array
+          title: Items
+        model:
+          anyOf:
+          - $ref: '#/components/schemas/DataStatusModel'
+          - type: 'null'
+          description: 사용 중인 모델이 없으면 null
+      type: object
+      required:
+      - items
+      - model
+      title: DataStatusResponse
+    DbHealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          examples:
+          - ok
+      type: object
+      required:
+      - status
+      title: DbHealthResponse
+    DeletingResponse:
+      properties:
+        status:
+          type: string
+          const: deleting
+          title: Status
+      type: object
+      required:
+      - status
+      title: DeletingResponse
+    DiagnosisContractSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          type: string
+          enum:
+          - processing
+          - needs_review
+          - confirmed
+          - failed
+          title: Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - status
+      - created_at
+      title: DiagnosisContractSummary
+    DiagnosisCosts:
+      properties:
+        deposit:
+          type: integer
+          title: Deposit
+        monthly_rent:
+          type: integer
+          title: Monthly Rent
+        rent_vat_included:
+          type: boolean
+          title: Rent Vat Included
+        management_fee:
+          type: integer
+          title: Management Fee
+        labor_cost:
+          type: integer
+          title: Labor Cost
+        other_fixed_cost:
+          type: integer
+          title: Other Fixed Cost
+        variable_cost_rate:
+          type: number
+          title: Variable Cost Rate
+        expected_monthly_sales:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Expected Monthly Sales
+        key_money:
+          type: integer
+          title: Key Money
+        facility_cost:
+          type: integer
+          title: Facility Cost
+      type: object
+      required:
+      - deposit
+      - monthly_rent
+      - rent_vat_included
+      - management_fee
+      - labor_cost
+      - other_fixed_cost
+      - variable_cost_rate
+      - expected_monthly_sales
+      - key_money
+      - facility_cost
+      title: DiagnosisCosts
+      description: 저장한 원래 입력. 월세 슬라이더를 다시 계산할 때 쓴다.
+    DiagnosisCostsInput:
+      properties:
+        deposit:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Deposit
+          default: 0
+        monthly_rent:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 1.0
+          title: Monthly Rent
+          examples:
+          - 2500000
+        rent_vat_included:
+          type: boolean
+          title: Rent Vat Included
+        management_fee:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Management Fee
+          default: 0
+        labor_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Labor Cost
+        other_fixed_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Other Fixed Cost
+        variable_cost_rate:
+          type: number
+          maximum: 0.95
+          minimum: 0.0
+          title: Variable Cost Rate
+          description: 0–0.95, 소수 넷째 자리까지
+          examples:
+          - 0.4
+        expected_monthly_sales:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Expected Monthly Sales
+          description: 사용자 입력만 쓴다. 없으면 월손익·감당 가능한 월세·예상 손실은 null
+        key_money:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Key Money
+          default: 0
+        facility_cost:
+          type: integer
+          maximum: 10000000000.0
+          minimum: 0.0
+          title: Facility Cost
+          default: 0
+      type: object
+      required:
+      - monthly_rent
+      - rent_vat_included
+      - labor_cost
+      - other_fixed_cost
+      - variable_cost_rate
+      title: DiagnosisCostsInput
+    DiagnosisCreateRequest:
+      properties:
+        address:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Address
+          examples:
+          - 예시 주소
+        lat:
+          type: number
+          maximum: 90.0
+          minimum: -90.0
+          title: Lat
+          examples:
+          - 37.5665
+        lng:
+          type: number
+          maximum: 180.0
+          minimum: -180.0
+          title: Lng
+          examples:
+          - 126.978
+        category_id:
+          type: string
+          title: Category Id
+          examples:
+          - cafe
+        area_sqm:
+          anyOf:
+          - type: number
+            maximum: 1000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Area Sqm
+          description: 1년 모델의 입력. 없으면 1년은 km_baseline
+          examples:
+          - 33.0
+        costs:
+          $ref: '#/components/schemas/DiagnosisCostsInput'
+      type: object
+      required:
+      - address
+      - lat
+      - lng
+      - category_id
+      - costs
+      title: DiagnosisCreateRequest
+    DiagnosisDetailResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          examples:
+          - 00000000-0000-4000-8000-000000000001
+        address:
+          type: string
+          title: Address
+        lat:
+          type: number
+          title: Lat
+        lng:
+          type: number
+          title: Lng
+        category_id:
+          type: string
+          title: Category Id
+        dong_code:
+          type: string
+          title: Dong Code
+        dong_name:
+          type: string
+          title: Dong Name
+        gu_name:
+          type: string
+          title: Gu Name
+        area_sqm:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Area Sqm
+        costs:
+          $ref: '#/components/schemas/DiagnosisCosts'
+        survival:
+          $ref: '#/components/schemas/SurvivalResponse'
+        factors:
+          items:
+            $ref: '#/components/schemas/FactorResponse'
+          type: array
+          title: Factors
+        simulation:
+          $ref: '#/components/schemas/SimulationResponse'
+        contracts:
+          items:
+            $ref: '#/components/schemas/DiagnosisContractSummary'
+          type: array
+          title: Contracts
+          description: 최신순. 없으면 빈 배열
+        data_basis:
+          $ref: '#/components/schemas/DataBasis'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - id
+      - address
+      - lat
+      - lng
+      - category_id
+      - dong_code
+      - dong_name
+      - gu_name
+      - area_sqm
+      - costs
+      - survival
+      - factors
+      - simulation
+      - contracts
+      - data_basis
+      - created_at
+      - expires_at
+      title: DiagnosisDetailResponse
+    DiagnosisListItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        address:
+          type: string
+          title: Address
+        category_id:
+          type: string
+          title: Category Id
+        dong_name:
+          type: string
+          title: Dong Name
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - id
+      - address
+      - category_id
+      - dong_name
+      - created_at
+      - expires_at
+      title: DiagnosisListItem
+    DiagnosisListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/DiagnosisListItem'
+          type: array
+          title: Items
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+          description: 마지막 쪽은 null
+      type: object
+      required:
+      - items
+      - next_cursor
+      title: DiagnosisListResponse
+    DongStats:
+      properties:
+        source_regions:
+          items:
+            $ref: '#/components/schemas/SourceRegion'
+          type: array
+          title: Source Regions
+          description: merged면 여러 개
+        relation:
+          type: string
+          enum:
+          - same
+          - split
+          - merged
+          title: Relation
+          description: split이면 분동 전 통합 값임을 화면에 표시한다
+        quarter:
+          type: string
+          title: Quarter
+          description: 점포·추정매출·유동인구 수집이 모두 성공한 가장 최근 분기
+          examples:
+          - '20262'
+        population_quarter:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Population Quarter
+          description: 유동인구 기준 분기. 중단되면 마지막 정상 분기
+          examples:
+          - '20262'
+        population_reference_only:
+          type: boolean
+          title: Population Reference Only
+          description: 유동인구가 중단돼 마지막 정상 분기를 참고로만 보여 줄 때 true
+        floating_population:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Floating Population
+          examples:
+          - 100000
+        population_by_time:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Population By Time
+          description: '키: 00_06, 06_11, 11_14, 14_17, 17_21, 21_24'
+          examples:
+          - '11_14': 18000
+        population_by_age:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Population By Age
+          description: '키: 10, 20, 30, 40, 50, 60_plus'
+          examples:
+          - '30': 20000
+        population_per_store:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Population Per Store
+          description: 두 분기(quarter, population_quarter)가 다르면 null
+          examples:
+          - 420
+        avg_sales_per_store:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Avg Sales Per Store
+          description: 분모는 프랜차이즈를 포함한 similar_store_count. 매출 단위 확인 전에는 null
+        sales_unit_verified:
+          type: boolean
+          title: Sales Unit Verified
+          description: 추정매출 금액 단위를 확인했는지
+        open_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Open Rate
+          examples:
+          - 0.04
+        close_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Close Rate
+          examples:
+          - 0.03
+        franchise_ratio:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Franchise Ratio
+          examples:
+          - 0.2
+      type: object
+      required:
+      - source_regions
+      - relation
+      - quarter
+      - population_quarter
+      - population_reference_only
+      - floating_population
+      - population_by_time
+      - population_by_age
+      - population_per_store
+      - avg_sales_per_store
+      - sales_unit_verified
+      - open_rate
+      - close_rate
+      - franchise_ratio
+      title: DongStats
+      description: 로그인한 사용자에게만 준다. 값이 없으면 null이고 `missing`에 필드 이름이 들어간다.
+    EarlyTerminationValue:
+      properties:
+        allowed:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Allowed
+        penalty_amount:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Penalty Amount
+          description: 원
+        notice_months:
+          anyOf:
+          - type: integer
+            maximum: 120.0
+            minimum: 0.0
+          - type: 'null'
+          title: Notice Months
+        penalty_covers_remaining_rent:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Penalty Covers Remaining Rent
+      type: object
+      required:
+      - allowed
+      - penalty_amount
+      - notice_months
+      - penalty_covers_remaining_rent
+      title: EarlyTerminationValue
+      description: '`early_termination`의 값. 모르는 항목은 null이다.'
+    ErrorResponse:
       properties:
         detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
+          anyOf:
+          - type: string
+          - items:
+              additionalProperties: true
+              type: object
+            type: array
           title: Detail
+        code:
+          type: string
+          title: Code
       type: object
-      title: HTTPValidationError
+      required:
+      - detail
+      - code
+      title: ErrorResponse
+    FactorResponse:
+      properties:
+        name:
+          type: string
+          title: Name
+        direction:
+          type: string
+          enum:
+          - risk
+          - positive
+          title: Direction
+        contribution:
+          type: number
+          title: Contribution
+          description: 확률이 아닌 로그 오즈 단위의 크기
+      type: object
+      required:
+      - name
+      - direction
+      - contribution
+      title: FactorResponse
+      description: 인과관계가 아니다. risk, positive 각각 최대 3개다.
     HealthResponse:
       properties:
         status:
@@ -67,6 +2677,34 @@ components:
       - status
       - model_loaded
       title: HealthResponse
+    MeResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+          examples:
+          - 00000000-0000-4000-8000-000000000010
+        provider:
+          type: string
+          enum:
+          - google
+          - kakao
+          title: Provider
+          examples:
+          - kakao
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+          examples:
+          - '2026-11-25T00:00:00Z'
+      type: object
+      required:
+      - id
+      - provider
+      - created_at
+      title: MeResponse
     PredictRequest:
       properties:
         features:
@@ -98,29 +2736,462 @@ components:
       required:
       - predictions
       title: PredictResponse
-    ValidationError:
+    Radius:
+      type: integer
+      enum:
+      - 150
+      - 300
+      - 500
+      - 1000
+      title: Radius
+      description: A05 조회 반경(m). Literal은 쿼리 문자열을 숫자로 바꾸지 않아 IntEnum을 쓴다.
+    RadiusStats:
       properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
-          type: string
-          title: Message
-        type:
-          type: string
-          title: Error Type
-        input:
-          title: Input
-        ctx:
-          type: object
-          title: Context
+        radius_m:
+          type: integer
+          title: Radius M
+          examples:
+          - 500
+        same_category_count:
+          type: integer
+          title: Same Category Count
+          description: 반경 안 같은 업종 영업 매장 수
+          examples:
+          - 24
+        opened_1y:
+          $ref: '#/components/schemas/CountValue'
+        closed_1y:
+          $ref: '#/components/schemas/CountValue'
+        base_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Base Date
+          description: 인허가 자료 기준일. 최근 1년은 이 날을 포함해 거슬러 센다. 성공한 수집이 없으면 null
+          examples:
+          - '2026-11-22'
       type: object
       required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
+      - radius_m
+      - same_category_count
+      - opened_1y
+      - closed_1y
+      - base_date
+      title: RadiusStats
+    RegionResolveResponse:
+      properties:
+        dong_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dong Code
+          examples:
+          - '11110515'
+        dong_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dong Name
+          examples:
+          - 청운효자동
+        gu_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gu Name
+          examples:
+          - 종로구
+        supported:
+          type: boolean
+          title: Supported
+      type: object
+      required:
+      - dong_code
+      - dong_name
+      - gu_name
+      - supported
+      title: RegionResolveResponse
+      description: 서울 밖이면 supported는 false이고 나머지는 null이다.
+    RestorationValue:
+      properties:
+        scope:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Scope
+        estimated_cost:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Estimated Cost
+          description: 원
+      type: object
+      required:
+      - scope
+      - estimated_cost
+      title: RestorationValue
+      description: '`restoration`의 값. 모르는 항목은 null이다.'
+    SimulationCreateRequest:
+      properties:
+        overrides:
+          anyOf:
+          - $ref: '#/components/schemas/CostOverrides'
+          - type: 'null'
+        exit:
+          anyOf:
+          - $ref: '#/components/schemas/SimulationExit'
+          - type: 'null'
+          description: 없으면 `estimated_loss`는 null
+      additionalProperties: false
+      type: object
+      title: SimulationCreateRequest
+      description: '`overrides`와 `exit`는 각각 선택이며 둘 다 없으면 422다. 생존확률은 다시 계산하지 않는다.'
+    SimulationExit:
+      properties:
+        month:
+          type: integer
+          maximum: 120.0
+          minimum: 1.0
+          title: Month
+          description: 종료 시점(개업 후 개월)
+          examples:
+          - 12
+        obligation_months:
+          type: integer
+          maximum: 120.0
+          minimum: 0.0
+          title: Obligation Months
+          description: 종료 후 남은 의무 개월 수
+          examples:
+          - 3
+        restoration_cost:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Restoration Cost
+          examples:
+          - 5000000
+        penalty_amount:
+          anyOf:
+          - type: integer
+            maximum: 10000000000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Penalty Amount
+        penalty_covers_remaining_rent:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Penalty Covers Remaining Rent
+          description: true면 위약금과 남은 월세·관리비 중 큰 값, false면 둘 다 더함. 모르면 큰 값과 확인 필요 가정을
+            표시
+      additionalProperties: false
+      type: object
+      required:
+      - month
+      - obligation_months
+      title: SimulationExit
+      description: A13 종료 조건. 값이 없으면 A18에서만 확인한 계약값을 쓰고, 그것도 없으면 0과 가정 표시.
+    SimulationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        source:
+          type: string
+          enum:
+          - initial
+          - user
+          title: Source
+          description: 진단 상세에는 항상 initial 계산을 준다
+        break_even_sales:
+          type: integer
+          title: Break Even Sales
+        monthly_profit:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Monthly Profit
+        affordable_rent:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Affordable Rent
+          description: 부가세를 뺀 공급가. 음수도 그대로 준다
+        estimated_loss:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Estimated Loss
+          description: 종료 조건이 없으면 null
+        assumptions:
+          items:
+            type: string
+          type: array
+          title: Assumptions
+      type: object
+      required:
+      - id
+      - source
+      - break_even_sales
+      - monthly_profit
+      - affordable_rent
+      - estimated_loss
+      - assumptions
+      title: SimulationResponse
+    SourceRegion:
+      properties:
+        code:
+          type: string
+          title: Code
+          description: 상권 자료의 행정동 코드
+          examples:
+          - '11110515'
+        name:
+          type: string
+          title: Name
+          examples:
+          - 청운효자동
+      type: object
+      required:
+      - code
+      - name
+      title: SourceRegion
+    StoreItem:
+      properties:
+        id:
+          type: string
+          title: Id
+          description: '`source:관리번호`'
+          examples:
+          - general:example-001
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+          examples:
+          - 예시 매장
+        category_id:
+          type: string
+          title: Category Id
+          examples:
+          - cafe
+        licensed_year:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Licensed Year
+          examples:
+          - 2023
+        lat:
+          type: number
+          title: Lat
+          examples:
+          - 37.5665
+        lng:
+          type: number
+          title: Lng
+          examples:
+          - 126.978
+        distance_m:
+          type: integer
+          title: Distance M
+          examples:
+          - 120
+      type: object
+      required:
+      - id
+      - name
+      - category_id
+      - licensed_year
+      - lat
+      - lng
+      - distance_m
+      title: StoreItem
+    StoreListResponse:
+      properties:
+        total:
+          type: integer
+          title: Total
+          description: 잘리기 전 전체 건수
+          examples:
+          - 1280
+        returned:
+          type: integer
+          title: Returned
+          examples:
+          - 1000
+        truncated:
+          type: boolean
+          title: Truncated
+        category_counts:
+          items:
+            $ref: '#/components/schemas/CategoryCount'
+          type: array
+          title: Category Counts
+          description: 잘리기 전 전체 건수. 조회한 업종은 0건도 넣는다
+        base_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Base Date
+          description: 조회 업종의 인허가 자료 기준일 중 가장 이른 날. 성공한 수집이 없으면 null
+          examples:
+          - '2026-11-22'
+        items:
+          items:
+            $ref: '#/components/schemas/StoreItem'
+          type: array
+          title: Items
+          description: 가까운 순, 같으면 ID 순
+      type: object
+      required:
+      - total
+      - returned
+      - truncated
+      - category_counts
+      - base_date
+      - items
+      title: StoreListResponse
+    SurvivalPointResponse:
+      properties:
+        month:
+          type: integer
+          enum:
+          - 12
+          - 24
+          - 36
+          title: Month
+        method:
+          type: string
+          enum:
+          - km_baseline
+          - logistic
+          - lightgbm
+          title: Method
+        scope:
+          type: string
+          enum:
+          - location_category
+          - dong_category
+          - seoul_category
+          title: Scope
+        probability:
+          type: number
+          title: Probability
+        lower:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Lower
+        upper:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Upper
+        baseline:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Baseline
+          description: 서울 같은 업종 기준선
+      type: object
+      required:
+      - month
+      - method
+      - scope
+      - probability
+      - lower
+      - upper
+      - baseline
+      title: SurvivalPointResponse
+    SurvivalResponse:
+      properties:
+        available:
+          type: boolean
+          title: Available
+        model_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Version
+        points:
+          items:
+            $ref: '#/components/schemas/SurvivalPointResponse'
+          type: array
+          title: Points
+        interval_level:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Interval Level
+        sample_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Sample Size
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - available
+      - model_version
+      - points
+      - interval_level
+      - sample_size
+      - reason
+      title: SurvivalResponse
+      description: 자료가 부족하면 available은 false이고 points는 빈 배열이며 reason에 사유를 넣는다.
+    TokenRequest:
+      properties:
+        code:
+          type: string
+          title: Code
+          description: 1회용 로그인 코드. 60초 뒤 만료된다
+          examples:
+          - one-time-code
+        code_verifier:
+          type: string
+          title: Code Verifier
+          description: 로그인 시작 때 보낸 code_challenge의 원본 값
+          examples:
+          - example-verifier
+      type: object
+      required:
+      - code
+      - code_verifier
+      title: TokenRequest
+    TokenResponse:
+      properties:
+        token:
+          type: string
+          title: Token
+          description: 세션 토큰. 이 응답에서만 준다
+          examples:
+          - example-token
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+          examples:
+          - '2026-12-25T00:00:00Z'
+      type: object
+      required:
+      - token
+      - expires_at
+      title: TokenResponse
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      description: A01에서 받은 세션 토큰
+      scheme: bearer

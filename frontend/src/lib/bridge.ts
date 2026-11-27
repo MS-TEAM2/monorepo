@@ -53,6 +53,7 @@ function installReceiver(w: BridgeWindow) {
 export function callApp<K extends BridgeRequestType>(
   type: K,
   payload: BridgeRequests[K]["payload"],
+  { timeoutMs = TIMEOUT_MS }: { timeoutMs?: number } = {},
 ): Promise<BridgeRequests[K]["result"]> {
   const w = bridgeWindow();
   if (!w?.ReactNativeWebView) return Promise.reject(new Error("앱 안에서만 쓸 수 있는 기능입니다"));
@@ -63,7 +64,7 @@ export function callApp<K extends BridgeRequestType>(
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error(`앱 응답 시간 초과: ${type}`));
-    }, TIMEOUT_MS);
+    }, timeoutMs);
     pending.set(id, {
       resolve: (value) => {
         clearTimeout(timer);

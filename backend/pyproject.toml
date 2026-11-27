@@ -9,6 +9,13 @@ dependencies = [
     "pydantic-settings",
     "pyyaml",
     "ai-core",
+    "sqlalchemy[asyncio]>=2.1.9",
+    "psycopg[binary]>=3.3.9",
+    "alembic>=1.20.1",
+    "azure-storage-blob[aio]>=12.31.1",
+    "azure-identity>=1.27.0",
+    "pyjwt[crypto]>=2.15.1",
+    "httpx2>=2.16.0",
 ]
 
 [tool.uv.sources]
@@ -20,3 +27,15 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+# 루트 ruff 설정에 백엔드 규칙만 더한다.
+[tool.ruff]
+extend = "../pyproject.toml"
+
+[tool.ruff.lint]
+# FAST001은 "모든 라우트에 response_model" 팀 규칙과 부딪혀 뺀다.
+extend-select = ["ASYNC", "FAST002", "FAST003", "S", "T20"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+"app/export_openapi.py" = ["T20"]

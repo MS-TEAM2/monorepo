@@ -3,7 +3,23 @@ name = "ai-core"
 version = "0.1.0"
 description = "학습·평가·추론 패키지. 백엔드가 이 패키지를 import 해서 모델을 서빙한다."
 requires-python = ">=3.13"
-dependencies = ["scikit-learn", "joblib", "numpy", "pandas"]
+dependencies = [
+    "scikit-learn",
+    "joblib",
+    "numpy",
+    "pandas",
+    # 수집 결과를 DB에 반영한다(SCRUM-98). 백엔드와 같은 라이브러리·버전 범위
+    "sqlalchemy>=2.1.9",
+    "psycopg[binary]>=3.3.9",
+    # 계약서 마스킹의 Azure PII detection(SCRUM-198)·OCR의 Document Intelligence(SCRUM-136) 호출.
+    # 백엔드가 이미 쓰는 라이브러리
+    "azure-core[aio]>=1.38.0",
+    "azure-identity>=1.27.0",
+    # 인허가 좌표 변환(EPSG:5174 → 4326)과 행정동 경계 판정(SCRUM-101).
+    # PostGIS 승인 전에도 DB 없이 결합률·오차를 보고하려고 파이썬에서 계산한다
+    "pyproj>=3.8.0",
+    "shapely>=2.2.0",
+]
 
 [build-system]
 requires = ["hatchling"]

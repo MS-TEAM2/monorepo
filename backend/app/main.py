@@ -1,11 +1,25 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ai_core.predict import load_model, predict
+from ai_core.predict import load_model
+from app.access_log import AccessLogMiddleware, configure_access_log
+from app.auth.router import router as auth_router
 from app.config import settings
-from app.schemas import HealthResponse, PredictRequest, PredictResponse
+from app.contracts.router import router as contracts_router
+from app.data_status.router import router as data_status_router
+from app.db import create_engine, create_session_factory
+from app.diagnoses.router import router as diagnoses_router
+from app.errors import register_error_handlers
+from app.explore.router import router as explore_router
+from app.prediction.router import router as prediction_router
+from app.system.router import router as system_router
+from app.users.router import router as users_router
+
+API_PREFIX = "/api/v1"
+
+configure_access_log()
 
 
 @asynccontextmanager
@@ -13,7 +27,13 @@ async def lifespan(app: FastAPI):
     # 모델은 별도 엔드포인트 없이 이 컨테이너 안에서 서빙한다 (상시 과금 방지).
     path = settings.model_path
     app.state.model = load_model(path) if path.exists() else None
-    yield
+    engine = create_engine(settings.database_url) if settings.database_url else None
+    app.state.session_factory = create_session_factory(engine) if engine else None
+    try:
+        yield
+    finally:
+        if engine:
+            await engine.dispose()
 
 
 app = FastAPI(title="AX Service API", version="0.1.0", lifespan=lifespan)
@@ -24,19 +44,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 마지막에 더한 미들웨어가 가장 바깥이라 CORS 사전 요청까지 기록한다.
+app.add_middleware(AccessLogMiddleware)
+register_error_handlers(app)
 
-
-@app.get("/health", response_model=HealthResponse, tags=["system"])
-def health(request: Request) -> HealthResponse:
-    return HealthResponse(status="ok", model_loaded=request.app.state.model is not None)
-
-
-@app.post("/api/v1/predict", response_model=PredictResponse, tags=["ai"])
-def run_predict(body: PredictRequest, request: Request) -> PredictResponse:
-    model = request.app.state.model
-    if model is None:
-        raise HTTPException(status_code=503, detail="모델이 로드되지 않았습니다")
-    try:
-        return PredictResponse(predictions=predict(model, body.features))
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+# 도메인 라우터는 여기서만 등록한다.
+app.include_router(system_router)
+app.include_router(prediction_router, prefix=API_PREFIX)
+app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(users_router, prefix=API_PREFIX)
+app.include_router(explore_router, prefix=API_PREFIX)
+app.include_router(diagnoses_router, prefix=API_PREFIX)
+app.include_router(contracts_router, prefix=API_PREFIX)
+app.include_router(data_status_router, prefix=API_PREFIX)
